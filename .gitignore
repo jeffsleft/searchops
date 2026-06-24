@@ -1,0 +1,65 @@
+# Credentials and secrets — NEVER commit these
+credentials.json
+token.json
+*.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Modal
+.modal/
+
+# Local data — never commit
+recruiting.db
+*.db
+*.db-shm
+*.db-wal
+
+# Claude session data
+.claude/
+
+# Personal notes and local data files (not for repo)
+Criteria feedback - Jeffs.txt
+Venture Funded Companies List.xlsx
+bio.txt
+HANDOFF.md
+features.json
+IMPLEMENTATION_SUMMARY.md
+
+# Resume and personal docs — private, never commit
+data/resume.docx
+
+# Personal config — candidate profile + hunt targets (untracked; WP-A)
+candidate_profile.yaml
+app/discovery/hunt_targets.yaml
+
+# Personal corpus + spec docx (Layer 2 input, internal specs)
+data/*.docx
+/*.docx
+
+# Visual audit artifacts
+data/audit_screenshots/
+implementation_plan.md
+
+# Dated audit/report exports at repo root (internal artifacts, not source)
+/*-audit-report.docx

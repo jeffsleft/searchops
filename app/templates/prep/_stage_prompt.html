@@ -1,0 +1,10 @@
+<div class="prep-stage-prompt">
+  <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor"><path d="M6.5 0L8 4h4.5l-3.6 2.7 1.4 4.3L6.5 8.4l-3.8 2.6 1.4-4.3L0 4h4.5L6.5 0z"/></svg>
+  <span>
+    <strong>{{ active_job.company }}</strong> is at <em>{{ active_job.pipeline_stage|replace('_', ' ')|title }}</em> — add a <strong>{{ stage_prompt_type.label }}</strong> session?
+  </span>
+  <div class="spacer"></div>
+  <button class="btn btn-sm" hx-post="/prep/{{ active_job.id }}/sessions" hx-vals='{"type_id":"{{ stage_prompt_type_id }}"}' hx-target=".prep-shell" hx-swap="outerHTML">
+    <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><path d="M5.5 0v11M0 5.5h11"/></svg> Add {{ stage_prompt_type.short }} session
+  </button>
+</div>

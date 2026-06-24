@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block page_title %}Application Patterns Analysis{% endblock %}
+
+{% block content %}
+
+<div style="max-width: 1200px;">
+  <!-- Summary bar -->
+  <div class="card" style="background: var(--bg-elev); border: 1px solid var(--border); padding: 20px; margin-bottom: 24px; display: flex; gap: 32px; align-items: center;">
+    <div>
+      <div class="dim" style="font-size: 12px; margin-bottom: 4px;">Total Applications</div>
+      <div style="font-size: 24px; font-weight: 600;">{{ total_apps }}</div>
+    </div>
+    <div>
+      <div class="dim" style="font-size: 12px; margin-bottom: 4px;">Screening Calls</div>
+      <div style="font-size: 24px; font-weight: 600;">{{ total_progressed }}</div>
+    </div>
+    <div>
+      <div class="dim" style="font-size: 12px; margin-bottom: 4px;">Response Rate</div>
+      <div style="font-size: 24px; font-weight: 600; color: var(--accent);">{{ response_rate }}%</div>
+    </div>
+  </div>
+
+  <!-- Calibration: Predicted vs. Actual Interviews -->
+  {% if calibration.total > 0 %}
+  <div class="card" style="background: var(--bg-elev); border: 1px solid var(--border); padding: 20px; margin-bottom: 24px;">
+    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Calibration — Predicted vs. Actual Interviews</h3>
+    <div class="dim" style="font-size: 12px; margin-bottom: 16px;">Got Interview = ever reached recruiter/HM/panel/final/accepted (from stage history). Auto-reweighting is deferred until enough outcomes accrue.</div>
+
+    <!-- By Probability -->
+    <div style="margin-bottom: 20px;">
+      <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-dim);">By Predicted Interview Probability</h4>
+      <table style="width: 100%; font-size: 13px;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border); color: var(--text-dim);">
+            <th style="text-align: left; padding: 8px 0;">Bucket</th>
+            <th style="text-align: right; padding: 8px 0;">Applications</th>
+            <th style="text-align: right; padding: 8px 0;">Got Interview</th>
+            <th style="text-align: right; padding: 8px 0;">Rate %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for bucket in calibration.by_probability %}
+          <tr style="border-bottom: 1px solid var(--border-faint);">
+            <td style="padding: 8px 0;">{{ bucket.label }}</td>
+            <td style="text-align: right; padding: 8px 0;">{{ bucket.total }}</td>
+            <td style="text-align: right; padding: 8px 0;">{{ bucket.got_interview }}</td>
+            <td style="text-align: right; padding: 8px 0; color: var(--accent);">
+              {% if bucket.total > 0 %}
+                {{ "%.1f" | format(bucket.rate) }}%
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- By Score Band -->
+    <div>
+      <h4 style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text-dim);">By Final Score Band</h4>
+      <table style="width: 100%; font-size: 13px;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border); color: var(--text-dim);">
+            <th style="text-align: left; padding: 8px 0;">Bucket</th>
+            <th style="text-align: right; padding: 8px 0;">Applications</th>
+            <th style="text-align: right; padding: 8px 0;">Got Interview</th>
+            <th style="text-align: right; padding: 8px 0;">Rate %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for bucket in calibration.by_score %}
+          <tr style="border-bottom: 1px solid var(--border-faint);">
+            <td style="padding: 8px 0;">{{ bucket.label }}</td>
+            <td style="text-align: right; padding: 8px 0;">{{ bucket.total }}</td>
+            <td style="text-align: right; padding: 8px 0;">{{ bucket.got_interview }}</td>
+            <td style="text-align: right; padding: 8px 0; color: var(--accent);">
+              {% if bucket.total > 0 %}
+                {{ "%.1f" | format(bucket.rate) }}%
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card" style="background: var(--bg-elev); border: 1px solid var(--border); padding: 20px; margin-bottom: 24px;">
+    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Calibration — Predicted vs. Actual Interviews</h3>
+    <div class="dim" style="font-size: 12px;">No scored applications yet.</div>
+  </div>
+  {% endif %}
+
+  <!-- Score Buckets -->
+  <div class="card" style="background: var(--bg-elev); border: 1px solid var(--border); padding: 20px; margin-bottom: 24px;">
+    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Score Buckets</h3>
+    <table style="width: 100%; font-size: 13px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border); color: var(--text-dim);">
+          <th style="text-align: left; padding: 8px 0;">Bucket</th>
+          <th style="text-align: right; padding: 8px 0;">Total</th>
+          <th style="text-align: right; padding: 8px 0;">Progressed</th>
+          <th style="text-align: right; padding: 8px 0;">Rate %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for bucket_label, data in buckets %}
+        <tr style="border-bottom: 1px solid var(--border-faint);">
+          <td style="padding: 8px 0;">{{ bucket_label }}</td>
+          <td style="text-align: right; padding: 8px 0;">{{ data.total }}</td>
+          <td style="text-align: right; padding: 8px 0;">{{ data.progressed }}</td>
+          <td style="text-align: right; padding: 8px 0; color: var(--accent);">
+            {% if data.total > 0 %}
+              {{ "%.1f" | format((data.progressed / data.total * 100)) }}%
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Sector Analysis -->
+  <div class="card" style="background: var(--bg-elev); border: 1px solid var(--border); padding: 20px; margin-bottom: 24px;">
+    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">By Sector</h3>
+    <table style="width: 100%; font-size: 13px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border); color: var(--text-dim);">
+          <th style="text-align: left; padding: 8px 0;">Sector</th>
+          <th style="text-align: right; padding: 8px 0;">Total</th>
+          <th style="text-align: right; padding: 8px 0;">Progressed</th>
+          <th style="text-align: right; padding: 8px 0;">Rate %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sector_name, data in sectors %}
+        <tr style="border-bottom: 1px solid var(--border-faint);">
+          <td style="padding: 8px 0;">{{ sector_name }}</td>
+          <td style="text-align: right; padding: 8px 0;">{{ data.total }}</td>
+          <td style="text-align: right; padding: 8px 0;">{{ data.progressed }}</td>
+          <td style="text-align: right; padding: 8px 0; color: var(--accent);">
+            {% if data.total > 0 %}
+              {{ "%.1f" | format((data.progressed / data.total * 100)) }}%
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Greenfield Analysis -->
+  <div class="card" style="background: var(--bg-elev); border: 1px solid var(--border); padding: 20px; margin-bottom: 24px;">
+    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">By Greenfield Status</h3>
+    <table style="width: 100%; font-size: 13px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border); color: var(--text-dim);">
+          <th style="text-align: left; padding: 8px 0;">Greenfield</th>
+          <th style="text-align: right; padding: 8px 0;">Total</th>
+          <th style="text-align: right; padding: 8px 0;">Progressed</th>
+          <th style="text-align: right; padding: 8px 0;">Rate %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for gf_status, data in greenfield %}
+        <tr style="border-bottom: 1px solid var(--border-faint);">
+          <td style="padding: 8px 0;">{{ gf_status }}</td>
+          <td style="text-align: right; padding: 8px 0;">{{ data.total }}</td>
+          <td style="text-align: right; padding: 8px 0;">{{ data.progressed }}</td>
+          <td style="text-align: right; padding: 8px 0; color: var(--accent);">
+            {% if data.total > 0 %}
+              {{ "%.1f" | format((data.progressed / data.total * 100)) }}%
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Role Archetype Analysis -->
+  <div class="card" style="background: var(--bg-elev); border: 1px solid var(--border); padding: 20px; margin-bottom: 24px;">
+    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">By Role Archetype</h3>
+    <table style="width: 100%; font-size: 13px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--border); color: var(--text-dim);">
+          <th style="text-align: left; padding: 8px 0;">Archetype</th>
+          <th style="text-align: right; padding: 8px 0;">Total</th>
+          <th style="text-align: right; padding: 8px 0;">Progressed</th>
+          <th style="text-align: right; padding: 8px 0;">Rate %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for archetype_name, data in archetypes %}
+        <tr style="border-bottom: 1px solid var(--border-faint);">
+          <td style="padding: 8px 0;">{{ archetype_name }}</td>
+          <td style="text-align: right; padding: 8px 0;">{{ data.total }}</td>
+          <td style="text-align: right; padding: 8px 0;">{{ data.progressed }}</td>
+          <td style="text-align: right; padding: 8px 0; color: var(--accent);">
+            {% if data.total > 0 %}
+              {{ "%.1f" | format((data.progressed / data.total * 100)) }}%
+            {% else %}
+              —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+{% endblock %}

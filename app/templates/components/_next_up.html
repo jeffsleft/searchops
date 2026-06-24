@@ -1,0 +1,23 @@
+{% if upcoming %}
+  <div class="card" style="border-color: color-mix(in oklch, var(--accent) 35%, var(--border))">
+    <div class="card-head">
+      <h3 style="color: var(--accent)">Next up</h3>
+      <div class="spacer"></div>
+      <span class="dim mono" style="font-size:11px">{{ upcoming|length }} scheduled</span>
+    </div>
+    <div style="padding: 4px 4px">
+      {% for u in upcoming %}
+        <a class="next-up-row" href="/prep/{{ u.job_id }}?session={{ u.id }}">
+          <div class="logo-sq sm" style="background: #ddd">{{ u.company[:2]|upper }}</div>
+          <div style="flex:1; min-width:0">
+            <div style="font-size:12.5px; font-weight:500">
+              {{ u.company }} <span class="dim" style="font-weight:400">· {{ u.label }}</span>
+            </div>
+            <div class="dim mono" style="font-size:10.5px">{{ u.when_display }}</div>
+          </div>
+          <span class="next-up-pill">{{ u.rel }}</span>
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}

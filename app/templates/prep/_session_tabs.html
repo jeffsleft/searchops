@@ -1,0 +1,164 @@
+<div class="prep-tabs-row">
+  <div class="prep-round-tabs" id="session-tabs">
+    {% for s in sessions %}
+      <div class="prep-session-tab {% if s.id == active_session_id %}selected{% endif %}" data-session-id="{{ s.id }}" data-type="{{ s.type_id }}">
+        <span class="prep-session-dot" style="background:oklch(60% 0.13 {{ session_types[s.type_id].hue }})"></span>
+        <span class="prep-session-label" style="cursor:pointer">{{ s.label }}</span>
+        <button class="prep-session-x" style="display:none" title="Delete">×</button>
+        <div class="session-popover session-confirm" style="display:none">
+          <div class="session-confirm-text">Delete <strong>{{ s.label }}</strong>? This can't be undone.</div>
+          <div class="session-confirm-actions">
+            <button class="btn btn-sm btn-ghost" onclick="this.closest('.session-popover').style.display='none'; this.closest('.prep-session-tab')?.querySelector('.prep-session-x')?.style && (this.closest('.prep-session-tab').querySelector('.prep-session-x').style.display='none')">Cancel</button>
+            <button class="btn btn-sm btn-primary" hx-delete="/prep/sessions/{{ s.id }}" hx-target=".prep-shell" hx-swap="outerHTML">Delete</button>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="prep-tabs-add-wrap" style="position:relative; flex-shrink:0">
+    <button class="prep-session-add" id="add-session-btn" title="Add interview session">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M6 1v10M1 6h10"/></svg> <span>Add session</span>
+    </button>
+    <div class="session-popover session-add-menu" id="add-menu" style="display:none">
+      <div class="session-popover-title">Add a session</div>
+      {% for type_id, t in session_types.items() %}
+        <button class="session-popover-row" hx-post="/prep/{{ active_job.id }}/sessions" hx-vals='{"type_id":"{{ type_id }}"}' hx-target=".prep-shell" hx-swap="outerHTML" onclick="document.getElementById('add-menu').style.display='none'">
+          <span class="prep-session-dot" style="background:oklch(60% 0.13 {{ t.hue }})"></span>
+          <div class="session-popover-row-text">
+            <div class="session-popover-row-label">{{ t.label }}</div>
+            <div class="session-popover-row-hint">{{ t.hint }}</div>
+          </div>
+        </button>
+      {% endfor %}
+      <div class="session-popover-foot dim">Double-click tab to rename. Drag to reorder.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const tabs = document.querySelectorAll('.prep-session-tab');
+  const addBtn = document.getElementById('add-session-btn');
+  const addMenu = document.getElementById('add-menu');
+
+  // Click tab to select
+  tabs.forEach(tab => {
+    tab.addEventListener('click', function(e) {
+      if (e.target.closest('.prep-session-x') || e.target.closest('.session-popover')) return;
+      const sid = this.dataset.sessionId;
+      htmx.ajax('POST', '/prep/sessions/' + sid + '/select', { target: '.prep-shell', swap: 'outerHTML' });
+    });
+
+    // Double-click to rename
+    tab.addEventListener('dblclick', function(e) {
+      if (e.target.closest('.prep-session-x')) return;
+      const label = this.querySelector('.prep-session-label');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'prep-session-rename';
+      input.value = label.textContent;
+      label.replaceWith(input);
+      input.focus();
+      input.select();
+      const sid = this.dataset.sessionId;
+      input.addEventListener('blur', function() {
+        const newLabel = this.value.trim();
+        const inp = this;
+        if (!newLabel) { location.reload(); return; }
+        const fd = new FormData();
+        fd.append('label', newLabel);
+        fetch('/prep/sessions/' + sid, { method: 'PATCH', body: fd, headers: {'X-Requested-With': 'XMLHttpRequest'} })
+          .then(() => {
+            const span = document.createElement('span');
+            span.className = 'prep-session-label';
+            span.style.cursor = 'pointer';
+            span.textContent = newLabel;
+            inp.replaceWith(span);
+          });
+      });
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { this.blur(); }
+        if (e.key === 'Escape') { location.reload(); }
+      });
+    });
+
+    // Hover to show delete (only hide × on leave if confirm not open)
+    tab.addEventListener('mouseenter', function() {
+      this.querySelector('.prep-session-x').style.display = 'block';
+    });
+    tab.addEventListener('mouseleave', function() {
+      const confirm = this.querySelector('.session-popover');
+      if (confirm.style.display !== 'block') {
+        this.querySelector('.prep-session-x').style.display = 'none';
+      }
+    });
+
+    // Delete button — use fixed positioning to escape overflow:auto clipping
+    tab.querySelector('.prep-session-x').addEventListener('click', function(e) {
+      e.stopPropagation();
+      const confirm = tab.querySelector('.session-popover');
+      const rect = this.getBoundingClientRect();
+      confirm.style.position = 'fixed';
+      confirm.style.top = (rect.bottom + 6) + 'px';
+      confirm.style.left = rect.left + 'px';
+      confirm.style.zIndex = '200';
+      confirm.style.display = 'block';
+    });
+
+    // Close confirm on click-outside
+    document.addEventListener('click', function(e) {
+      const confirm = tab.querySelector('.session-popover');
+      if (confirm.style.display === 'block' && !e.target.closest('.session-confirm')) {
+        confirm.style.display = 'none';
+        tab.querySelector('.prep-session-x').style.display = 'none';
+      }
+    });
+
+    // Drag to reorder — visual move first, then persist new order
+    tab.draggable = true;
+    tab.addEventListener('dragstart', function(e) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', this.dataset.sessionId);
+      this.style.opacity = '0.4';
+    });
+    tab.addEventListener('dragend', function() {
+      this.style.opacity = '';
+    });
+    tab.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const dragged = document.querySelector('.prep-session-tab[style*="opacity"]');
+      if (dragged && dragged !== this) {
+        const container = this.parentNode;
+        const allTabs = Array.from(container.querySelectorAll('.prep-session-tab'));
+        const fromIdx = allTabs.indexOf(dragged);
+        const toIdx = allTabs.indexOf(this);
+        if (fromIdx < toIdx) container.insertBefore(dragged, this.nextSibling);
+        else container.insertBefore(dragged, this);
+      }
+    });
+    tab.addEventListener('drop', function(e) {
+      e.preventDefault();
+      // Read DOM order AFTER visual reorder
+      const newOrder = Array.from(document.querySelectorAll('.prep-session-tab'))
+        .map(t => t.dataset.sessionId).join(',');
+      htmx.ajax('POST', '/prep/{{ active_job.id }}/sessions/reorder', {
+        values: { order: newOrder },
+        target: '.prep-shell',
+        swap: 'outerHTML'
+      });
+    });
+  });
+
+  addBtn.addEventListener('click', function() {
+    addMenu.style.display = addMenu.style.display === 'none' ? 'block' : 'none';
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#add-session-btn') && !e.target.closest('#add-menu')) {
+      addMenu.style.display = 'none';
+    }
+  });
+})();
+</script>

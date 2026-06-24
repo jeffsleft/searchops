@@ -1,0 +1,190 @@
+{% set need_tone = 'tier-dream' if co.need_assessment == 'High' else ('tier-skip' if co.need_assessment == 'Low' else 'tier-worth') %}
+{% set fit_tier = 'tier-dream' if co.fit_score and co.fit_score >= 9 else ('tier-solid' if co.fit_score and co.fit_score >= 7 else ('tier-worth' if co.fit_score and co.fit_score >= 5 else ('tier-skip' if co.fit_score and co.fit_score >= 3 else 'tier-pass'))) %}
+
+{% from "components/_macros.html" import logo %}
+<div class="drawer-head prospect-head">
+  {{ logo(co.name) }}
+  <div style="flex:1;min-width:0;">
+    <div style="font-weight:600;font-size:18px;letter-spacing:-0.02em;line-height:1.2;">{{ co.name }}</div>
+    <div class="dim" style="font-size:12px;margin-top:3px;">{{ co.sector or '' }}{% if co.funding_stage %} · {{ co.funding_stage }}{% endif %}</div>
+  </div>
+  {% if co.website %}
+  <a href="{{ co.website }}" target="_blank" rel="noopener" class="weblink">Website ↗</a>
+  {% endif %}
+  <button onclick="window.closeOutreachPanel && window.closeOutreachPanel()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
+</div>
+
+<div class="drawer-body prospect-body">
+
+  {# Research date #}
+  {% if co.research_date %}
+  <div class="dim mono" style="font-size:11px;letter-spacing:0.04em;margin-bottom:14px;">Researched {{ co.research_date }}</div>
+  {% else %}
+  <div class="dim mono" style="font-size:11px;letter-spacing:0.04em;margin-bottom:14px;">Not yet researched — use the Research button on the row.</div>
+  {% endif %}
+
+  {# Ops leader #}
+  {% if research.ops_leader_name %}
+  <section class="info-section">
+    <div class="info-section-head">Ops Leader</div>
+    <div class="info-section-body">
+      {% if research.ops_leader_name == 'N' %}
+      <div style="font-size:13px;color:var(--tier-solid);font-style:italic;">No senior GTM / Rev Ops leader identified — potential opening.</div>
+      {% else %}
+      <div style="font-size:13px;font-weight:500;">{{ research.ops_leader_name }}</div>
+      {% if research.ops_leader_linkedin %}
+      <a href="https://{{ research.ops_leader_linkedin }}" target="_blank" rel="noopener" class="dim" style="font-size:11px;">{{ research.ops_leader_linkedin }}</a>
+      {% endif %}
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# Fit Score + Need #}
+  {% if co.fit_score or co.need_assessment %}
+  <div class="info-grid-2">
+    {% if co.fit_score %}
+    <section class="info-section">
+      <div class="info-section-head">Fit Score</div>
+      <div class="info-section-body" style="display:grid;place-items:center;padding:20px 16px;">
+        <span class="score-badge score-badge-xl {{ fit_tier }}">
+          <span class="dot"></span>{{ "%.1f"|format(co.fit_score) }}
+        </span>
+      </div>
+    </section>
+    {% endif %}
+    {% if co.need_assessment %}
+    <section class="info-section">
+      <div class="info-section-head">Need <span class="dim" title="Likelihood this company needs a senior GTM/CS Ops hire now" style="font-size:10px;margin-left:2px;cursor:help;">(?)</span></div>
+      <div class="info-section-body" style="display:grid;place-items:center;padding:20px 16px;">
+        <span class="need-pill {{ need_tone }}">
+          <span class="dot"></span>{{ co.need_assessment }}
+        </span>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# Signals — multi-row, derived in routes.company_detail #}
+  {% if signals %}
+  <section class="info-section">
+    <div class="info-section-head">Signals</div>
+    <div class="info-section-body" style="padding:0;">
+      {% for s in signals %}
+      <div class="signal-row {{ s.severity }}">
+        <span class="signal-icon" aria-hidden="true">
+          {%- if s.severity == 'warn' -%}⚠
+          {%- elif s.severity == 'good' -%}✓
+          {%- else -%}◎{%- endif -%}
+        </span>
+        <div class="signal-text">{{ s.text }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# Score Justification #}
+  {% if research.fit_justification or research.need_justification %}
+  <section class="info-section">
+    <div class="info-section-head">Score Justification</div>
+    <div class="info-section-body" style="display:flex;flex-direction:column;gap:16px;">
+
+      {% if research.fit_justification %}
+      <div>
+        <div class="dim mono" style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:8px;">Why this Fit? ({{ "%.1f"|format(co.fit_score) }})</div>
+        {% if research.fit_rationale %}
+        <div style="font-size:13px;line-height:1.6;margin-bottom:10px;">{{ research.fit_rationale }}</div>
+        {% endif %}
+        <ul class="just-list">
+          {% for bullet in research.fit_justification %}<li>{{ bullet }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if research.need_justification %}
+      <div style="border-top:1px solid var(--border);padding-top:14px;">
+        <div class="dim mono" style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:8px;">Why this Need? ({{ co.need_assessment }})</div>
+        {% if research.need_rationale %}
+        <div style="font-size:13px;line-height:1.6;margin-bottom:10px;">{{ research.need_rationale }}</div>
+        {% endif %}
+        <ul class="just-list">
+          {% for bullet in research.need_justification %}<li>{{ bullet }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+    </div>
+  </section>
+  {% elif co.research_date %}
+  <section class="info-section">
+    <div class="info-section-body" style="font-size:11.5px;color:var(--text-dim);">
+      Detailed score justification missing for this research entry.
+      <button hx-post="/companies/{{ co.id }}/research"
+              hx-target="#co-detail-panel"
+              hx-swap="innerHTML"
+              class="btn btn-sm btn-ghost" style="margin-top:8px;width:100%;">Re-run Research for Details</button>
+    </div>
+  </section>
+  {% endif %}
+
+  {# Outreach hook #}
+  {% if research.outreach_hook and research.outreach_hook != 'Unknown' %}
+  <section class="info-section">
+    <div class="info-section-head">Outreach Hook</div>
+    <div class="info-section-body" style="font-size:13px;line-height:1.65;font-style:italic;">{{ research.outreach_hook }}</div>
+  </section>
+  {% endif %}
+
+  {# Why interesting #}
+  {% if co.why_interesting %}
+  <section class="info-section">
+    <div class="info-section-head">Why Interesting</div>
+    <div class="info-section-body dim" style="font-size:12.5px;line-height:1.6;">{{ co.why_interesting }}</div>
+  </section>
+  {% endif %}
+
+  {# Matching roles — open roles discovered at this company #}
+  {% if matches %}
+  <section class="info-section">
+    <div class="info-section-head">Matching Roles ({{ matches|length }})</div>
+    <div class="info-section-body" style="padding:0;">
+      {% for j in matches %}
+      <div class="signal-row good">
+        <span class="signal-icon">✓</span>
+        <div class="signal-text" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <a href="/job/{{ j.id }}" style="color:var(--text);">{{ j.job_title or 'Untitled role' }}</a>
+          {% if j.match_score %}
+          <span class="score-badge
+            {%- if j.match_score >= 9 %} tier-dream
+            {%- elif j.match_score >= 7 %} tier-solid
+            {%- elif j.match_score >= 5 %} tier-worth
+            {%- elif j.match_score >= 3 %} tier-skip
+            {%- else %} tier-pass{%- endif %}"><span class="dot"></span>{{ "%.1f"|format(j.match_score) }}</span>
+          {% endif %}
+          <span class="dim" style="font-size:11px;">{{ j.date_added or j.date_found }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# Promote to Pipeline #}
+  <section class="info-section">
+    <div class="info-section-head">Promote to Pipeline</div>
+    <div class="info-section-body">
+      <form hx-post="/companies/{{ co.id }}/promote"
+            hx-target="#promote-panel-result"
+            hx-swap="innerHTML"
+            style="display:flex;flex-direction:column;gap:8px;">
+        <input type="text" name="job_title" placeholder="Job title *" class="input" required style="font-size:12px;">
+        <input type="url" name="url" placeholder="JD URL (optional)" class="input" style="font-size:12px;">
+        <button type="submit" class="btn btn-sm btn-primary">Create Job →</button>
+      </form>
+      <div id="promote-panel-result" style="margin-top:6px;font-size:12px;"></div>
+    </div>
+  </section>
+
+</div>

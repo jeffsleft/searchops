@@ -1,0 +1,52 @@
+<div id="no-go-list">
+  <div class="dim" style="font-size:12px;margin-bottom:12px;">
+    A job whose description matches any enabled keyword below is auto-rejected (Layer 1). Matching is whole-word, case-insensitive.
+  </div>
+  {% if sectors %}
+  {% for sector, items in sectors.items() %}
+  <div style="margin-bottom:16px;">
+    <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">{{ sector }}</div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      {% for n in items %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg-sunk);border-radius:var(--radius);{% if not n.enabled %}opacity:0.45;{% endif %}">
+        <span style="font-size:13px;font-family:monospace;">{{ n.keyword }}</span>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button hx-post="/settings/no-go/{{ n.id }}/toggle"
+                  hx-target="#no-go-card-body"
+                  hx-swap="innerHTML"
+                  class="btn btn-sm btn-ghost"
+                  style="font-size:11px;padding:2px 8px;">
+            {% if n.enabled %}Disable{% else %}Enable{% endif %}
+          </button>
+          <button hx-post="/settings/no-go/{{ n.id }}/delete"
+                  hx-target="#no-go-card-body"
+                  hx-swap="innerHTML"
+                  hx-confirm="Remove '{{ n.keyword }}'?"
+                  class="btn btn-sm btn-ghost"
+                  style="font-size:11px;padding:2px 8px;color:var(--text-muted);">
+            ✕
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="dim" style="font-size:12px;">None configured.</div>
+  {% endif %}
+
+  <div style="padding-top:12px;border-top:1px solid var(--border);">
+    <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Add No-Go Keyword</div>
+    <form hx-post="/settings/no-go/add"
+          hx-target="#no-go-card-body"
+          hx-swap="innerHTML"
+          style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input name="sector" type="text" placeholder="Sector (e.g. Gambling)" class="input"
+             style="font-size:12px;flex:1;min-width:140px;" required>
+      <input name="keyword" type="text" placeholder="Keyword (e.g. casino)" class="input"
+             style="font-size:12px;flex:1;min-width:140px;" required>
+      <button type="submit" class="btn btn-sm btn-primary">Add</button>
+    </form>
+  </div>
+</div>

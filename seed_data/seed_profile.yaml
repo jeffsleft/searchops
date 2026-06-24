@@ -1,0 +1,14 @@
+# SearchOps — seed candidate profile (fictional, for tests and demo)
+# Used by the test suite when candidate_profile.yaml is absent.
+# Values match the scoring expectations in test_scoring.py.
+
+scoring:
+  base_score: 3.5
+  max_l4_positive: 2.5
+  l2_range: [-4.0, 4.0]
+  l3_range: [-1.5, 1.5]
+  top_band_gate_threshold: 7.0
+  top_band_gate_enabled: true
+
+compensation:
+  base_min: 175000

@@ -1,0 +1,55 @@
+<div class="cmdk-backdrop" onclick="if(event.target === this) htmx.remove(this.parentElement)">
+  <div class="cmdk">
+    <div class="cmdk-search">
+      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="m9.5 9.5 4.5 4.5"/></svg>
+      <input id="cmdk-input" autofocus placeholder="Switch to a company…" style="flex:1; background:none; border:none; outline:none; color:var(--text); font-size:14px"/>
+      <span class="kbd">ESC</span>
+    </div>
+    <div class="cmdk-list" id="cmdk-list"></div>
+    <div class="cmdk-foot dim">
+      <span><span class="kbd">↑</span> <span class="kbd">↓</span> navigate</span>
+      <span><span class="kbd">↵</span> open</span>
+      <span><span class="kbd">ESC</span> dismiss</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const input = document.getElementById('cmdk-input');
+  const list = document.getElementById('cmdk-list');
+  const jobs = {{ eligible_jobs|tojson }};
+  let idx = 0;
+
+  function render() {
+    const q = input.value.toLowerCase();
+    const filtered = jobs.filter(j => !q || (j.company + ' ' + j.job_title).toLowerCase().includes(q));
+    list.innerHTML = filtered.map((j, i) => `
+      <button class="cmdk-row {% if i == idx %}selected{% endif %}" onclick="window.location='/prep/${j.id}'">
+        <div class="logo-sq sm" style="background:#ddd; font-size:11px">${j.company.substring(0,2).toUpperCase()}</div>
+        <div class="cmdk-row-text">
+          <div style="font-weight:500">${j.company}</div>
+          <div class="dim" style="font-size:11px">${j.job_title}</div>
+        </div>
+        <span class="dim mono" style="font-size:10px">${j.pipeline_stage}</span>
+        <span class="dim mono" style="font-size:10px">${(j.final_score||0).toFixed(1)}</span>
+      </button>
+    `).join('');
+    if (filtered.length === 0) {
+      list.innerHTML = '<div class="empty" style="padding:30px 20px"><strong>No matches</strong></div>';
+    }
+    idx = 0;
+  }
+
+  input.addEventListener('input', render);
+  input.addEventListener('keydown', function(e) {
+    const items = list.querySelectorAll('.cmdk-row');
+    if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx+1, items.length-1); render(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx-1, 0); render(); }
+    if (e.key === 'Enter') { e.preventDefault(); items[idx]?.click(); }
+    if (e.key === 'Escape') { htmx.remove(this.closest('.cmdk-backdrop')?.parentElement); }
+  });
+
+  render();
+})();
+</script>

@@ -1,0 +1,676 @@
+{% extends "base.html" %}
+
+{% block title %}{{ job.company }} — {{ job.job_title }} | Recruiting Engine{% endblock %}
+{% block page_title %}{{ job.company }}{% endblock %}
+
+{% block content %}
+{% from "components/_macros.html" import logo, stage_label %}
+
+{# ── Job header ───────────────────────────────────────────── #}
+<div class="drawer-head" style="position:static;border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:16px;">
+  {{ logo(job.company, 'lg') }}
+  <div style="flex:1;min-width:0;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+      <h2 style="margin:0;font-size:18px;font-weight:600;letter-spacing:-0.015em;">{{ job.job_title }}</h2>
+      {%- set s = job.final_score or 0 -%}
+      <span class="score-badge
+        {%- if job.auto_rejected %} tier-reject
+        {%- elif s >= 9 %} tier-dream
+        {%- elif s >= 7 %} tier-solid
+        {%- elif s >= 5 %} tier-worth
+        {%- elif s >= 3 %} tier-skip
+        {%- else %} tier-pass{%- endif %}">
+        <span class="dot"></span>{% if job.auto_rejected %}REJECT{% else %}{{ "%.1f"|format(s) }}{% endif %}
+      </span>
+    </div>
+    <div class="muted" style="font-size:12.5px;">
+      {{ job.company }} · {{ job.sector or '—' }}
+      {%- set safe_url = job.url if job.url and job.url.startswith(('http://', 'https://')) else '' -%}
+      {% if safe_url %} · <a href="{{ safe_url }}" target="_blank" rel="noopener" style="color:var(--accent);">View JD ↗</a>{% endif %}
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+    <form hx-post="/job/{{ job.id }}/ethics" hx-swap="outerHTML" hx-target="closest form" style="margin:0;">
+      <button type="submit" class="btn btn-sm {% if job.ethics_vetted %}btn-ghost{% endif %}">
+        {% if job.ethics_vetted %}✓ Ethics vetted{% else %}Mark ethics vetted{% endif %}
+      </button>
+    </form>
+    <a href="/pipeline" class="btn btn-sm btn-ghost">← Pipeline</a>
+  </div>
+</div>
+
+{# ── Tabs ─────────────────────────────────────────────────── #}
+<div class="drawer-tabs" style="position:sticky;top:0;z-index:10;margin:0 -20px;padding:0 20px;">
+  <button class="drawer-tab" aria-current="true"   data-tab="0">Overview</button>
+  <button class="drawer-tab" data-tab="1">Score breakdown</button>
+  <button class="drawer-tab" data-tab="5">Match analysis</button>
+  <button class="drawer-tab" data-tab="2">Research</button>
+  <button class="drawer-tab" data-tab="3">
+    Questions <span class="count">{{ questions_answered }}/{{ questions|length }}</span>
+  </button>
+  <button class="drawer-tab" data-tab="4">Strategy brief</button>
+</div>
+
+{# ── Tab panels ───────────────────────────────────────────── #}
+
+{# TAB 0: Overview #}
+<div class="tab-panel" data-panel="0" style="display:flex;flex-direction:column;gap:18px;padding-top:18px;">
+
+  {% if job.auto_rejected %}
+  <div class="card" style="border-color:color-mix(in oklch, var(--tier-pass) 40%, var(--border));">
+    <div class="card-body" style="display:flex;gap:12px;align-items:flex-start;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--tier-pass)" stroke-width="2" style="flex-shrink:0;margin-top:2px;"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+      <div style="flex:1;">
+        <div style="font-weight:600;margin-bottom:4px;">Auto-rejected</div>
+        <div class="muted" style="font-size:12.5px;">{{ job.reject_reason or 'No reason provided' }}</div>
+      </div>
+      <div id="rescore-result-{{ job.id }}">
+        <button hx-post="/job/{{ job.id }}/rescore"
+                hx-target="#rescore-result-{{ job.id }}"
+                hx-swap="innerHTML"
+                hx-indicator="#rescore-result-{{ job.id }}"
+                style="font-size:12px;background:var(--bg-sunk);border:1px solid var(--border);color:var(--fg);padding:5px 12px;border-radius:var(--radius);cursor:pointer;white-space:nowrap;">
+          Force Rescore
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not job.jd_text or job.jd_text|length < 100 %}
+  <div class="card" id="jd-paste-card-{{ job.id }}">
+    <div class="card-head"><h3>Paste job description to score</h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+      <div class="muted" style="font-size:12.5px;">No JD text stored — paste the full job description below to run scoring.</div>
+      <form hx-post="/job/{{ job.id }}/paste-and-score"
+            hx-target="#jd-paste-card-{{ job.id }}"
+            hx-swap="outerHTML"
+            style="display:flex;flex-direction:column;gap:8px;">
+        <textarea name="jd_text" rows="10"
+                  placeholder="Paste the full job description here…"
+                  style="width:100%;box-sizing:border-box;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);font-size:13px;line-height:1.6;padding:10px 12px;resize:vertical;font-family:inherit;"></textarea>
+        <button type="submit"
+                style="align-self:flex-start;font-size:13px;background:var(--accent);color:#fff;border:none;padding:7px 18px;border-radius:var(--radius);cursor:pointer;">
+          Score this job
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Personal Notes ─────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head">
+      <h3>My notes</h3>
+      <div class="spacer"></div>
+      <span id="notes-save-indicator" style="font-size:11px;color:var(--accent);"></span>
+    </div>
+    <div style="padding:8px 12px 12px;">
+      <form hx-post="/job/{{ job.id }}/notes"
+            hx-trigger="change, keyup changed delay:1200ms"
+            hx-swap="none">
+        <textarea name="notes"
+                  placeholder="Applied 2026-05-23. Need to prep case study on GTM migration. They require on-site 3x/week — probably a reach, but lead with the GitLab scale story…"
+                  style="width:100%;box-sizing:border-box;min-height:100px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);font-size:13px;line-height:1.65;padding:10px 12px;resize:vertical;font-family:inherit;"
+                  onblur="this.form.dispatchEvent(new Event('change'))"
+        >{{ job.notes or '' }}</textarea>
+      </form>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    <div class="card">
+      <div class="card-head"><h3>Pros</h3></div>
+      <div class="card-body" style="font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ job.pros or '—' }}</div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Cons</h3></div>
+      <div class="card-body" style="font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ job.cons or '—' }}</div>
+    </div>
+  </div>
+
+  {% if job.recommended_angle %}
+  <div class="card">
+    <div class="card-head"><h3>Recommended angle</h3></div>
+    <div class="card-body" style="font-size:14.5px;line-height:1.6;font-style:italic;font-family:var(--font-serif);">"{{ job.recommended_angle }}"</div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Key facts</h3>
+      <div class="spacer"></div>
+      <a href="/prep/{{ job.id }}" class="btn btn-sm btn-ghost">Interview prep →</a>
+    </div>
+    <div class="card-body">
+      <dl class="dl">
+        <dt>Sector</dt><dd>{{ job.sector or '—' }}</dd>
+        {% if job.role_archetype %}<dt>Role archetype</dt><dd>{{ job.role_archetype }}</dd>{% endif %}
+        <dt>Greenfield</dt>
+        <dd>
+          {% if job.greenfield == 'Yes' %}<span class="tag green">Yes</span>
+          {% elif job.greenfield == 'Partial' %}<span class="tag amber">Partial</span>
+          {% else %}<span>{{ job.greenfield or '—' }}</span>{% endif %}
+          {% if job.greenfield_rationale %}<span class="dim" style="font-size:11px;margin-left:6px;">{{ job.greenfield_rationale }}</span>{% endif %}
+        </dd>
+        <dt>Pricing</dt><dd>{{ job.pricing_model or '—' }}</dd>
+        <dt>Salary</dt><dd class="mono">{{ job.salary_range_detected or '—' }}</dd>
+        <dt>Date found</dt><dd class="mono dim">{{ job.date_found or '—' }}</dd>
+        {% if job.posting_age_days %}
+        <dt>Posted</dt><dd>{{ job.posting_date_raw or (job.posting_age_days|string + 'd ago') }}</dd>
+        {% endif %}
+        {% if job.interview_probability %}
+        <dt>Interview probability</dt>
+        <dd>{{ job.interview_probability or 'Unknown' }}{% if job.interview_probability_rationale %}<span class="dim" style="font-size:11px;margin-left:6px;">{{ job.interview_probability_rationale }}</span>{% endif %}</dd>
+        {% endif %}
+        {% if job.timing_signal == 'Yes' %}
+        <dt>Timing signal</dt>
+        <dd><span class="tag green">⏰ Yes</span>{% if job.timing_signal_rationale %}<span class="dim" style="font-size:11px;margin-left:6px;">{{ job.timing_signal_rationale }}</span>{% endif %}</dd>
+        {% endif %}
+        <dt>Ethics vetted</dt>
+        <dd id="ethics-vetted-cell">{% if job.ethics_vetted %}<span class="tag green">✓ Confirmed</span>{% else %}<span class="tag red">Not vetted</span>{% endif %}</dd>
+        <dt>Pipeline stage</dt>
+        <dd>
+          <select id="stageSelect" class="select" style="font-size:12px;">
+            {% for code, info in all_stages.items() %}
+            <option value="{{ code }}" {% if code == job.pipeline_stage %}selected{% endif %}>{{ info.label }}</option>
+            {% endfor %}
+          </select>
+        </dd>
+      </dl>
+    </div>
+  </div>
+
+  {% if contacts %}
+  <div class="card">
+    <div class="card-head"><h3>Contacts</h3></div>
+    <div style="padding:4px 0;">
+      {% for c in contacts %}
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;{% if not loop.first %}border-top:1px solid var(--border);{% endif %}">
+        <div class="avatar">{{ c.name[:2]|upper }}</div>
+        <div style="flex:1;">
+          <div style="font-size:12.5px;font-weight:500;">{{ c.name }}</div>
+          <div class="dim" style="font-size:11px;">{{ c.title or '—' }}{% if c.persona_type %} · <span style="color:var(--accent);" class="mono">{{ c.persona_type }}</span>{% endif %}</div>
+        </div>
+        {% if c.met_on %}<span class="dim mono" style="font-size:10px;">met {{ c.met_on }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="card-body" style="border-top:1px solid var(--border);padding-top:12px;">
+      <form hx-post="/job/{{ job.id }}/contact" hx-swap="beforeend" hx-target="closest .card > div:nth-child(2)" style="display:flex;flex-direction:column;gap:6px;">
+        <input type="text" name="name" placeholder="Name" style="font-size:12px;padding:6px 10px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);">
+        <input type="text" name="title" placeholder="Title" style="font-size:12px;padding:6px 10px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);">
+        <button type="submit" class="btn btn-sm">Add contact</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# TAB 1: Score breakdown #}
+<div class="tab-panel" data-panel="1" style="display:none;flex-direction:column;gap:18px;padding-top:18px;">
+  <div class="card">
+    <div class="card-body" style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;">
+      <div>
+        <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:6px;">Final score</div>
+        <div class="mono tnum" style="font-size:42px;font-weight:600;line-height:1;letter-spacing:-.03em;">
+          {% if job.auto_rejected %}—{% else %}{{ "%.1f"|format(job.final_score or 0) }}{% endif %}
+        </div>
+        <div class="mono dim" style="font-size:11px;margin-top:4px;">/ 10.0 · {{ job.tier }}</div>
+      </div>
+      <div style="flex:1;min-width:280px;">
+        <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:10px;">Layer composition</div>
+        {%- set base = 5.0 -%}
+        {%- set adj = job.adjustment_weights_score or 0 -%}
+        {%- set match = job.match_score or 0 -%}
+        {%- set llm = job.llm_adjustment or 0 -%}
+        <table style="width:100%;font-size:12.5px;border-collapse:collapse;">
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:6px 0;" class="dim">Base</td>
+              <td style="padding:6px 0;text-align:right;" class="mono tnum">5.0</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:6px 0;"><span class="dim">+</span> Layer 4 · Adjustment weights</td>
+              <td style="padding:6px 0;text-align:right;" class="mono tnum" style="color:{% if adj >= 0 %}var(--tier-solid){% else %}var(--tier-pass){% endif %};">{% if adj >= 0 %}+{% endif %}{{ "%.1f"|format(adj) }}</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:6px 0;"><span class="dim">+</span> Layer 2 · Match to candidate</td>
+              <td style="padding:6px 0;text-align:right;" class="mono tnum" style="color:{% if match >= 0 %}var(--accent){% else %}var(--tier-pass){% endif %};">{% if match >= 0 %}+{% endif %}{{ "%.1f"|format(match) }}</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:6px 0;"><span class="dim">+</span> Layer 3 · LLM qualitative</td>
+              <td style="padding:6px 0;text-align:right;" class="mono tnum" style="color:{% if llm >= 0 %}var(--accent){% else %}var(--tier-pass){% endif %};">{% if llm >= 0 %}+{% endif %}{{ "%.1f"|format(llm) }}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0 0;font-weight:600;">= Final (clamped 0–10)</td>
+              <td style="padding:8px 0 0;text-align:right;font-weight:600;" class="mono tnum">{{ "%.1f"|format(job.final_score or 0) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Deterministic flags</h3>
+      <div class="spacer"></div>
+      <span class="dim mono" style="font-size:11px;">{{ flags_fired|length }} fired</span>
+    </div>
+    <div style="padding:0 16px 8px;">
+      {% if flags_fired %}
+        {% for flag in flags_fired %}
+        <div class="flag-row">
+          <span class="icon {% if flag.weight > 0 %}pos{% elif flag.weight < 0 %}neg{% endif %}">
+            {% if flag.weight > 0 %}+{% elif flag.weight < 0 %}−{% else %}!{% endif %}
+          </span>
+          <div>
+            <div style="font-size:12.5px;">{{ flag.label }}</div>
+            <div class="dim mono" style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;">{{ flag.id }}</div>
+          </div>
+          <div class="delta {% if flag.weight > 0 %}pos{% elif flag.weight < 0 %}neg{% else %}zero{% endif %}">
+            {% if flag.weight > 0 %}+{% endif %}{{ "%.1f"|format(flag.weight) if flag.weight != 0 else "warn" }}
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="dim" style="padding:16px 0;text-align:center;font-size:12px;">No flags fired — job sits at deterministic base.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>LLM qualitative pass</h3></div>
+    <div class="card-body">
+      <dl class="dl">
+        <dt>Adjustment</dt>
+        <dd class="mono tnum" style="font-weight:600;color:{% if (job.llm_adjustment or 0) >= 0 %}var(--tier-solid){% else %}var(--tier-pass){% endif %};">
+          {% if (job.llm_adjustment or 0) >= 0 %}+{% endif %}{{ "%.1f"|format(job.llm_adjustment or 0) }}
+        </dd>
+        <dt>Greenfield</dt><dd>{{ job.greenfield or '—' }}{% if job.greenfield_rationale %} — <span class="muted">{{ job.greenfield_rationale }}</span>{% endif %}</dd>
+        <dt>Pricing model</dt><dd>{{ job.pricing_model or '—' }}</dd>
+        <dt>Recommended angle</dt><dd style="font-style:italic;font-family:var(--font-serif);">"{{ job.recommended_angle or '—' }}"</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+
+{# TAB 5: Match Analysis (Layer 2 output) #}
+<div class="tab-panel" data-panel="5" style="display:none;flex-direction:column;gap:18px;padding-top:18px;">
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Match score</h3>
+      <div class="spacer"></div>
+      <span class="mono tnum" style="font-size:18px;font-weight:600;color:{% if (job.match_score or 0) >= 0 %}var(--accent){% else %}var(--tier-pass){% endif %};">
+        {% if (job.match_score or 0) >= 0 %}+{% endif %}{{ "%.1f"|format(job.match_score or 0) }} / ±3.0
+      </span>
+    </div>
+    <div class="card-body" style="font-size:13px;line-height:1.6;">
+      {% if job.match_summary %}{{ job.match_summary }}{% else %}<span class="dim">No summary recorded. Layer 2 may not have run yet, or the corpus was unavailable.</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Evidence — JD requirement → corpus match</h3>
+      <span class="dim mono" style="font-size:11px;">{{ job.match_evidence|length }}</span>
+    </div>
+    {% if job.match_evidence %}
+    <div style="padding:0 16px 12px;">
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:left;padding:8px 4px;font-weight:600;width:42%;">JD requirement</th>
+            <th style="text-align:left;padding:8px 4px;font-weight:600;width:46%;">Matched accomplishment</th>
+            <th style="text-align:left;padding:8px 4px;font-weight:600;">Strength</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in job.match_evidence %}
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px 4px;line-height:1.5;">{{ e.jd_requirement }}</td>
+            <td style="padding:8px 4px;line-height:1.5;">{{ e.matched_accomplishment }}</td>
+            <td style="padding:8px 4px;">
+              <span class="tag {% if e.strength == 'Strong' %}green{% elif e.strength == 'Moderate' %}amber{% else %}red{% endif %}">{{ e.strength }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card-body dim" style="text-align:center;padding:24px 0;font-size:12px;">No evidence rows. The corpus may be missing — see <a href="/settings/methodology" style="color:var(--accent);">methodology</a>.</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Mismatches — gaps the JD asks for</h3>
+      <span class="dim mono" style="font-size:11px;">{{ job.match_mismatches|length }}</span>
+    </div>
+    {% if job.match_mismatches %}
+    <div style="padding:0 16px 12px;">
+      {% for m in job.match_mismatches %}
+      <div style="padding:10px 0;{% if not loop.first %}border-top:1px solid var(--border);{% endif %}">
+        <div style="display:flex;align-items:flex-start;gap:8px;">
+          <span class="tag {% if m.severity == 'High' %}red{% elif m.severity == 'Medium' %}amber{% else %}green{% endif %}" style="flex-shrink:0;">{{ m.severity }}</span>
+          <div style="flex:1;font-size:12.5px;line-height:1.6;">
+            <div style="font-weight:500;">{{ m.jd_requirement }}</div>
+            <div class="dim" style="margin-top:2px;">{{ m.gap }}</div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card-body dim" style="text-align:center;padding:24px 0;font-size:12px;">No mismatches detected.</div>
+    {% endif %}
+  </div>
+
+  {% if job.differentiator_themes %}
+  <div class="card">
+    <div class="card-head"><h3>Differentiator themes that resonate</h3></div>
+    <div class="card-body" style="display:flex;flex-wrap:wrap;gap:6px;">
+      {% for theme in job.differentiator_themes %}<span class="tag green">{{ theme }}</span>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if job.match_bullets %}
+  <div class="card">
+    <div class="card-head">
+      <h3>Tailored resume bullets</h3>
+      <div class="spacer"></div>
+      <a href="/job/{{ job.id }}/resume" target="_blank"
+         style="font-size:12px;background:var(--accent);color:#fff;padding:4px 10px;border-radius:4px;text-decoration:none;white-space:nowrap;">
+        ⬇ Print Tailored Resume
+      </a>
+    </div>
+    <div style="padding:8px 16px 16px;">
+      {% for b in job.match_bullets %}
+      <div class="flag-row" style="align-items:flex-start;">
+        <span class="icon pos" style="margin-top:2px;">★</span>
+        <div style="font-size:12.5px;line-height:1.6;">{{ b }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if job.match_hooks %}
+  <div class="card">
+    <div class="card-head"><h3>Cover-letter hooks</h3></div>
+    <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:8px;">
+      {% for h in job.match_hooks %}
+      <div style="background:var(--bg-sunk);padding:10px 14px;border-radius:var(--radius);border-left:2px solid var(--accent);font-size:13px;line-height:1.6;font-family:var(--font-serif);font-style:italic;">"{{ h }}"</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if job.match_score is not none %}
+  <div class="card">
+    <div class="card-head">
+      <h3>Full cover letter</h3>
+      <div class="spacer"></div>
+      {% if not job.match_cover_letter %}
+      <button hx-post="/job/{{ job.id }}/cover-letter" hx-target="#cover-letter-body" hx-swap="innerHTML"
+              hx-indicator="#cover-letter-spin"
+              style="font-size:12px;background:var(--accent);color:#fff;padding:4px 10px;border-radius:4px;border:none;cursor:pointer;white-space:nowrap;">
+        ✍ Generate cover letter
+      </button>
+      {% endif %}
+    </div>
+    <div id="cover-letter-body" style="padding:8px 16px 16px;">
+      <span id="cover-letter-spin" class="htmx-indicator" style="font-size:12px;color:var(--ink-dim);">Generating…</span>
+      {% if job.match_cover_letter %}
+        {% set cl = job.match_cover_letter %}
+        <div style="display:flex;gap:10px;margin-bottom:10px;">
+          <a href="/job/{{ job.id }}/cover-letter" target="_blank"
+             style="font-size:12px;background:var(--accent);color:#fff;padding:4px 10px;border-radius:4px;text-decoration:none;">Print / Preview</a>
+          <a href="/job/{{ job.id }}/cover-letter/download"
+             style="font-size:12px;background:var(--bg-sunk);color:var(--ink);padding:4px 10px;border-radius:4px;text-decoration:none;border:1px solid var(--border);">⬇ Download .docx</a>
+          <button hx-post="/job/{{ job.id }}/cover-letter" hx-target="#cover-letter-body" hx-swap="innerHTML"
+                  style="font-size:12px;background:none;color:var(--ink-dim);border:1px solid var(--border);padding:4px 10px;border-radius:4px;cursor:pointer;">↻ Regenerate</button>
+        </div>
+        <div style="background:var(--bg-sunk);padding:14px 16px;border-radius:var(--radius);font-family:var(--font-serif);">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;">{{ cl.salutation }}</div>
+          {% for p in cl.body %}<p style="font-size:13px;line-height:1.65;margin:0 0 10px;">{{ p }}</p>{% endfor %}
+          <div style="font-size:13px;margin-top:10px;">{{ cl.closing }}</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+{# TAB 2: Research (HTMX lazy load) #}
+<div class="tab-panel" data-panel="2" style="display:none;padding-top:18px;">
+  <div class="card"
+       hx-get="/job/{{ job.id }}/research-panel"
+       hx-trigger="load"
+       hx-swap="innerHTML">
+    <div class="card-body dim" style="text-align:center;padding:32px 0;">Loading research…</div>
+  </div>
+  {% if tech_stack %}
+  <div class="card" style="margin-top:16px;">
+    <div class="card-head"><h3>Tech stack detected</h3></div>
+    <div class="card-body" style="display:flex;flex-wrap:wrap;gap:6px;">
+      {% for k, v in tech_stack.items() %}{% if v %}<span class="tag">{{ k }} · {{ v }}</span>{% endif %}{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# TAB 3: Questions #}
+<div class="tab-panel" data-panel="3" style="display:none;flex-direction:column;gap:18px;padding-top:18px;">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="dim mono" style="font-size:11px;">{{ questions_answered }} of {{ questions|length }} answered</div>
+    <div class="spacer"></div>
+    <a href="/prep/{{ job.id }}" class="btn btn-sm btn-ghost">Open interview prep →</a>
+  </div>
+
+  {% set priorities = ['High', 'Medium', 'Low'] %}
+  {% for pri in priorities %}
+    {% set pri_qs = questions | selectattr('priority', 'equalto', pri) | list %}
+    {% if pri_qs %}
+    <div class="card">
+      <div class="card-head">
+        <h3>{{ pri }} priority</h3>
+        <span class="dim mono" style="font-size:11px;">{{ pri_qs|length }}</span>
+      </div>
+      <div>
+        {% for q in pri_qs %}
+        <div style="padding:10px 16px;{% if not loop.first %}border-top:1px solid var(--border);{% endif %}">
+          <div style="font-size:13px;line-height:1.5;margin-bottom:6px;">{{ q.question }}</div>
+          <div class="dim mono" style="font-size:10px;display:flex;flex-wrap:wrap;gap:8px;">
+            <span style="color:{% if pri == 'High' %}var(--tier-skip){% elif pri == 'Medium' %}var(--accent){% else %}var(--text-dim){% endif %};">{{ pri }}</span>
+            {% if q.category %}<span>· {{ q.category }}</span>{% endif %}
+            {% if q.persona_target %}<span>· Ask: {{ q.persona_target }}</span>{% endif %}
+            {% if q.source %}<span>· {{ q.source }}</span>{% endif %}
+            {% if q.asked_to %}<span style="color:var(--accent);">· Asked → {{ q.asked_to }}</span>{% endif %}
+          </div>
+          {% if q.answer_notes %}
+          <div style="margin-top:8px;padding:8px 12px;background:var(--bg-sunk);border-left:2px solid var(--border-strong);border-radius:0 var(--radius) var(--radius) 0;font-size:12.5px;line-height:1.5;">
+            <div class="dim mono" style="font-size:10px;margin-bottom:4px;">Answer{% if q.asked_to %} · {{ q.asked_to }}{% endif %}</div>
+            {{ q.answer_notes }}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  {% if not questions %}
+  <div class="card">
+    <div class="card-body dim" style="text-align:center;padding:32px 0;">No questions yet. Questions are seeded when a job moves to Researching.</div>
+  </div>
+  {% endif %}
+</div>
+
+{# TAB 4: Strategy brief (HTMX lazy load) #}
+<div class="tab-panel" data-panel="4" style="display:none;padding-top:18px;">
+  <div class="card">
+    <div class="card-head">
+      <h3>Strategy brief</h3>
+      <div class="spacer"></div>
+      <span class="dim mono" style="font-size:10px;">Living document · accumulates after every interview</span>
+    </div>
+    <div class="card-body"
+         hx-get="/job/{{ job.id }}/brief-panel"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <div class="dim" style="text-align:center;padding:24px 0;">Loading brief…</div>
+    </div>
+  </div>
+</div>
+
+{# ── Decline / Close-listing dialog ───────────────────────────── #}
+<dialog id="declineDialog" style="border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-card);color:var(--text);padding:24px;min-width:340px;max-width:420px;">
+  <form id="declineForm" method="dialog" style="display:flex;flex-direction:column;gap:14px;">
+    <div style="font-weight:600;font-size:15px;" id="declineDialogTitle">Confirm stage change</div>
+    <div>
+      <label class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Reason <span style="color:var(--tier-pass);">*</span></label>
+      <select id="declineReasonSelect" class="select" style="width:100%;font-size:13px;" required>
+        <option value="">— select a reason —</option>
+      </select>
+    </div>
+    <div>
+      <label class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Notes <span class="dim">(optional)</span></label>
+      <textarea id="declineNotes" rows="3" style="width:100%;font-size:13px;padding:8px 10px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);resize:vertical;box-sizing:border-box;" placeholder="Add any context…"></textarea>
+    </div>
+    <div id="declineError" style="color:var(--tier-pass);font-size:12px;display:none;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" id="declineCancelBtn" class="btn btn-sm btn-ghost">Cancel</button>
+      <button type="button" id="declineSubmitBtn" class="btn btn-sm btn-primary">Confirm</button>
+    </div>
+  </form>
+</dialog>
+
+{# Tab switcher + stage-change intercept #}
+<script>
+(function() {
+  var tabs = document.querySelectorAll('.drawer-tab[data-tab]');
+  var panels = document.querySelectorAll('.tab-panel[data-panel]');
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      var idx = this.dataset.tab;
+      tabs.forEach(function(t) { t.removeAttribute('aria-current'); });
+      panels.forEach(function(p) { p.style.display = 'none'; });
+      this.setAttribute('aria-current', 'true');
+      var panel = document.querySelector('.tab-panel[data-panel="' + idx + '"]');
+      if (panel) panel.style.display = 'flex';
+    });
+  });
+
+  // Decline reasons keyed by stage code
+  var REASONS = {
+    i_declined:        {{ i_declined_reasons | tojson }},
+    they_declined:     {{ they_declined_reasons | tojson }},
+    job_listing_closed: {{ job_closed_reasons | tojson }},
+    duplicate:         {{ duplicate_reasons | tojson }},
+  };
+  var TITLES = {
+    i_declined:        'Why are you declining?',
+    they_declined:     'Why did they decline?',
+    job_listing_closed: 'Why is this listing closed?',
+    duplicate:         'Mark as duplicate',
+  };
+  var TERMINAL_STAGES = Object.keys(REASONS);
+
+  var stageSelect   = document.getElementById('stageSelect');
+  var dialog        = document.getElementById('declineDialog');
+  var reasonSelect  = document.getElementById('declineReasonSelect');
+  var notesField    = document.getElementById('declineNotes');
+  var errorBox      = document.getElementById('declineError');
+  var titleEl       = document.getElementById('declineDialogTitle');
+  var submitBtn     = document.getElementById('declineSubmitBtn');
+  var cancelBtn     = document.getElementById('declineCancelBtn');
+  var pendingStage  = null;
+  var originalStage = stageSelect ? stageSelect.value : '';
+
+  if (!stageSelect) return;
+
+  function applyStageChange(newStage, stageLabel) {
+    stageSelect.value = newStage;
+    originalStage = newStage;
+    stageSelect.classList.add('stage-changed-flash');
+    setTimeout(function() { stageSelect.classList.remove('stage-changed-flash'); }, 600);
+    window.showToast && window.showToast('Moved to ' + stageLabel);
+  }
+
+  stageSelect.addEventListener('change', function() {
+    var chosen = this.value;
+    if (TERMINAL_STAGES.indexOf(chosen) === -1) {
+      var fd = new FormData();
+      fd.append('to_stage', chosen);
+      fetch('/job/{{ job.id }}/stage', {method:'POST', body:fd, headers:{"X-Requested-With":"XMLHttpRequest"}})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.ok) applyStageChange(data.stage, data.stage_label);
+          else { stageSelect.value = originalStage; window.showToast && window.showToast('Error: ' + (data.error || 'Save failed')); }
+        })
+        .catch(function() { stageSelect.value = originalStage; });
+    } else {
+      pendingStage = chosen;
+      stageSelect.value = originalStage;
+      titleEl.textContent = TITLES[chosen] || 'Confirm stage change';
+      reasonSelect.innerHTML = '<option value="">— select a reason —</option>';
+      REASONS[chosen].forEach(function(r) {
+        var opt = document.createElement('option');
+        opt.value = r; opt.textContent = r;
+        reasonSelect.appendChild(opt);
+      });
+      notesField.value = '';
+      errorBox.style.display = 'none';
+      dialog.showModal();
+    }
+  });
+
+  cancelBtn.addEventListener('click', function() {
+    dialog.close();
+    pendingStage = null;
+  });
+
+  submitBtn.addEventListener('click', function() {
+    var reason = reasonSelect.value;
+    if (!reason) {
+      errorBox.textContent = 'Please select a reason.';
+      errorBox.style.display = 'block';
+      return;
+    }
+    errorBox.style.display = 'none';
+    var fd = new FormData();
+    fd.append('to_stage', pendingStage);
+    fd.append('decline_reason', reason);
+    fd.append('notes', notesField.value);
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving…';
+    fetch('/job/{{ job.id }}/stage', {method:'POST', body:fd, headers:{"X-Requested-With":"XMLHttpRequest"}})
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        dialog.close();
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Confirm';
+        if (data.ok) applyStageChange(data.stage, data.stage_label);
+      })
+      .catch(function() {
+        errorBox.textContent = 'Save failed — please try again.';
+        errorBox.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Confirm';
+      });
+  });
+
+  dialog.addEventListener('click', function(e) {
+    if (e.target === dialog) { dialog.close(); pendingStage = null; }
+  });
+})();
+</script>
+
+{% endblock %}

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ header.name }} — Cover Letter — {{ job.company }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: oklch(20% 0.012 60); --bg-elev: oklch(24% 0.013 60);
+    --border: oklch(30% 0.013 60); --text: oklch(94% 0.012 80);
+    --muted: oklch(72% 0.012 75); --accent: oklch(68% 0.12 45);
+    --accent-fg: oklch(18% 0.02 45); --radius: 5px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    color: var(--text); background: var(--bg); margin: 0; padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .print-bar {
+    background: var(--bg-elev); border-bottom: 1px solid var(--border);
+    padding: 8px 24px; display: flex; align-items: center;
+    justify-content: space-between; gap: 16px; position: sticky; top: 0; z-index: 10;
+  }
+  .print-bar .label { font-size: 12px; color: var(--muted); }
+  .print-bar .label strong { color: var(--text); font-weight: 500; }
+  .print-bar .actions { display: flex; gap: 8px; align-items: center; }
+  .print-bar a {
+    font-size: 12px; color: var(--muted); text-decoration: none;
+    padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .print-bar a:hover { color: var(--text); }
+  .print-bar button.print-btn {
+    background: var(--accent); color: var(--accent-fg); border: none;
+    padding: 6px 14px; border-radius: var(--radius); cursor: pointer;
+    font-size: 12px; font-weight: 600; font-family: inherit;
+  }
+  .page-wrap { padding: 32px 24px 60px; }
+  .page {
+    background: white; max-width: 816px; margin: 0 auto;
+    padding: 0.65in 0.75in; box-shadow: 0 8px 40px oklch(0% 0 0 / 0.5);
+    border-radius: 4px; font-family: "Source Serif 4", Georgia, serif;
+    font-size: 11pt; line-height: 1.5; color: #1d1d1d;
+  }
+  .cl-name { font-size: 14pt; font-weight: 700; color: #0a0a0a; margin: 0; }
+  .cl-contact { font-size: 9.5pt; color: #333; margin: 2px 0 22px; }
+  .cl-date, .cl-recipient { margin: 0 0 18px; }
+  .cl-recipient { white-space: pre-line; }
+  .cl-salutation { margin: 0 0 12px; }
+  .cl-body p { margin: 0 0 12px; }
+  .cl-closing { margin: 20px 0 2px; }
+  .cl-signature { font-weight: 600; }
+  .cl-error { color: #b00; font-size: 11pt; }
+  @media print {
+    body { background: white; }
+    .print-bar { display: none !important; }
+    .page-wrap { padding: 0; }
+    .page { box-shadow: none; max-width: none; border-radius: 0; padding: 0; }
+    @page { size: Letter; margin: 0.75in; }
+  }
+</style>
+</head>
+<body>
+
+<div class="print-bar">
+  <span class="label">
+    Cover letter for <strong>{{ job.company }}</strong>{% if job.job_title %} — {{ job.job_title }}{% endif %}
+  </span>
+  <div class="actions">
+    <a href="/job/{{ job.id }}">← Back</a>
+    <a href="/job/{{ job.id }}/cover-letter/download">Download .docx</a>
+    <button class="print-btn" onclick="window.print()">Print / Save PDF</button>
+  </div>
+</div>
+
+<div class="page-wrap">
+<div class="page">
+  <p class="cl-name">{{ header.name }}</p>
+  {% if header.contact %}<div class="cl-contact">{{ header.contact }}</div>{% endif %}
+  <div class="cl-date">{{ date }}</div>
+  {% if cl.recipient %}<div class="cl-recipient">{{ cl.recipient }}</div>{% endif %}
+
+  {% if cl.body %}
+    <div class="cl-salutation">{{ cl.salutation }}</div>
+    <div class="cl-body">
+      {% for p in cl.body %}<p>{{ p }}</p>{% endfor %}
+    </div>
+    <div class="cl-closing">{{ cl.closing }}</div>
+    <div class="cl-signature">{{ header.name }}</div>
+  {% else %}
+    <p class="cl-error">{{ cl.error or "Cover letter could not be generated. Try regenerating from the job page." }}</p>
+  {% endif %}
+</div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,68 @@
+# SearchOps — Hunt Targets (example)
+# ────────────────────────────────────
+# Copy to app/discovery/hunt_targets.yaml and add companies you want to track.
+# hunt_targets.yaml is gitignored and never committed.
+#
+# On first run, title_filters are seeded from this file into SQLite.
+# After that, manage companies via the Hunt Targets page in the app.
+
+# ── Title filters ─────────────────────────────────────────────────────────────
+# Jobs are only surfaced if the title contains at least one positive keyword
+# and no negative keywords. Case-insensitive. "operations" and "ops" are treated
+# as equivalent.
+
+title_filters:
+  positive:
+    - "GTM Operations"
+    - "Revenue Operations"
+    - "CS Operations"
+    - "Customer Success Operations"
+    - "Sales Operations"
+    - "Business Operations"
+    - "GTM Strategy"
+    - "Head of Operations"
+    - "VP of Operations"
+    - "Director of Operations"
+  negative:
+    - "Intern"
+    - "Associate"
+    - "Coordinator"
+    - "Manager, Sales"         # sales manager, not ops
+    - "Account Executive"
+
+# ── Hunt targets ──────────────────────────────────────────────────────────────
+# companies: list of companies to scan for job postings.
+# ats:  greenhouse | lever | workday | ashby | rippling | icims
+#       (leave blank to skip ATS scanning; the company still appears in the list)
+# ats_id: the company's slug on the ATS platform (from their job page URL)
+# tier: A (scan every run) | B (scan every 3 days) | C (manual only)
+# notes: freeform — visible in the app
+
+companies:
+  - name: "Acme SaaS"
+    ats: "greenhouse"
+    ats_id: "acmesaas"
+    careers_url: "https://www.acmesaas.com/careers"
+    tier: A
+    notes: "Tier 1 target. DevTools, Series C. Know the Head of Sales."
+
+  - name: "NovaCRM"
+    ats: "lever"
+    ats_id: "novacrm"
+    careers_url: "https://jobs.lever.co/novacrm"
+    tier: A
+    notes: "Greenfield GTM ops role rumored from conference contact."
+
+  - name: "BuildStack"
+    ats: "ashby"
+    ats_id: "buildstack"
+    careers_url: "https://jobs.ashbyhq.com/buildstack"
+    tier: B
+    notes: "AI-native construction tech. Series B. COO previously led RevOps at a public DevTools company."
+
+  - name: "FinOps Co"
+    ats: ""
+    ats_id: ""
+    careers_url: "https://www.finopsco.com/careers"
+    tier: C
+    notes: "No public ATS. Monitor manually. Fintech, Series B."

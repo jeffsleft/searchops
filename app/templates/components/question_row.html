@@ -1,0 +1,53 @@
+{# question_row.html — single question bank entry #}
+{# expects: q dict #}
+<div class="flex items-start gap-3 py-3 border-b border-gray-800 last:border-0">
+  <div class="flex-shrink-0 mt-1">
+    {% if q.status == 'answered' %}
+      <span class="w-5 h-5 rounded-full bg-green-600 flex items-center justify-center text-xs">✓</span>
+    {% elif q.status == 'asked' %}
+      <span class="w-5 h-5 rounded-full bg-yellow-600 flex items-center justify-center text-xs">?</span>
+    {% elif q.status == 'deferred' %}
+      <span class="w-5 h-5 rounded-full bg-gray-600 flex items-center justify-center text-xs">–</span>
+    {% else %}
+      <span class="w-5 h-5 rounded-full border border-gray-600 flex items-center justify-center text-xs text-gray-500">·</span>
+    {% endif %}
+  </div>
+  <div class="flex-1 min-w-0">
+    <div class="text-sm text-gray-200 mb-1">{{ q.question }}</div>
+    <div class="flex gap-2 flex-wrap">
+      <span class="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded">{{ q.category }}</span>
+      <span class="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded">{{ q.persona_target }}</span>
+      <span class="text-xs px-2 py-0.5 rounded
+        {% if q.priority == 'High' %}bg-red-900 text-red-300
+        {% elif q.priority == 'Medium' %}bg-yellow-900 text-yellow-300
+        {% else %}bg-gray-800 text-gray-500{% endif %}">
+        {{ q.priority }}
+      </span>
+      {% if q.divergence_flag %}
+        <span class="text-xs bg-orange-900 text-orange-300 px-2 py-0.5 rounded">⚠ Divergence</span>
+      {% endif %}
+    </div>
+    {% if q.answer_notes %}
+      <div class="mt-2 text-xs text-gray-500 italic">{{ q.answer_notes }}</div>
+    {% endif %}
+  </div>
+  <div class="flex-shrink-0 flex flex-col gap-1">
+    {% if q.status == 'unasked' %}
+      <button hx-post="/prep/{{ q.job_id }}/question/{{ q.id }}/asked"
+              hx-swap="outerHTML" hx-target="closest div.flex"
+              class="text-xs text-blue-400 hover:text-blue-300">Mark Asked</button>
+    {% elif q.status == 'asked' %}
+      <button onclick="document.getElementById('answer-{{ q.id }}').classList.toggle('hidden')"
+              class="text-xs text-green-400 hover:text-green-300">Add Answer</button>
+    {% endif %}
+  </div>
+</div>
+{% if q.status == 'asked' %}
+<div id="answer-{{ q.id }}" class="hidden px-8 pb-3">
+  <form hx-post="/prep/{{ q.job_id }}/question/{{ q.id }}/answered" hx-swap="outerHTML" hx-target="closest div">
+    <textarea name="answer_notes" rows="2" placeholder="Answer notes…"
+              class="w-full bg-gray-800 text-gray-200 text-sm rounded px-3 py-2 border border-gray-700 mb-2"></textarea>
+    <button type="submit" class="text-xs bg-green-700 hover:bg-green-600 text-white px-3 py-1 rounded">Save Answer</button>
+  </form>
+</div>
+{% endif %}

@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}Pipeline — Recruiting Engine{% endblock %}
+{% block page_title %}Pipeline{% endblock %}
+
+{% block topbar_actions %}
+<div class="tgroup">
+  <button aria-pressed="{{ 'true' if view != 'funnel' else 'false' }}"
+          hx-get="/pipeline?view=kanban"
+          hx-target="#pipeline-content"
+          hx-swap="innerHTML"
+          hx-push-url="true">Kanban</button>
+  <button aria-pressed="{{ 'true' if view == 'funnel' else 'false' }}"
+          hx-get="/pipeline?view=funnel"
+          hx-target="#pipeline-content"
+          hx-swap="innerHTML"
+          hx-push-url="true">Funnel</button>
+</div>
+{% endblock %}
+
+{% block content %}
+{% from "components/_macros.html" import logo, stage_label %}
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;justify-content:space-between;flex-wrap:wrap;">
+  <div class="dim mono" style="font-size:12px;">{{ active }} active · {{ total }} total</div>
+  <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;">
+    <a href="/pipeline" class="pill" style="font-size:11px;{% if not selected_archetype %}font-weight:600;{% endif %}">All</a>
+    {% for arch in ['GTM Ops','CS Ops','RevOps','Finance Ops','Strategy','IC-Heavy','Other'] %}
+    <a href="/pipeline?archetype={{ arch|urlencode }}" class="pill" style="font-size:11px;{% if selected_archetype == arch %}font-weight:600;{% endif %};">{{ arch }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div id="pipeline-content">
+
+{# ── Kanban View ───────────────────────────────────────────── #}
+{% if view != 'funnel' %}
+<div class="kanban">
+  {% for stage_code, stage_label in stages %}
+  {% if stage_code not in ('evaluated', 'accepted', 'i_declined', 'they_declined', 'job_listing_closed', 'duplicate', 'discovered') %}
+  {%- set stage_jobs = jobs_by_stage.get(stage_code, []) -%}
+  <div class="kanban-col">
+    <div class="kanban-col-head">
+      <span class="name">{{ stage_label }}</span>
+      <span class="count">{{ stage_jobs|length }}</span>
+    </div>
+    <div class="kanban-col-body" data-stage="{{ stage_code }}">
+      {% for job in stage_jobs %}
+      {%- set s = job.final_score or 0 -%}
+      <div class="kcard {% if not job.ethics_vetted %}unvetted{% endif %}"
+           draggable="true"
+           data-job-id="{{ job.id }}"
+           data-stage="{{ job.pipeline_stage }}">
+        <div class="row" style="gap:8px;align-items:flex-start;">
+          {{ logo(job.company, 'sm') }}
+          <div style="flex:1;min-width:0;">
+            <div class="ktitle">{{ job.job_title }}</div>
+            <div class="kcompany">{{ job.company }} · <span class="mono dim">{{ job.sector or '' }}</span></div>
+          </div>
+        </div>
+
+        {%- set det = job.deterministic_score or 0 -%}
+        {%- set llm = job.llm_adjustment or 0 -%}
+        <div class="score-bar">
+          <span class="det" style="width:{{ ((det / 10) * 100)|int }}%"></span>
+          {% if llm >= 0 %}
+          <span class="llm-pos" style="width:{{ ((llm / 10) * 100)|int }}%"></span>
+          {% else %}
+          <span class="llm-neg" style="width:{{ ((llm|abs / 10) * 100)|int }}%"></span>
+          {% endif %}
+        </div>
+
+        <div class="kfoot">
+          <span class="score-badge
+            {%- if job.auto_rejected %} tier-reject
+            {%- elif s >= 9 %} tier-dream
+            {%- elif s >= 7 %} tier-solid
+            {%- elif s >= 5 %} tier-worth
+            {%- elif s >= 3 %} tier-skip
+            {%- else %} tier-pass{%- endif %}">
+            <span class="dot"></span>{{ "%.1f"|format(s) }}
+          </span>
+          {% if job.greenfield == 'Yes' %}
+          <span class="dim mono" style="font-size:9px;letter-spacing:.05em;">GRNFLD</span>
+          {% endif %}
+          {% if job.posting_age_days and job.posting_age_days > 21 %}
+          <span class="dim mono" style="font-size:9px;letter-spacing:.05em;">⏱ {{ job.posting_age_days }}d</span>
+          {% endif %}
+          {% if job.role_archetype %}
+          <span class="dim mono" style="font-size:9px;letter-spacing:.05em;">{{ job.role_archetype }}</span>
+          {% endif %}
+          {% if job.notes %}
+          <span title="{{ job.notes[:80] }}" style="font-size:11px;opacity:0.7;cursor:default;">📝</span>
+          {% endif %}
+          <div class="spacer"></div>
+          <span class="dim mono" style="font-size:10px;">{{ (job.date_found or '')[5:10] }}</span>
+        </div>
+
+        <select class="kanban-stage-select" style="width:100%;font-size:10px;margin-top:4px;"
+                data-job-id="{{ job.id }}"
+                data-current-stage="{{ job.pipeline_stage }}">
+          {% for sc, sl in stages %}
+          <option value="{{ sc }}"{% if sc == job.pipeline_stage %} selected{% endif %}>{{ sl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endfor %}
+
+      {% if not stage_jobs %}
+      <div style="padding:20px;text-align:center;color:var(--text-dim);font-size:11px;">—</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Funnel View ───────────────────────────────────────────── #}
+{% if view == 'funnel' %}
+<div class="funnel">
+  <div class="dim" style="text-align:center;font-size:12px;margin-bottom:12px;">
+    Distribution across {{ stages|length }} stages · {{ active }} active jobs
+  </div>
+  {% for stage_code, stage_label in stages %}
+  {% if stage_code not in ('identified', 'evaluated') %}
+  {%- set count = jobs_by_stage.get(stage_code, [])|length -%}
+  <div class="funnel-row">
+    <div class="label">{{ stage_label }}</div>
+    <div class="funnel-bar">
+      <div class="fill" style="width:{{ ((count / max_stage_count) * 100)|int }}%"></div>
+      <span class="fill-text">{{ count }}</span>
+    </div>
+    <div class="pct">{{ ((count / active * 100)|int) if active else 0 }}%</div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+</div>{# end #pipeline-content #}
+
+<style>
+  .kanban-col-body.drop-target { background: color-mix(in oklch, var(--accent) 8%, transparent); outline: 1px dashed var(--accent); outline-offset: -4px; }
+  .kcard[draggable="true"] { cursor: grab; }
+  .kcard.dragging { opacity: 0.4; cursor: grabbing; }
+</style>
+
+{# ── Decline / Close-listing dialog ───────────────────────────── #}
+<dialog id="pipelineDeclineDialog" style="border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-card);color:var(--text);padding:24px;min-width:340px;max-width:420px;">
+  <div style="font-weight:600;font-size:15px;margin-bottom:14px;" id="pipelineDeclineTitle">Confirm stage change</div>
+  <div style="display:flex;flex-direction:column;gap:14px;">
+    <div>
+      <label class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Reason <span style="color:var(--tier-pass);">*</span></label>
+      <select id="pipelineDeclineReason" class="select" style="width:100%;font-size:13px;" required>
+        <option value="">— select a reason —</option>
+      </select>
+    </div>
+    <div>
+      <label class="dim" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Notes <span class="dim">(optional)</span></label>
+      <textarea id="pipelineDeclineNotes" rows="3" style="width:100%;font-size:13px;padding:8px 10px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);resize:vertical;box-sizing:border-box;" placeholder="Add any context…"></textarea>
+    </div>
+    <div id="pipelineDeclineError" style="color:var(--tier-pass);font-size:12px;display:none;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" id="pipelineDeclineCancelBtn" class="btn btn-sm btn-ghost">Cancel</button>
+      <button type="button" id="pipelineDeclineSubmitBtn" class="btn btn-sm btn-primary">Confirm</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+  (function() {
+    var dragId = null;
+    var dragSrcCol = null;
+    var dragCardEl = null;
+
+    var REASONS = {
+      i_declined:         {{ i_declined_reasons | tojson }},
+      they_declined:      {{ they_declined_reasons | tojson }},
+      job_listing_closed: {{ job_closed_reasons | tojson }},
+      duplicate:          {{ duplicate_reasons | tojson }},
+    };
+    var TITLES = {
+      i_declined:         'Why are you declining?',
+      they_declined:      'Why did they decline?',
+      job_listing_closed: 'Why is this listing closed?',
+      duplicate:          'Mark as duplicate',
+    };
+    var TERMINAL_STAGES = Object.keys(REASONS);
+    var STAGE_LABELS = {
+      {% for stage_code, stage_label in stages %}'{{ stage_code }}': '{{ stage_label }}',
+      {% endfor %}
+    };
+
+    var dialog      = document.getElementById('pipelineDeclineDialog');
+    var reasonSel   = document.getElementById('pipelineDeclineReason');
+    var notesField  = document.getElementById('pipelineDeclineNotes');
+    var errorBox    = document.getElementById('pipelineDeclineError');
+    var titleEl     = document.getElementById('pipelineDeclineTitle');
+    var submitBtn   = document.getElementById('pipelineDeclineSubmitBtn');
+    var cancelBtn   = document.getElementById('pipelineDeclineCancelBtn');
+    var pendingJobId  = null;
+    var pendingStage  = null;
+    var pendingSelect = null;
+    var pendingCard   = null;
+
+    function postStage(jobId, stage, reason, notes) {
+      var fd = new FormData();
+      fd.append('to_stage', stage);
+      if (reason) fd.append('decline_reason', reason);
+      if (notes)  fd.append('notes', notes);
+      return fetch('/job/' + jobId + '/stage', {method:'POST', body:fd, credentials:'same-origin', headers:{"X-Requested-With":"XMLHttpRequest"}});
+    }
+
+    // Move a card to a new column immediately, update column counts, update card metadata.
+    function moveCardOptimistic(card, newStage) {
+      var targetCol = document.querySelector('.kanban-col-body[data-stage="' + newStage + '"]');
+      if (!card || !targetCol) return false;
+      card.dataset.stage = newStage;
+      var sel = card.querySelector('.kanban-stage-select');
+      if (sel) sel.dataset.currentStage = newStage;
+      targetCol.appendChild(card);
+      updateColCounts();
+      return true;
+    }
+
+    // Remove a card (terminal stage — card leaves the board entirely).
+    function removeCard(card) {
+      if (card && card.parentNode) card.parentNode.removeChild(card);
+      updateColCounts();
+    }
+
+    function updateColCounts() {
+      document.querySelectorAll('.kanban-col').forEach(function(col) {
+        var body  = col.querySelector('.kanban-col-body');
+        var badge = col.querySelector('.kanban-col-head .count');
+        if (body && badge) badge.textContent = body.querySelectorAll('.kcard').length;
+      });
+    }
+
+    function openDeclineDialog(jobId, stage, selectEl, cardEl) {
+      pendingJobId  = jobId;
+      pendingStage  = stage;
+      pendingSelect = selectEl;
+      pendingCard   = cardEl;
+      titleEl.textContent = TITLES[stage] || 'Confirm stage change';
+      reasonSel.innerHTML = '<option value="">— select a reason —</option>';
+      (REASONS[stage] || []).forEach(function(r) {
+        var opt = document.createElement('option');
+        opt.value = r; opt.textContent = r;
+        reasonSel.appendChild(opt);
+      });
+      notesField.value = '';
+      errorBox.style.display = 'none';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Confirm';
+      dialog.showModal();
+    }
+
+    cancelBtn.addEventListener('click', function() {
+      if (pendingSelect) pendingSelect.value = pendingSelect.dataset.currentStage;
+      dialog.close();
+      pendingJobId = pendingStage = pendingSelect = pendingCard = null;
+    });
+
+    submitBtn.addEventListener('click', function() {
+      var reason = reasonSel.value;
+      if (!reason) {
+        errorBox.textContent = 'Please select a reason.';
+        errorBox.style.display = 'block';
+        return;
+      }
+      errorBox.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving…';
+      var card = pendingCard;
+      var toastStage = pendingStage;
+      postStage(pendingJobId, pendingStage, reason, notesField.value)
+        .then(function() {
+          dialog.close();
+          // Terminal stage: remove from board immediately.
+          if (card) removeCard(card);
+          window.showToast && window.showToast('Moved to ' + (STAGE_LABELS[toastStage] || toastStage));
+          pendingJobId = pendingStage = pendingSelect = pendingCard = null;
+        })
+        .catch(function() {
+          errorBox.textContent = 'Save failed — please try again.';
+          errorBox.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Confirm';
+        });
+    });
+
+    dialog.addEventListener('click', function(e) {
+      if (e.target === dialog) {
+        if (pendingSelect) pendingSelect.value = pendingSelect.dataset.currentStage;
+        dialog.close();
+        pendingJobId = pendingStage = pendingSelect = pendingCard = null;
+      }
+    });
+
+    function bindStageSelects(root) {
+      root.querySelectorAll('.kanban-stage-select').forEach(function(sel) {
+        sel.addEventListener('change', function() {
+          var jobId = sel.dataset.jobId;
+          var chosen = sel.value;
+          var card = sel.closest('.kcard');
+          var prevStage = sel.dataset.currentStage;
+          if (TERMINAL_STAGES.indexOf(chosen) === -1) {
+            // Optimistic: move card to new column right away.
+            moveCardOptimistic(card, chosen);
+            postStage(jobId, chosen, '', '')
+              .then(function(r) {
+                if (r.ok || r.redirected) {
+                  window.showToast && window.showToast('Moved to ' + (STAGE_LABELS[chosen] || chosen));
+                } else {
+                  moveCardOptimistic(card, prevStage);
+                  sel.value = prevStage;
+                }
+              })
+              .catch(function() {
+                // Revert on network/server error.
+                moveCardOptimistic(card, prevStage);
+                sel.value = prevStage;
+              });
+          } else {
+            sel.value = prevStage;
+            openDeclineDialog(jobId, chosen, sel, card);
+          }
+        });
+      });
+    }
+
+    function bind(root) {
+      bindStageSelects(root);
+      root.querySelectorAll('.kcard[draggable="true"]').forEach(function(card) {
+        card.addEventListener('dragstart', function(e) {
+          dragId = card.dataset.jobId;
+          dragSrcCol = card.dataset.stage;
+          dragCardEl = card;
+          card.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', dragId); } catch (_) {}
+        });
+        card.addEventListener('dragend', function() {
+          card.classList.remove('dragging');
+          document.querySelectorAll('.kanban-col-body.drop-target').forEach(function(c) { c.classList.remove('drop-target'); });
+          dragId = null; dragSrcCol = null; dragCardEl = null;
+        });
+        card.addEventListener('click', function(e) {
+          if (e.target.closest('select, a, button')) return;
+          if (card.classList.contains('dragging')) return;
+          window.openJobDrawer && window.openJobDrawer(card.dataset.jobId);
+        });
+        card.style.cursor = 'pointer';
+      });
+
+      root.querySelectorAll('.kanban-col-body').forEach(function(col) {
+        col.addEventListener('dragover', function(e) {
+          if (!dragId) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          col.classList.add('drop-target');
+        });
+        col.addEventListener('dragleave', function(e) {
+          if (e.target === col) col.classList.remove('drop-target');
+        });
+        col.addEventListener('drop', function(e) {
+          if (!dragId) return;
+          e.preventDefault();
+          var newStage = col.dataset.stage;
+          col.classList.remove('drop-target');
+          if (newStage === dragSrcCol) return;
+          var jobId = dragId;
+          var card  = dragCardEl;
+          var prev  = dragSrcCol;
+          if (TERMINAL_STAGES.indexOf(newStage) === -1) {
+            // Optimistic: card is already in the drop target visually (browser moved it).
+            // Just update metadata and save.
+            if (card) { card.dataset.stage = newStage; var s = card.querySelector('.kanban-stage-select'); if (s) { s.value = newStage; s.dataset.currentStage = newStage; } }
+            updateColCounts();
+            postStage(jobId, newStage, '', '')
+              .then(function(r) {
+                if (r.ok || r.redirected) {
+                  window.showToast && window.showToast('Moved to ' + (STAGE_LABELS[newStage] || newStage));
+                } else {
+                  if (card) moveCardOptimistic(card, prev);
+                }
+              })
+              .catch(function() { if (card) moveCardOptimistic(card, prev); });
+          } else {
+            openDeclineDialog(jobId, newStage, null, card);
+          }
+        });
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() { bind(document); });
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+      if (e.target && e.target.id === 'pipeline-content') bind(e.target);
+    });
+  })();
+</script>
+
+{% endblock %}

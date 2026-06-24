@@ -1,0 +1,92 @@
+[
+  {
+    "id": "seed_001",
+    "company": "Forgeline",
+    "job_title": "VP of GTM Operations",
+    "url": "https://example.com/forgeline-vp-gtm-ops",
+    "jd_text": "Forgeline is looking for a VP of GTM Operations to build and scale our revenue operations function. You will report to the CRO and lead a team of 8-12 people across RevOps, CS Ops, and Deal Desk. This is a greenfield opportunity \u2014 we're building the GTM operating system from scratch as we transition from PLG to enterprise sales. We use Salesforce, Gainsight, Slack, and Google Workspace. Our team is remote-first with quarterly in-person offsites. The ideal candidate has scaled GTM operations at a $100M+ ARR SaaS company and has experience with consumption-based pricing models. Compensation: $250,000-$320,000 OTE + equity. MacBook Pro provided. Series D, $425M raised.",
+    "expected_score_range": [
+      8.5,
+      10.0
+    ],
+    "expected_greenfield": "Yes",
+    "expected_flags": [
+      "greenfield",
+      "modern_tech",
+      "modern_pricing",
+      "target_sector",
+      "remote"
+    ],
+    "notes": "Dream job scenario. Hits almost every preference."
+  },
+  {
+    "id": "seed_002",
+    "company": "Acme Corp",
+    "job_title": "Director of Revenue Operations",
+    "url": "https://example.com/acme-dir-revops",
+    "jd_text": "Acme Corp is hiring a Director of Revenue Operations to optimize our existing sales and CS processes. You'll report to the CFO and manage a team of 3. Our primary focus is cleaning up Salesforce data hygiene, standardizing our reporting, and reducing manual work in our renewal process. We are a Series C healthcare technology company based in Boston with a hybrid work model (3 days in office required). We use Microsoft Teams, Windows, and HubSpot CRM. Compensation: $185,000-$215,000 base + 15% bonus. No equity at this time.",
+    "expected_score_range": [
+      1.0,
+      3.0
+    ],
+    "expected_greenfield": "No",
+    "expected_flags": [
+      "windows_penalty",
+      "process_upcycling",
+      "low_interest_sector"
+    ],
+    "notes": "Should score very low. Healthcare sector (hard no), Windows/Teams, reports to CFO, process cleanup only, no equity, in-office required. Tests multiple penalty stacking."
+  },
+  {
+    "id": "seed_003",
+    "company": "Sentora",
+    "job_title": "Head of GTM Strategy and Operations",
+    "url": "https://example.com/sentora-head-gtm",
+    "jd_text": "Sentora is looking for a Head of GTM Strategy and Operations to define and execute our go-to-market operating model. This is a newly created role \u2014 we are building this function from scratch \u2014 a true build from scratch greenfield mandate \u2014 reporting to the COO. You'll work cross-functionally with Sales, CS, and Product to build the systems and processes that scale our developer-focused security platform. We're a Series C company with $100M+ raised, 200 employees, and growing 80% YoY. Our pricing is transitioning from seat-based to consumption-based as we expand our platform capabilities. We offer fully remote work, competitive salary ($200k-$280k base), meaningful equity, and use Slack, Salesforce, and Mac across the company. The ideal candidate brings financial rigor to GTM operations \u2014 someone who can build board-ready reporting while also rolling up their sleeves on process design.",
+    "expected_score_range": [
+      8.0,
+      10.0
+    ],
+    "expected_greenfield": "Yes",
+    "expected_flags": [
+      "greenfield",
+      "modern_tech",
+      "target_sector",
+      "remote",
+      "modern_pricing"
+    ],
+    "notes": "Near-perfect fit. DevTools, greenfield, COO reporting line, pricing transition, remote, financial rigor emphasis. Note: founder_type requires research data, not detectable from JD text alone."
+  },
+  {
+    "id": "seed_004",
+    "company": "MidCo Analytics",
+    "job_title": "Director of Business Operations",
+    "url": "https://example.com/midco-dir-ops",
+    "jd_text": "MidCo Analytics is hiring a Director of Business Operations. You'll report to the VP of Sales and manage operational support for the sales team. Key responsibilities include pipeline reporting, territory management, and quota setting. We're a Series B analytics company with 150 employees. Hybrid role based in Sacramento, CA (2 days per week in office). Compensation: $185,000-$210,000 base. Standard benefits package. We use Salesforce, Slack, and Google Workspace on Macs.",
+    "expected_score_range": [
+      5.0,
+      7.0
+    ],
+    "expected_greenfield": "Partial",
+    "expected_flags": [
+      "modern_tech"
+    ],
+    "notes": "Mixed bag. Good tech stack, good location, but reports to VP Sales (not C-level), salary range is mid, no equity mentioned, scope is narrow (sales support only). Tests the 'Worth a Look' tier."
+  },
+  {
+    "id": "seed_005",
+    "company": "PokerStars Tech",
+    "job_title": "VP of Operations",
+    "url": "https://example.com/pokerstars-vp-ops",
+    "jd_text": "PokerStars Tech is seeking a VP of Operations to lead our global operations team. Fully remote, $350,000 OTE, significant equity. We are revolutionizing online gaming with AI-powered experiences.",
+    "expected_score_range": [
+      0.0,
+      0.0
+    ],
+    "expected_greenfield": "N/A",
+    "expected_flags": [
+      "auto_rejected"
+    ],
+    "notes": "Auto-reject test. Gambling sector. Should score 0 regardless of attractive compensation and remote work."
+  }
+]

@@ -1,0 +1,34 @@
+<div class="prep-shell layout-{{ layout|default('rail') }}">
+  {% if not active_job %}
+    {% include "prep/_empty_hero.html" %}
+  {% else %}
+    {% if layout == 'rail' %}
+      {% include "prep/_company_rail.html" %}
+    {% endif %}
+
+    <div class="prep-main">
+      {% include "prep/_header.html" %}
+      {% include "prep/_session_tabs.html" %}
+
+      {% if stage_prompt_type %}
+        {% include "prep/_stage_prompt.html" %}
+      {% endif %}
+
+      <div class="prep-body" id="prep-body">
+        <div class="prep-col">
+          {% include "prep/_card_hook.html" %}
+          {% include "prep/_card_questions_to_ask.html" %}
+          {% include "prep/_card_questions_they_ask.html" %}
+          {% include "prep/_card_scratchpad.html" %}
+        </div>
+        <div class="prep-col prep-side">
+          {% include "prep/_card_interviewer_dossier.html" %}
+          {% include "prep/_card_anchor_stories.html" %}
+          {% include "prep/_card_red_flags.html" %}
+          {% include "prep/_card_cheat_sheet.html" %}
+          {% include "prep/_card_transcript.html" %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>

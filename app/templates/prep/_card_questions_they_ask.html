@@ -1,0 +1,27 @@
+<div class="card prep-card">
+  <div class="card-head">
+    <h3>Likely questions they'll ask</h3>
+    <span class="dim mono" style="font-size:11px">{{ questions_they_ask|length }}</span>
+    <div class="spacer"></div>
+    <button class="btn btn-sm" hx-post="/prep/sessions/{{ active_session.id }}/questions-they-ask/generate" hx-target="closest .prep-card" hx-swap="outerHTML" title="Auto-generate with LLM">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><circle cx="5.5" cy="5.5" r="4.5" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="5.5" cy="5.5" r="1.5" fill="currentColor"/></svg> Draft more
+    </button>
+  </div>
+  <div>
+    {% for q in questions_they_ask %}
+      <div class="prep-tq-row">
+        <div class="prep-tq-prompt">
+          <span class="prep-tq-bullet">Q</span>
+          <textarea class="prep-tq-edit" rows="1"
+            hx-patch="/prep/questions-they-ask/{{ q.id }}" hx-trigger="blur" hx-swap="none" name="prompt">{{ q.prompt }}</textarea>
+          <button class="btn btn-sm btn-ghost btn-icon" hx-delete="/prep/questions-they-ask/{{ q.id }}" hx-target="closest .prep-card" hx-swap="outerHTML" title="Remove">×</button>
+        </div>
+        <textarea class="textarea prep-tq-answer" placeholder="My answer notes…"
+          hx-patch="/prep/questions-they-ask/{{ q.id }}" hx-trigger="blur" hx-swap="none" name="my_answer" rows="3">{{ q.my_answer or '' }}</textarea>
+      </div>
+    {% endfor %}
+    <form class="prep-add-row" hx-post="/prep/sessions/{{ active_session.id }}/questions-they-ask" hx-target="closest .prep-card" hx-swap="outerHTML">
+      <input class="input" placeholder="Add a likely question…" name="prompt" autocomplete="off"/>
+    </form>
+  </div>
+</div>

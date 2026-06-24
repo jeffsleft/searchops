@@ -1,0 +1,77 @@
+# SearchOps — Candidate Profile (example)
+# ─────────────────────────────────────────
+# Copy this file to candidate_profile.yaml and fill in your own details.
+# candidate_profile.yaml is gitignored and never committed.
+#
+# On first run the app seeds this into SQLite. The DB becomes the source of
+# truth; edits to candidate_profile.yaml after that have no effect unless
+# you reset the DB or use the Settings UI.
+
+# ── Who you are ───────────────────────────────────────────────────────────────
+
+candidate:
+  name: "Alex Rivera"
+  target_title: "Director / VP of GTM Operations or Revenue Operations"
+  current_role: "Head of Revenue Operations, AcmeSaaS Inc."
+
+  background: |
+    Revenue Operations leader with 8 years scaling GTM systems at Series B–D
+    SaaS companies. Led the CS Ops and RevOps rebuild at AcmeSaaS during a
+    $30M → $150M ARR journey. CPA background provides financial rigor rare in
+    operations roles. AI-native builder: shipped internal automation tools that
+    reduced manual renewal work by 60%.
+
+  differentiators:
+    - "CPA + RevOps — financial rigor in GTM decision-making"
+    - "AI-native operator — shipped internal tools, not just a user"
+    - "Led pricing-model transitions (seat → consumption)"
+    - "CS Ops rebuilds that moved NRR from 95% to 112%"
+
+# ── What you're looking for ───────────────────────────────────────────────────
+
+  target_roles:
+    - "VP of GTM Operations"
+    - "Director of Revenue Operations"
+    - "Head of CS Operations"
+    - "GTM Strategy & Operations"
+
+  target_companies:
+    size: "200–500 employees"
+    funding_stage: "Series B+"
+
+  preferred_sectors:
+    - "Developer Tools"
+    - "AI-native SaaS"
+    - "Fintech"
+    - "PropTech"
+
+  geography:
+    base: "Austin, TX"
+    preference: "Remote preferred. Hybrid 1–2×/month Austin or San Francisco OK."
+
+  availability: "October 2026"
+
+# ── Scoring configuration ─────────────────────────────────────────────────────
+# These tune the engine's calibration. See /settings/methodology for
+# a full explanation of each layer.
+
+scoring:
+  base_score: 3.5             # anchor before any bonuses or penalties
+  max_l4_positive: 2.5        # cap on stacked keyword bonuses (Layer 4)
+  l2_range: [-4.0, 4.0]       # Layer 2 (LLM corpus match) contribution range
+  l3_range: [-1.5, 1.5]       # Layer 3 (qualitative role shape) range
+  top_band_gate_threshold: 7.0 # scores above this need all 5 must-haves
+  top_band_gate_enabled: true
+
+# ── Auto-reject threshold ─────────────────────────────────────────────────────
+# Jobs with a posted salary explicitly below base_min are auto-rejected.
+# Jobs with no salary listed are NOT rejected.
+
+compensation:
+  base_min: 160000
+  target_base: 180000
+
+# ── No-go sectors + ethics reasons ───────────────────────────────────────────
+# These are seeded into SQLite on first run from app/scoring/engine.py defaults.
+# After first run, manage them in the Settings UI (they live in the DB).
+# You don't need to define them here unless you want custom values at seed time.

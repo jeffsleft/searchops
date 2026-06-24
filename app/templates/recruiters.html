@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Recruiters — Recruiting Engine{% endblock %}
+{% block page_title %}Recruiters{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-sm btn-primary"
+        onclick="document.getElementById('add-recruiter-details').setAttribute('open','')">
+  + Add Recruiter
+</button>
+{% endblock %}
+
+{% block content_wrap %}
+<div class="split" id="recruiters-split">
+  <div class="split-list">
+    <div class="page">
+{% block content %}
+{% from "components/_macros.html" import logo %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Recruiters</h1>
+    <div class="sub">CRM for headhunters and recruiting contacts</div>
+  </div>
+  <span class="dim mono" style="font-size:12px;">{{ counts.all }} contact{{ '' if counts.all == 1 else 's' }}</span>
+</div>
+
+{% if counts.stale > 0 %}
+<div style="background:var(--rust-soft);border:1px solid var(--rust);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--text);">
+  {{ counts.stale }} recruiter{{ '' if counts.stale == 1 else 's' }} overdue for follow-up.
+</div>
+{% endif %}
+
+<div class="filterbar" style="margin-bottom:16px;">
+  <div class="tgroup">
+    {% set tabs = [
+      ('all',    'All'),
+      ('active', 'Active'),
+      ('warm',   'Warm'),
+      ('cold',   'Cold'),
+      ('stale',  'Stale'),
+    ] %}
+    {% for val, label in tabs %}
+    <button aria-pressed="{{ 'true' if tab == val else 'false' }}"
+            hx-get="/recruiters?tab={{ val }}"
+            hx-target="body"
+            hx-swap="outerHTML"
+            hx-push-url="true">
+      {{ label }} · {{ counts.get(val, 0) }}
+    </button>
+    {% endfor %}
+  </div>
+</div>
+
+{% if recruiters %}
+<div class="card">
+  <table class="tbl">
+    <thead><tr>
+      <th style="width:28%;">Name</th>
+      <th>Firm</th>
+      <th>Specialty</th>
+      <th>Status</th>
+      <th>Last contact</th>
+    </tr></thead>
+    <tbody>
+      {% for r in recruiters %}
+      <tr data-recruiter-id="{{ r.id }}" style="cursor:pointer;"
+          hx-get="/recruiters/{{ r.id }}/detail"
+          hx-target="#recruiters-panel"
+          hx-swap="innerHTML"
+          onclick="window.openRecruitersPanel && window.openRecruitersPanel(this)">
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;">
+            {{ logo(r.name, 'sm') }}
+            <div>
+              <div style="font-weight:500;">{{ r.name }}</div>
+              {% if r.email %}<div class="dim" style="font-size:11px;">{{ r.email }}</div>{% endif %}
+            </div>
+          </div>
+        </td>
+        <td class="muted" style="font-size:12px;">{{ r.firm or '—' }}</td>
+        <td class="muted" style="font-size:12px;">{{ r.specialty or '—' }}</td>
+        <td>
+          {%- if r.relationship_status == 'Active' -%}
+          <span class="need-pill tier-dream"><span class="dot"></span>Active</span>
+          {%- elif r.relationship_status == 'Warm' -%}
+          <span class="need-pill tier-worth"><span class="dot"></span>Warm</span>
+          {%- else -%}
+          <span class="need-pill tier-skip"><span class="dot"></span>Cold</span>
+          {%- endif -%}
+          {% if r.days_since and r.stale_alert_days and r.days_since > r.stale_alert_days %}
+          <span class="tag amber" style="margin-left:4px;">{{ r.days_since|int }}d stale</span>
+          {% endif %}
+        </td>
+        <td class="dim mono" style="font-size:11px;">{{ r.last_contact_date or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:32px;text-align:center;">
+  <div class="dim" style="font-size:14px;margin-bottom:12px;">No recruiters in this view</div>
+  <div style="font-size:12px;color:var(--text-muted);">Switch tabs or click <strong>+ Add Recruiter</strong>.</div>
+</div>
+{% endif %}
+
+{# Add recruiter form #}
+<details id="add-recruiter-details" style="margin-top:16px;">
+  <summary style="list-style:none;display:none;"></summary>
+  <div class="card" style="margin-top:8px;">
+    <div class="card-head"><h3>Add Recruiter</h3></div>
+    <form hx-post="/recruiters"
+          hx-target="body"
+          hx-swap="outerHTML"
+          data-htmx-after="reset-form" data-htmx-after-details="add-recruiter-details"
+          style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Name *</label>
+          <input type="text" name="name" required class="input">
+        </div>
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Firm / Company</label>
+          <input type="text" name="firm" class="input">
+        </div>
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Specialty</label>
+          <input type="text" name="specialty" placeholder="GTM, RevOps, FinOps…" class="input">
+        </div>
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Relationship</label>
+          <select name="relationship_status" class="select">
+            <option>Cold</option><option>Warm</option><option>Active</option>
+          </select>
+        </div>
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Email</label>
+          <input type="email" name="email" class="input">
+        </div>
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">LinkedIn URL</label>
+          <input type="url" name="linkedin_url" class="input">
+        </div>
+      </div>
+      <div>
+        <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Notes</label>
+        <textarea name="notes" class="textarea"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button type="submit" class="btn btn-primary">Add</button>
+        <button type="button" class="btn btn-ghost"
+                onclick="document.getElementById('add-recruiter-details').removeAttribute('open')">Cancel</button>
+      </div>
+    </form>
+  </div>
+</details>
+
+<script>
+  window.openRecruitersPanel = function(row) {
+    document.querySelectorAll('#recruiters-split tr.row-selected').forEach(function(tr) { tr.classList.remove('row-selected'); });
+    if (row) row.classList.add('row-selected');
+    var split = document.getElementById('recruiters-split');
+    if (split) split.setAttribute('data-open', 'true');
+    var panel = document.getElementById('recruiters-panel');
+    if (panel) panel.style.display = 'flex';
+  };
+  window.closeRecruitersPanel = function() {
+    document.querySelectorAll('#recruiters-split tr.row-selected').forEach(function(tr) { tr.classList.remove('row-selected'); });
+    var split = document.getElementById('recruiters-split');
+    if (split) split.removeAttribute('data-open');
+    var panel = document.getElementById('recruiters-panel');
+    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+  };
+</script>
+
+{% endblock %}{# /content #}
+    </div>{# /page #}
+  </div>{# /split-list #}
+  <aside class="split-panel" id="recruiters-panel" aria-label="Recruiter detail" style="display:none;"></aside>
+</div>{# /split #}
+{% endblock %}{# /content_wrap #}

@@ -1,0 +1,210 @@
+{% from "components/_macros.html" import logo, stage_label %}
+<div class="drawer-head prospect-head">
+  {{ logo(job.company) }}
+  <div style="flex:1;min-width:0;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="font-weight:600;font-size:17px;letter-spacing:-0.015em;line-height:1.2;">{{ job.job_title or 'Untitled role' }}</div>
+      {%- set fs = job.final_score or job.lightweight_score or 0 -%}
+      {%- if fs -%}
+      <span class="score-badge
+        {%- if fs >= 9 %} tier-dream
+        {%- elif fs >= 7 %} tier-solid
+        {%- elif fs >= 5 %} tier-worth
+        {%- elif fs >= 3 %} tier-skip
+        {%- else %} tier-pass{%- endif %}"><span class="dot"></span>{{ "%.1f"|format(fs) }}</span>
+      {%- endif -%}
+    </div>
+    <div class="dim" style="font-size:12px;margin-top:3px;">{{ job.company }}{% if job.sector %} · {{ job.sector }}{% endif %}</div>
+  </div>
+  {% if job.url %}
+  <a href="{{ job.url }}" target="_blank" rel="noopener" class="weblink">JD ↗</a>
+  {% endif %}
+  <button onclick="window.closeDiscoveredPanel && window.closeDiscoveredPanel()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
+</div>
+
+<div class="drawer-body prospect-body">
+
+  <div class="dim mono" style="font-size:11px;letter-spacing:0.04em;margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <span>Detected {{ (job.date_added or job.date_found or '—')[:16] }}</span>
+    {% if job.discovery_source == 'manual' %}
+    <span class="tag clay" style="font-size:10px;">My sheet</span>
+    {% elif job.discovery_source %}
+    <span class="tag green" style="font-size:10px;">Hunt scan</span>
+    {% endif %}
+  </div>
+
+  {% if fit_bullets %}
+  <section class="info-section">
+    <div class="info-section-head">Why this matched</div>
+    <div class="info-section-body" style="padding:0;">
+      {% for b in fit_bullets %}
+      <div class="signal-row good">
+        <span class="signal-icon">✓</span>
+        <div class="signal-text">{{ b }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if job.salary_range_detected %}
+  <section class="info-section">
+    <div class="info-section-head">Compensation</div>
+    <div class="info-section-body mono" style="font-size:13px;">{{ job.salary_range_detected }}</div>
+  </section>
+  {% endif %}
+
+  {% if job.jd_text %}
+  <section class="info-section">
+    <div class="info-section-head">JD excerpt</div>
+    <div class="info-section-body" style="font-size:12.5px;line-height:1.6;max-height:280px;overflow:auto;">{{ job.jd_text[:1200] }}{% if job.jd_text|length > 1200 %}…{% endif %}</div>
+  </section>
+  {% endif %}
+
+  <section class="info-section">
+    <div class="info-section-head">Status</div>
+    <div class="info-section-body">
+      <dl class="dl" style="display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px;margin:0;">
+        <dt class="dim">Stage</dt>
+        <dd>
+          <select name="stage"
+                  hx-post="/discovered/{{ job.id }}/stage"
+                  hx-target="#discovered-panel"
+                  hx-swap="innerHTML"
+                  class="select">
+            {% set all_stages = [
+              ('identified','Identified'),('discovered','Discovered'),('evaluated','Evaluated'),
+              ('researching','Researching'),('outreach','Outreach'),('recruiter','Recruiter Screen'),
+              ('hm_interview','HM Interview'),('panel','Panel / Loop'),('final_offer','Final / Offer'),
+              ('on_hold','On Hold'),('accepted','Accepted'),('i_declined','I Declined'),
+              ('they_declined','They Declined'),('job_listing_closed','Job Listing Closed'),('duplicate','Duplicate'),
+            ] %}
+            {% for val, label in all_stages %}
+            <option value="{{ val }}" {% if job.pipeline_stage == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </dd>
+        <dt class="dim">Score</dt><dd>{% if job.final_score is not none and job.final_score != '' %}{% if job.auto_rejected %}<span style="color:var(--tier-pass);">{{ "%.1f"|format(job.final_score) }} — auto-rejected{% if job.reject_reason %}: {{ job.reject_reason }}{% endif %}</span>{% else %}{{ "%.1f"|format(job.final_score) }} (final){% endif %}{% elif job.lightweight_score %}{{ "%.1f"|format(job.lightweight_score) }} (lightweight){% else %}—{% endif %}</dd>
+        <dt class="dim">Greenfield</dt><dd>{{ job.greenfield or '—' }}</dd>
+      </dl>
+    </div>
+  </section>
+
+  {% if job.pipeline_stage == 'identified' and not job.final_score %}
+  {# Stub job — JD fetch failed previously #}
+  {%- set is_linkedin_stub = job.url and ('linkedin.com/jobs/' in job.url or 'linkedin.com/job/' in job.url) -%}
+  {%- set attempts_exhausted = job.jd_fetch_attempts and job.jd_fetch_attempts >= 3 -%}
+  <section class="info-section">
+    <div class="info-section-head">Needs JD</div>
+    <div class="info-section-body">
+      {% if is_linkedin_stub %}
+      <div class="dim" style="font-size:12px;margin-bottom:12px;">
+        LinkedIn blocks automated JD fetching. Open the listing in your browser, copy the job description, and paste it below.
+      </div>
+      {% elif attempts_exhausted %}
+      <div class="dim" style="font-size:12px;margin-bottom:12px;">
+        Fetch attempts exhausted (3/3). Paste the JD text below to score this role.
+      </div>
+      {% else %}
+      <div class="dim" style="font-size:12px;margin-bottom:10px;">
+        JD fetch failed. Click to retry, or paste the JD text below.
+        {% if job.jd_fetch_attempts %}(Attempt {{ job.jd_fetch_attempts }}/3){% endif %}
+      </div>
+      {% endif %}
+
+      <div id="fetch-score-result-{{ job.id }}" style="margin-bottom:8px;"></div>
+
+      {% if not is_linkedin_stub and not attempts_exhausted %}
+      <button class="btn btn-sm btn-primary"
+              hx-post="/job/{{ job.id }}/fetch-and-score"
+              hx-target="#fetch-score-result-{{ job.id }}"
+              hx-swap="innerHTML"
+              hx-indicator="#fetch-score-spinner-{{ job.id }}"
+              style="margin-bottom:12px;">
+        Fetch &amp; Score
+      </button>
+      <span id="fetch-score-spinner-{{ job.id }}" class="htmx-indicator dim" style="font-size:12px;margin-left:8px;">
+        <span class="spinner-small"></span> Fetching JD&hellip;
+      </span>
+      {% endif %}
+
+      <details {% if is_linkedin_stub or attempts_exhausted %}open{% endif %} style="margin-top:4px;">
+        <summary style="font-size:12px;cursor:pointer;color:var(--text-dim);margin-bottom:8px;">
+          Paste JD text to score
+        </summary>
+        <form hx-post="/job/{{ job.id }}/paste-and-score"
+              hx-target="#discovered-panel"
+              hx-swap="innerHTML"
+              hx-indicator="#paste-score-spinner-{{ job.id }}">
+          <textarea name="jd_text" rows="8"
+                    placeholder="Paste the full job description here…"
+                    class="textarea" style="margin-bottom:8px;"></textarea>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button type="submit" class="btn btn-sm btn-primary">Score from paste</button>
+            <span id="paste-score-spinner-{{ job.id }}" class="htmx-indicator dim" style="font-size:12px;">
+              <span class="spinner-small"></span> Scoring&hellip;
+            </span>
+          </div>
+        </form>
+      </details>
+    </div>
+  </section>
+  {% elif job.pipeline_stage == 'discovered' %}
+  <section class="info-section">
+    <div class="info-section-head">Actions</div>
+    <div class="info-section-body">
+      {% if job.auto_rejected and job.jd_text %}
+      <div style="margin-bottom:10px;">
+        <div class="dim" style="font-size:12px;margin-bottom:8px;">
+          Auto-rejected with JD in DB — re-run scoring with current rules.
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn btn-sm btn-primary"
+                  hx-post="/job/{{ job.id }}/rescore"
+                  hx-target="#rescore-result-{{ job.id }}"
+                  hx-swap="innerHTML"
+                  hx-indicator="#rescore-spinner-{{ job.id }}">
+            Re-score
+          </button>
+          <span id="rescore-spinner-{{ job.id }}" class="htmx-indicator dim" style="font-size:12px;">
+            <span class="spinner-small"></span> Scoring&hellip;
+          </span>
+          <span id="rescore-result-{{ job.id }}"></span>
+        </div>
+      </div>
+      {% endif %}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-sm {% if not job.auto_rejected %}btn-primary{% else %}btn-ghost{% endif %}"
+                hx-post="/job/{{ job.id }}/promote"
+                hx-confirm="Promote to Evaluate and score this job?"
+                hx-swap="none"
+                data-htmx-after="reload">
+          Promote to Pipeline
+        </button>
+        <button class="btn btn-sm btn-ghost"
+                hx-post="/job/{{ job.id }}/dismiss"
+                hx-confirm="Dismiss this job?"
+                hx-swap="none"
+                data-htmx-after="reload">
+          Dismiss
+        </button>
+        <button class="btn btn-sm btn-ghost"
+                hx-post="/job/{{ job.id }}/close-listing"
+                hx-confirm="Mark this listing as closed?"
+                hx-swap="none"
+                data-htmx-after="reload">
+          Mark Closed
+        </button>
+      </div>
+    </div>
+  </section>
+  {% else %}
+  <section class="info-section">
+    <div class="info-section-body" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="/job/{{ job.id }}" class="btn btn-sm">Open full job →</a>
+      <a href="/pipeline" class="btn btn-sm btn-ghost">View in Pipeline →</a>
+    </div>
+  </section>
+  {% endif %}
+
+</div>

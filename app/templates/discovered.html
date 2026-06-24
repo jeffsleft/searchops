@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Discovered Jobs — Recruiting Engine{% endblock %}
+{% block page_title %}Discovered{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-sm"
+        hx-post="/api/discovery/scan"
+        hx-target="#scan-result"
+        hx-swap="innerHTML"
+        hx-indicator="#scan-result">
+  Run Scan Now
+</button>
+<span id="scan-result" class="dim" style="font-size:12px;"></span>
+{% endblock %}
+
+{% block content_wrap %}
+<div class="split" id="discovered-split">
+  <div class="split-list">
+    <div class="page">
+{% block content %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Discovered</h1>
+    <div class="sub">Roles from Hunt scans, your Google Sheet, and LinkedIn — review, then promote or dismiss</div>
+  </div>
+  <div>
+    <button class="btn btn-sm" onclick="document.getElementById('li-form').style.display=document.getElementById('li-form').style.display==='none'?'flex':'none'">
+      + Add by URL
+    </button>
+  </div>
+</div>
+
+<div id="li-form" style="display:none;flex-direction:column;gap:10px;padding:16px;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-bottom:16px;">
+  <div style="font-weight:500;font-size:13px;">Add a job by URL</div>
+  <div class="dim" style="font-size:11.5px;margin-top:-4px;">Works with any ATS (Greenhouse, Lever, Ashby), company careers pages, or LinkedIn. Use <em>Add as Declined</em> to log a rejection without scoring.</div>
+  <form hx-post="/discovered/add-linkedin"
+        hx-target="#li-result"
+        hx-swap="innerHTML"
+        hx-indicator="#li-result"
+        data-htmx-error-target="li-result"
+        data-htmx-error-msg="❌ Server error — check the URL and try again."
+        style="display:flex;flex-direction:column;gap:8px;">
+    <input name="url" type="url" placeholder="Job URL (LinkedIn, Greenhouse, Lever, company careers page…)" required
+           style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px;width:100%;box-sizing:border-box;">
+    <div style="display:flex;gap:8px;">
+      <input name="company" type="text" placeholder="Company (optional — auto-detected if blank)"
+             style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px;flex:1;">
+      <input name="job_title" type="text" placeholder="Job title (optional — auto-detected if blank)"
+             style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px;flex:1;">
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button type="submit" class="btn btn-sm">Fetch &amp; Score</button>
+      <button type="submit" name="action" value="declined" class="btn btn-sm btn-ghost">Add as Declined</button>
+      <div id="li-result" class="dim" style="font-size:12px;"></div>
+    </div>
+  </form>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+  <div class="tgroup">
+    {% set tabs = [
+      ('new',       'New'),
+      ('promoted',  'Promoted'),
+      ('dismissed', 'Dismissed'),
+      ('all',       'All'),
+    ] %}
+    {% for val, label in tabs %}
+    <button aria-pressed="{{ 'true' if tab == val else 'false' }}"
+            hx-get="/discovered?tab={{ val }}&source={{ source_filter }}"
+            hx-target="body"
+            hx-swap="outerHTML"
+            hx-push-url="true">
+      {{ label }} · {{ counts.get(val, 0) }}
+    </button>
+    {% endfor %}
+  </div>
+  <div class="tgroup">
+    {% set sources = [
+      ('all',      'All sources'),
+      ('manual',   'My sheet'),
+      ('scan',     'Hunt scan'),
+      ('linkedin', 'LinkedIn'),
+    ] %}
+    {% for val, label in sources %}
+    <button aria-pressed="{{ 'true' if source_filter == val else 'false' }}"
+            hx-get="/discovered?tab={{ tab }}&source={{ val }}"
+            hx-target="body"
+            hx-swap="outerHTML"
+            hx-push-url="true"
+            style="font-size:11px;">
+      {{ label }}
+    </button>
+    {% endfor %}
+  </div>
+</div>
+
+{% if jobs %}
+<div class="card">
+  <table class="tbl">
+    {% macro sth(label, col, w='') %}
+      {% set base = '/discovered?tab=' ~ tab ~ '&source=' ~ source_filter %}
+      <th{% if w %} style="width:{{ w }};"{% endif %}>
+        {% if sort == col and order == 'asc' %}
+          <button type="button" hx-get="{{ base }}&sort={{ col }}&order=desc" hx-target="body" hx-swap="outerHTML" hx-push-url="true">{{ label }} ↑</button>
+        {% elif sort == col and order == 'desc' %}
+          <button type="button" hx-get="{{ base }}" hx-target="body" hx-swap="outerHTML" hx-push-url="true">{{ label }} ↓</button>
+        {% else %}
+          <button type="button" hx-get="{{ base }}&sort={{ col }}&order=asc" hx-target="body" hx-swap="outerHTML" hx-push-url="true">{{ label }}</button>
+        {% endif %}
+      </th>
+    {% endmacro %}
+    <thead><tr>
+      {{ sth('Role',     'job_title',             '32%') }}
+      {{ sth('Source',   'discovery_source') }}
+      {{ sth('Detected', 'date_added') }}
+      {{ sth('Salary',   'salary_range_detected') }}
+      {{ sth('Fit',      'final_score') }}
+      {{ sth('Status',   'pipeline_stage') }}
+    </tr></thead>
+    <tbody>
+      {% for j in jobs %}
+        {% include "components/_discovered_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:32px;text-align:center;">
+  <div class="dim" style="font-size:14px;margin-bottom:12px;">
+    {% if tab == 'new' and counts.promoted > 0 %}
+      You've promoted all new roles.
+    {% elif tab == 'new' and counts.all == 0 %}
+      No roles discovered yet.
+    {% else %}
+      No roles in this view
+    {% endif %}
+  </div>
+  <div style="font-size:12px;color:var(--text-muted);">
+    {% if tab == 'new' and counts.promoted > 0 %}
+      Check the <a href="/discovered?tab=promoted">Promoted tab</a> or <a href="/targets">add companies to monitor →</a>
+    {% else %}
+      Switch tabs or <a href="/targets">add companies to monitor →</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+  window.openDiscoveredPanel = function(row) {
+    document.querySelectorAll('#discovered-split tr.row-selected').forEach(function(tr) { tr.classList.remove('row-selected'); });
+    if (row) row.classList.add('row-selected');
+    var split = document.getElementById('discovered-split');
+    if (split) split.setAttribute('data-open', 'true');
+    var panel = document.getElementById('discovered-panel');
+    if (panel) {
+      panel.style.display = 'flex';
+      if (row) panel.dataset.jobId = row.dataset.jobId;
+    }
+  };
+  window.closeDiscoveredPanel = function() {
+    document.querySelectorAll('#discovered-split tr.row-selected').forEach(function(tr) { tr.classList.remove('row-selected'); });
+    var split = document.getElementById('discovered-split');
+    if (split) split.removeAttribute('data-open');
+    var panel = document.getElementById('discovered-panel');
+    if (panel) {
+      panel.style.display = 'none';
+      panel.innerHTML = '';
+      delete panel.dataset.jobId;
+    }
+  };
+
+  document.body.addEventListener('jobScored', function(evt) {
+    var d = (evt.detail || {});
+    var payload = d.value || d;
+    var jobId = payload && payload.job_id;
+    if (!jobId) return;
+
+    var panel = document.getElementById('discovered-panel');
+    var panelOpen = panel && panel.style.display !== 'none';
+    var row = document.querySelector('tr[data-job-id="' + jobId + '"]');
+
+    if (panelOpen && panel.dataset.jobId == String(jobId)) {
+      setTimeout(function() {
+        htmx.ajax('GET', '/discovered/' + jobId + '/detail', {
+          target: '#discovered-panel',
+          swap: 'innerHTML',
+        }).then(function() {
+          panel.classList.remove('flash-arrive');
+          void panel.offsetWidth;
+          panel.classList.add('flash-arrive');
+        });
+      }, 350);
+    }
+
+    if (row) {
+      htmx.ajax('GET', '/discovered/' + jobId + '/row', {
+        target: 'tr[data-job-id="' + jobId + '"]',
+        swap: 'outerHTML',
+      }).then(function() {
+        var fresh = document.querySelector('tr[data-job-id="' + jobId + '"]');
+        if (fresh) {
+          if (row.classList.contains('row-selected')) fresh.classList.add('row-selected');
+          void fresh.offsetWidth;
+          fresh.classList.add('flash-arrive');
+        }
+      });
+    }
+  });
+</script>
+
+{% endblock %}{# /content #}
+    </div>{# /page #}
+  </div>{# /split-list #}
+  <aside class="split-panel" id="discovered-panel" aria-label="Discovered role detail" style="display:none;"></aside>
+</div>{# /split #}
+{% endblock %}{# /content_wrap #}

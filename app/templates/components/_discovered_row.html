@@ -1,0 +1,58 @@
+{# components/_discovered_row.html — single row in the Discovered list.
+   Used by discovered.html's loop AND by GET /discovered/{id}/row when
+   the jobScored client listener refreshes a single row after scoring. #}
+{% from "components/_macros.html" import logo %}
+<tr data-job-id="{{ j.id }}" style="cursor:pointer;"
+    hx-get="/discovered/{{ j.id }}/detail"
+    hx-target="#discovered-panel"
+    hx-swap="innerHTML"
+    onclick="window.openDiscoveredPanel && window.openDiscoveredPanel(this)">
+  <td>
+    <div style="display:flex;align-items:center;gap:10px;">
+      {{ logo(j.company, 'sm') }}
+      <div style="min-width:0;">
+        <div style="font-weight:500;">{{ j.job_title or 'Untitled role' }}</div>
+        <div class="dim" style="font-size:11px;">{{ j.company }}</div>
+      </div>
+    </div>
+  </td>
+  <td>
+    {% if j.discovery_source == 'manual' %}
+    <span class="tag clay" style="font-size:10px;">My sheet</span>
+    {% elif j.discovery_source == 'linkedin' %}
+    <span class="tag" style="font-size:10px;">LinkedIn</span>
+    {% elif j.discovery_source %}
+    <span class="tag green" style="font-size:10px;">Hunt scan</span>
+    {% else %}
+    <span class="dim" style="font-size:11px;">—</span>
+    {% endif %}
+  </td>
+  <td class="dim mono" style="font-size:11px;">{{ (j.date_added or j.date_found or '—')[:10] }}</td>
+  <td class="dim mono" style="font-size:11px;">{{ j.salary_range_detected or '—' }}</td>
+  <td>
+    {%- set fs = j.final_score or j.lightweight_score or 0 -%}
+    {%- if j.pipeline_stage == 'identified' and not j.final_score -%}
+    <span class="tag amber" style="font-size:10px;">Needs JD</span>
+    {%- elif fs -%}
+    <span class="score-badge
+      {%- if fs >= 9 %} tier-dream
+      {%- elif fs >= 7 %} tier-solid
+      {%- elif fs >= 5 %} tier-worth
+      {%- elif fs >= 3 %} tier-skip
+      {%- else %} tier-pass{%- endif %}">
+      <span class="dot"></span>{{ "%.1f"|format(fs) }}
+    </span>
+    {%- else -%}<span class="dim">—</span>{%- endif -%}
+  </td>
+  <td>
+    {% if j.pipeline_stage in ('discovered', 'identified') %}
+    <span class="tag green">New</span>
+    {% elif j.pipeline_stage == 'i_declined' %}
+    <span class="tag">Dismissed</span>
+    {% elif j.pipeline_stage == 'job_listing_closed' %}
+    <span class="tag" style="opacity:0.7;">Closed</span>
+    {% else %}
+    <span class="tag clay">Promoted</span>
+    {% endif %}
+  </td>
+</tr>

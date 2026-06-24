@@ -1,0 +1,25 @@
+<div class="prep-head">
+  <div class="logo-sq" style="background: #ddd; width:36px; height:36px">{{ active_job.company[:2]|upper }}</div>
+  <div class="prep-head-text">
+    <div class="prep-head-co">
+      <span>{{ active_job.company }}</span>
+      <span class="prep-head-sep">·</span>
+      <span class="prep-head-title">{{ active_job.job_title }}</span>
+    </div>
+    <div class="prep-head-meta">
+      <span class="dim mono" style="font-size:10px">{{ active_job.pipeline_stage }}</span>
+      <span class="dim mono" style="font-size:11px">{{ (active_job.final_score or 0)|round(1) }}</span>
+      {% if active_session and active_session.schedule_date %}
+        <span class="dim">·</span>
+        <span class="mono dim" style="font-size:11px">{{ active_session.schedule_date }}{% if active_session.schedule_time %} {{ active_session.schedule_time }}{% if active_session.schedule_tz %} {{ active_session.schedule_tz }}{% endif %}{% endif %}</span>
+      {% endif %}
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <a class="btn btn-sm btn-ghost" href="/job/{{ active_job.id }}" title="Open full job record">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1"><path d="m8 4 3-3m-6 1v4m4-4h4"/></svg> Job record
+  </a>
+  <button class="btn btn-sm" hx-post="/prep/sessions/{{ active_session.id }}/draft" hx-target=".prep-body" hx-swap="innerHTML" title="Pre-fill this session">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="5"/><circle cx="6" cy="6" r="1.5" fill="currentColor"/><path d="M6 2v1m0 6v1m4-4h-1m-6 0h-1"/></svg> Draft
+  </button>
+</div>

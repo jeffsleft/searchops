@@ -1,0 +1,125 @@
+# Voice add-on (WP-F) — built-in "don't sound like AI" guide, base list.
+#
+# Generic default shipped with the app. The Inspector scans generated prose
+# against this list; the Weaver (optional LLM pass) rewrites to remove the
+# flagged phrasing without changing facts.
+#
+# Format (same shape as a user-supplied override):
+#   forbidden:            # this file
+#   additional_forbidden: # an overlay (e.g. cover_letter.yaml)
+#     - phrase: "..."     # case-insensitive substring match
+#       reason: ai-tell | corporate-speak | hedge-overuse
+#       per_piece_limit: N   # optional; only a violation past N occurrences
+#     - word: "..."       # whole-word match (word boundaries)
+#       reason: corporate-speak
+#
+# To use your own guide instead: set VOICE_GUIDE_PATH to a YAML file with the
+# same shape (`forbidden:` list). It replaces this base.
+
+forbidden:
+
+  # --- Hard AI-tells (never acceptable in generated output) ---
+  - phrase: "it's important to note"
+    reason: ai-tell
+  - phrase: "it is important to note"
+    reason: ai-tell
+  - phrase: "it's worth noting"
+    reason: ai-tell
+  - phrase: "in conclusion"
+    reason: ai-tell
+  - phrase: "in summary"
+    reason: ai-tell
+  - phrase: "to summarize"
+    reason: ai-tell
+  - phrase: "in essence"
+    reason: ai-tell
+  - phrase: "at the end of the day"
+    reason: ai-tell
+  - phrase: "move the needle"
+    reason: ai-tell
+  - phrase: "game changer"
+    reason: ai-tell
+  - phrase: "game-changing"
+    reason: ai-tell
+  - phrase: "deep dive"
+    reason: ai-tell
+  - phrase: "cutting-edge"
+    reason: ai-tell
+  - phrase: "best-in-class"
+    reason: ai-tell
+  - phrase: "world-class"
+    reason: ai-tell
+  - phrase: "thought leader"
+    reason: ai-tell
+  - phrase: "paradigm shift"
+    reason: ai-tell
+  - phrase: "tapestry"
+    reason: ai-tell
+  - phrase: "testament to"
+    reason: ai-tell
+  - word: "synergy"
+    reason: ai-tell
+  - word: "synergies"
+    reason: ai-tell
+
+  # --- Corporate-speak (vague; flag for rewrite) ---
+  - word: "leverage"
+    reason: corporate-speak
+  - word: "leveraging"
+    reason: corporate-speak
+  - word: "utilize"
+    reason: corporate-speak
+  - word: "utilizing"
+    reason: corporate-speak
+  - word: "spearhead"
+    reason: corporate-speak
+  - word: "spearheaded"
+    reason: corporate-speak
+  - word: "deliverable"
+    reason: corporate-speak
+  - word: "deliverables"
+    reason: corporate-speak
+  - word: "transformative"
+    reason: corporate-speak
+  - word: "innovative"
+    reason: corporate-speak
+  - word: "impactful"
+    reason: corporate-speak
+  - word: "seamless"
+    reason: corporate-speak
+  - word: "seamlessly"
+    reason: corporate-speak
+  - word: "holistic"
+    reason: corporate-speak
+  - word: "robust"
+    reason: corporate-speak
+  - word: "myriad"
+    reason: corporate-speak
+
+  # --- AI connective tissue (overused transitions) ---
+  - phrase: "furthermore"
+    reason: ai-tell
+  - phrase: "moreover"
+    reason: ai-tell
+  - phrase: "additionally"
+    reason: ai-tell
+  - phrase: "crucially"
+    reason: ai-tell
+  - phrase: "notably"
+    reason: ai-tell
+  - phrase: "inherently"
+    reason: ai-tell
+  - word: "ultimately"
+    reason: ai-tell
+    per_piece_limit: 1
+
+  # --- Hedge-overuse (allowed sparingly; flag past the limit) ---
+  - word: "perhaps"
+    reason: hedge-overuse
+    per_piece_limit: 2
+  - word: "arguably"
+    reason: hedge-overuse
+    per_piece_limit: 1
+  - phrase: "to some extent"
+    reason: hedge-overuse
+    per_piece_limit: 1

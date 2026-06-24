@@ -1,0 +1,46 @@
+# Voice add-on (WP-F) — cover-letter overlay.
+# Extends forbidden_base.yaml; the Inspector applies both for tone "cover-letter".
+# Generic defaults — the kind of openers/closers that mark a letter as AI-written.
+
+tone: cover-letter
+
+additional_forbidden:
+  - phrase: "I am writing to express my interest"
+    reason: ai-tell
+  - phrase: "I am writing to apply"
+    reason: ai-tell
+  - phrase: "I am excited to apply"
+    reason: ai-tell
+  - phrase: "I am thrilled"
+    reason: ai-tell
+  - phrase: "I am passionate about"
+    reason: ai-tell
+  - phrase: "results-driven"
+    reason: corporate-speak
+  - phrase: "proven track record"
+    reason: corporate-speak
+  - phrase: "team player"
+    reason: corporate-speak
+  - phrase: "go-getter"
+    reason: corporate-speak
+  - phrase: "outside the box"
+    reason: corporate-speak
+  - phrase: "self-starter"
+    reason: corporate-speak
+  - phrase: "I would be a great fit"
+    reason: ai-tell
+  - phrase: "I believe I would be a great fit"
+    reason: ai-tell
+  - phrase: "I would love the opportunity"
+    reason: ai-tell
+  - phrase: "I look forward to hearing from you"
+    reason: ai-tell
+  - phrase: "thank you for your consideration"
+    reason: ai-tell
+  - phrase: "perfect candidate"
+    reason: ai-tell
+  - word: "passionate"
+    reason: ai-tell
+  - word: "excited"
+    reason: ai-tell
+    per_piece_limit: 1

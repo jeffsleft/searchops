@@ -1,0 +1,33 @@
+<div class="card prep-card">
+  <div class="card-head">
+    <h3>Questions for them</h3>
+    <span class="dim mono" style="font-size:11px">{{ (questions_to_ask|selectattr('asked')|list|length) }}/{{ questions_to_ask|length }}</span>
+  </div>
+  <div>
+    {% for q in questions_to_ask %}
+      <div class="qrow {% if q.asked %}answered{% endif %}">
+        <input type="checkbox" {% if q.asked %}checked{% endif %}
+          hx-patch="/prep/questions-to-ask/{{ q.id }}" hx-vals='{"asked":"{% if not q.asked %}on{% endif %}"}' hx-swap="none"
+          onchange="this.closest('.qrow').classList.toggle('answered', this.checked)"
+          title="Mark as asked"/>
+        <div>
+          <div class="qtext">{{ q.text }}</div>
+          <div class="qmeta">
+            <span class="pri-{{ q.priority[0]|lower }}">{{ q.priority }}</span>
+            <span>·</span>
+            <span>Ask: {{ q.persona }}</span>
+          </div>
+          {% if q.asked %}
+            <textarea class="textarea" style="margin-top:8px; min-height:54px; font-size:12px; background:var(--bg-sunk)"
+              placeholder="Their answer…"
+              hx-patch="/prep/questions-to-ask/{{ q.id }}" hx-trigger="blur" hx-swap="none" name="answer">{{ q.answer or '' }}</textarea>
+          {% endif %}
+        </div>
+        <button class="btn btn-sm btn-ghost btn-icon" hx-delete="/prep/questions-to-ask/{{ q.id }}" hx-target="closest .prep-card" hx-swap="outerHTML" title="Remove">×</button>
+      </div>
+    {% endfor %}
+    <form class="prep-add-row" hx-post="/prep/sessions/{{ active_session.id }}/questions-to-ask" hx-target="closest .prep-card" hx-swap="outerHTML">
+      <input class="input" placeholder="Add a question to ask…" name="text" autocomplete="off"/>
+    </form>
+  </div>
+</div>

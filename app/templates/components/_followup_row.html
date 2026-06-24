@@ -1,0 +1,40 @@
+{# Expects: f (dict from get_followups_due) #}
+<div class="fu-row{% if f.escalated %} no-rail{% endif %}" id="fu-row-{{ f.id }}">
+  <div class="fu-identity">
+    <div class="fu-logo">{{ f.logo }}</div>
+    <div class="fu-role">
+      <span class="fu-company">{{ f.company }}</span>
+      <span class="fu-title">{{ f.job_title }}</span>
+      <span class="stage-pill {{ f.stage }}">{{ f.stage|capitalize }}</span>
+    </div>
+  </div>
+  <div class="fu-meta">
+    <span class="chip{% if f.escalated %} rust{% elif f.days_since >= 14 %} warn{% endif %}">
+      {{ f.days_since }}d since {{ 'applied' if f.stage == 'applied' else 'outreach' }}
+    </span>
+    <span class="chip count">
+      {{ f.followup_count }} follow-up{{ '' if f.followup_count == 1 else 's' }} sent
+    </span>
+  </div>
+  <div class="fu-actions">
+    <button class="fu-btn primary"
+            hx-post="/followups/{{ f.id }}/log"
+            hx-target="#fu-row-{{ f.id }}"
+            hx-swap="outerHTML">Followed up</button>
+    <button class="fu-btn"
+            hx-post="/followups/{{ f.id }}/heard-back"
+            hx-target="#fu-row-{{ f.id }}"
+            hx-swap="outerHTML">Heard back <span class="arrow">→</span></button>
+    <button class="fu-btn ghost"
+            hx-post="/followups/{{ f.id }}/snooze?days=3"
+            hx-target="#fu-row-{{ f.id }}"
+            hx-swap="outerHTML">Snooze 3d</button>
+    {% if f.escalated %}
+    <button class="fu-btn danger-ghost"
+            hx-post="/followups/{{ f.id }}/close"
+            hx-confirm="Move {{ f.company }} to 'they declined'?"
+            hx-target="#fu-row-{{ f.id }}"
+            hx-swap="outerHTML">Consider closing</button>
+    {% endif %}
+  </div>
+</div>

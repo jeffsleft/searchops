@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block page_title %}Bulk Rescore{% endblock %}
+
+{% block content %}
+
+<div style="max-width: 600px;">
+  <div class="card" style="background: var(--bg-elev); border: 1px solid var(--border); padding: 24px;">
+    <h2 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">Batch Rescore Jobs</h2>
+
+    {% if count > 0 %}
+      <p style="color: var(--text); margin-bottom: 16px;">
+        <strong>{{ count }}</strong> job{{ 's' if count != 1 else '' }} need{{ 's' if count == 1 else '' }} rescoring (match_score is NULL).
+      </p>
+
+      <div style="background: var(--bg-default); border: 1px solid var(--border-faint); border-radius: var(--radius-md); padding: 12px; margin-bottom: 20px; font-size: 12px; color: var(--text-dim);">
+        <strong>Note:</strong> Processing will take approximately <strong>{{ (count * 5) // 60 }}m {{ (count * 5) % 60 }}s</strong> due to 5-second pacing between LLM calls. Do not close this page or reload.
+      </div>
+
+      <button
+        hx-post="/admin/rescore-all"
+        hx-swap="outerHTML"
+        hx-indicator="#rescore-spinner"
+        style="background: var(--accent); color: var(--bg); border: none; padding: 10px 16px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; cursor: pointer; width: 100%;">
+        Start Rescoring {{ count }} Job{{ 's' if count != 1 else '' }}
+      </button>
+
+      <div id="rescore-spinner" class="htmx-indicator" style="margin-top: 16px; text-align: center; color: var(--text-dim); font-size: 12px;">
+        <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 8px; animation: pulse 1s infinite;"></span>
+        Running rescore... (approx {{ (count * 5) // 60 }}m {{ (count * 5) % 60 }}s)
+      </div>
+    {% else %}
+      <p style="color: var(--text-dim); margin-bottom: 16px;">
+        All jobs already have match scores. Nothing to rescore.
+      </p>
+    {% endif %}
+
+  </div>
+
+  <div class="card" style="background: var(--bg-elev); border: 1px solid var(--border); padding: 24px; margin-top: 16px;">
+    <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">Background Task Log</h3>
+    <div id="task-log-rescore"
+         hx-get="/api/task-status"
+         hx-trigger="load, every 15s"
+         hx-swap="innerHTML">
+      <span style="font-size:12px;color:var(--text-dim);">Loading…</span>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+</style>
+
+{% endblock %}

@@ -1,0 +1,45 @@
+<div id="ethics-list">
+  <div class="dim" style="font-size:12px;margin-bottom:12px;">
+    Reference checklist shown on the Vetting queue to guide manual ethics confirmation. These do not auto-reject — they prompt a human judgment call.
+  </div>
+  {% if reasons %}
+  <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:16px;">
+    {% for e in reasons %}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg-sunk);border-radius:var(--radius);{% if not e.enabled %}opacity:0.45;{% endif %}">
+      <span style="font-size:13px;">{{ e.reason }}</span>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button hx-post="/settings/ethics/{{ e.id }}/toggle"
+                hx-target="#ethics-card-body"
+                hx-swap="innerHTML"
+                class="btn btn-sm btn-ghost"
+                style="font-size:11px;padding:2px 8px;">
+          {% if e.enabled %}Disable{% else %}Enable{% endif %}
+        </button>
+        <button hx-post="/settings/ethics/{{ e.id }}/delete"
+                hx-target="#ethics-card-body"
+                hx-swap="innerHTML"
+                hx-confirm="Remove '{{ e.reason }}'?"
+                class="btn btn-sm btn-ghost"
+                style="font-size:11px;padding:2px 8px;color:var(--text-muted);">
+          ✕
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="dim" style="font-size:12px;margin-bottom:16px;">None configured.</div>
+  {% endif %}
+
+  <div style="padding-top:12px;border-top:1px solid var(--border);">
+    <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Add Ethics Reason</div>
+    <form hx-post="/settings/ethics/add"
+          hx-target="#ethics-card-body"
+          hx-swap="innerHTML"
+          style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input name="reason" type="text" placeholder="e.g. Tobacco or vaping products" class="input"
+             style="font-size:12px;flex:1;min-width:200px;" required>
+      <button type="submit" class="btn btn-sm btn-primary">Add</button>
+    </form>
+  </div>
+</div>

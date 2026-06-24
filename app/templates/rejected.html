@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Rejected — Recruiting Engine{% endblock %}
+{% block page_title %}Rejected{% endblock %}
+
+{% block content %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Rejected</h1>
+    <div class="sub">Auto-rejected by scoring engine · below dealbreaker thresholds</div>
+  </div>
+  <span class="dim mono" style="font-size:12px;">{{ jobs|length }} total</span>
+</div>
+
+{% if jobs %}
+<div class="card">
+  <table class="tbl">
+    <thead><tr>
+      <th style="width:30%;">Company / Role</th>
+      <th>Sector</th>
+      <th>Score</th>
+      <th>Reject reason</th>
+      <th>Date</th>
+    </tr></thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr class="row-hover" style="cursor:pointer;" onclick="window.location='/job/{{ job.id }}'">
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="logo-sq sm"
+                  style="background:oklch(40% 0.04 {{ (job.company|length * 17 % 300) + 20 }});color:oklch(70% 0 0);flex-shrink:0;">
+              {{ job.company[:2]|upper }}
+            </span>
+            <div>
+              <div style="font-weight:500;color:var(--text-muted);">{{ job.company }}</div>
+              <div class="dim" style="font-size:11px;">{{ job.job_title }}</div>
+            </div>
+          </div>
+        </td>
+        <td class="muted" style="font-size:12px;">{{ job.sector or '—' }}</td>
+        <td>
+          <span class="score-badge tier-reject">
+            <span class="dot"></span>—
+          </span>
+        </td>
+        <td class="muted" style="font-size:12px;max-width:240px;">
+          {{ job.reject_reason or '—' }}
+        </td>
+        <td class="dim mono" style="font-size:11px;">{{ job.date_found or job.created_at[:10] if job.created_at else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card">
+  <div class="empty" style="padding:60px 24px;">
+    <strong>Nothing rejected</strong>
+    <span style="display:block;margin-top:6px;color:var(--text-muted);font-size:12.5px;">
+      Auto-rejected jobs will appear here.
+    </span>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

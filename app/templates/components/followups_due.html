@@ -1,0 +1,35 @@
+{# ============================================================
+   Follow-ups Due widget — renders nothing when list is empty.
+   ============================================================ #}
+{% if followups_due %}
+{% set escalated_present = followups_due | selectattr('escalated') | list | length > 0 %}
+{% set oldest = followups_due[0].days_since %}
+
+<div id="followups-widget" class="followups{% if followups_due|length <= 2 %} compact{% endif %}">
+  <div class="followups-head">
+    <span class="fu-icon" aria-hidden="true"></span>
+    <h3>
+      {% if followups_due|length <= 2 %}Follow-ups due
+      {% else %}{{ followups_due|length }} follow-ups due{% endif %}
+    </h3>
+    <span class="meta">
+      {% if followups_due|length <= 2 %}{{ followups_due|length }} due
+      {% elif escalated_present %}1 going cold
+      {% else %}oldest: {{ oldest }}d{% endif %}
+    </span>
+    <div class="spacer"></div>
+    <div class="head-actions">
+      <button class="ghost"
+              hx-post="/followups/snooze-all?days=3"
+              hx-target="#followups-widget"
+              hx-swap="outerHTML">Snooze all 3d</button>
+    </div>
+  </div>
+
+  <div class="followups-body">
+    {% for f in followups_due %}
+      {% include "components/_followup_row.html" %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}

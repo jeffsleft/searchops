@@ -1,0 +1,25 @@
+<div class="card prep-card">
+  <div class="card-head">
+    <h3>Anchor stories</h3>
+    <span class="dim mono" style="font-size:11px">{{ pinned_anchor_ids|length }} pinned · {{ all_anchors|length - pinned_anchor_ids|length }} more</span>
+  </div>
+  <div class="card-body" style="padding:10px 14px 14px">
+    {% if not all_anchors %}
+      <div class="dim" style="font-size:12px; padding:16px; text-align:center">No anchor stories yet</div>
+    {% else %}
+      {% for a in all_anchors %}
+        <div class="anchor-card prep-anchor {% if a.id in pinned_anchor_ids %}pinned{% endif %}"
+          hx-{% if a.id in pinned_anchor_ids %}delete{% else %}post{% endif %} "/prep/sessions/{{ active_session.id }}/anchors/{{ a.id }}"
+          hx-target="closest .prep-card" hx-swap="outerHTML">
+          <div class="prep-anchor-head">
+            <div class="atitle">{{ a.title }}</div>
+            <span class="prep-anchor-pin {% if a.id in pinned_anchor_ids %}on{% endif %}" style="cursor:pointer">
+              {% if a.id in pinned_anchor_ids %}✓ pinned{% else %}+ pin{% endif %}
+            </span>
+          </div>
+          <div class="asum">{{ a.summary }}</div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>

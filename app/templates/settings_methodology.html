@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+{% block title %}Scoring Methodology — Recruiting Engine{% endblock %}
+{% block page_title %}Scoring Methodology{% endblock %}
+
+{% block content %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Scoring Methodology</h1>
+    <div class="sub">Four layers, in order. Each layer has one job. If you're reading this cold weeks from now, start here.</div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:24px;max-width:900px;">
+
+  {# ── At-a-glance ───────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>At a glance</h3></div>
+    <div class="card-body" style="padding:20px 24px;">
+      <ol class="method-steps">
+        <li>
+          <span class="step-num">1</span>
+          <div>
+            <div class="step-title">Auto-reject gate</div>
+            <div class="step-body">Sector blocklist + $175k salary floor. Triggers short-circuit the rest to 0.0.</div>
+          </div>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <div>
+            <div class="step-title">Match to candidate <span class="dim" style="font-weight:400;font-size:12px;">(−3.0 to +3.0, highest weight)</span></div>
+            <div class="step-body">One Gemini call grounded in the Accomplishments Inventory. Returns evidence rows, mismatches, resume bullets, and cover-letter hooks.</div>
+          </div>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <div>
+            <div class="step-title">LLM qualitative nudge <span class="dim" style="font-weight:400;font-size:12px;">(±1.0)</span></div>
+            <div class="step-body">Role-shape vibe check: IC vs leadership balance, authority, reporting line, strategy-vs-execution skew.</div>
+          </div>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <div>
+            <div class="step-title">Adjustment weights <span class="dim" style="font-weight:400;font-size:12px;">(deterministic, additive)</span></div>
+            <div class="step-body">Substring signals on the JD: tech stack, greenfield, pricing, sector, remote, churn. Fast and brittle — kept on purpose.</div>
+          </div>
+        </li>
+      </ol>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;">
+        <div class="track">
+          <div class="track-head">Inbound sources</div>
+          <div class="track-body">Jeff's manual saves, sheet sync, and quick-add URLs. Scored end-to-end on creation.</div>
+        </div>
+        <div class="track">
+          <div class="track-head">Hunt sources</div>
+          <div class="track-body">Daily ATS scans against watched companies. New roles land in Discovered for triage before scoring.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Why this exists ───────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Why the methodology was rewritten</h3></div>
+    <div class="card-body" style="font-size:13.5px;line-height:1.7;">
+      <p style="margin:0 0 10px;">The previous engine scored <em>how appealing a role looked in the abstract</em> — greenfield language, AI-native sector, modern stack — and barely scored <em>how well Jeff matches it</em>. The LLM layer received a 4-line candidate summary and was allowed to nudge by ±1.0. That is not AI scoring. That is a spreadsheet with a chat window.</p>
+      <p style="margin:0 0 10px;">The fix: a new <strong>Layer 2 — Match to Candidate</strong> that compares the JD against Jeff's full corpus (resume, LinkedIn, leadership deck, blog posts, and the Accomplishments Inventory) and produces an evidence-grounded match score worth up to ±3.0. The rest of the engine keeps doing what it did, but now it's anchored to a real candidate-vs-role comparison.</p>
+      <p style="margin:0;">Layers run in this order:</p>
+    </div>
+  </div>
+
+  {# ── Architecture overview ─────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>The four layers, in order</h3></div>
+    <div class="card-body">
+      <p style="font-size:13.5px;line-height:1.7;margin:0 0 16px;">
+        <strong>Final Score = base (5.0) + Layer 4 + Layer 2 + Layer 3</strong>, clamped to [0.0, 10.0] at the end, rounded to one decimal place. The clamp happens <em>once</em>, after every layer has been added — a strong match can rescue a so-so role, and a weak match can sink one that looks flashy.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="background:var(--bg-sunk);padding:12px 16px;border-radius:var(--radius);border-left:4px solid var(--red-400);">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Layer 1 — Auto-Reject</div>
+          <div class="dim" style="font-size:12.5px;line-height:1.5;">
+            Runs first. Blocked sectors and the salary floor. If any trigger, score = 0.0 and the rest of the pipeline is skipped.
+          </div>
+        </div>
+        <div style="background:var(--bg-sunk);padding:12px 16px;border-radius:var(--radius);border-left:4px solid var(--accent);">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Layer 2 — Match to Candidate <span class="dim" style="font-weight:400;">(highest weight, −3.0 to +3.0)</span></div>
+          <div class="dim" style="font-size:12.5px;line-height:1.5;">
+            One Gemini call. Compares JD requirements against Jeff's <em>Accomplishments Inventory</em> and differentiators. Returns evidence rows (JD requirement → matched accomplishment), explicit mismatches, tailored resume bullets to swap in, and 1–3 cover-letter hooks. This is the layer that answers "is Jeff actually qualified for this?"
+          </div>
+        </div>
+        <div style="background:var(--bg-sunk);padding:12px 16px;border-radius:var(--radius);border-left:4px solid var(--accent);">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Layer 3 — LLM Qualitative Adjustment <span class="dim" style="font-weight:400;">(−1.0 to +1.0)</span></div>
+          <div class="dim" style="font-size:12.5px;line-height:1.5;">
+            A second LLM call focused on <em>role shape</em>: IC vs leadership balance, authority, reporting line, strategy-vs-execution skew, and culture/business-model red flags. Answers "is the role actually as good as it looks?"
+          </div>
+        </div>
+        <div style="background:var(--bg-sunk);padding:12px 16px;border-radius:var(--radius);border-left:4px solid var(--accent);">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Layer 4 — Adjustment Weights <span class="dim" style="font-weight:400;">(deterministic, additive)</span></div>
+          <div class="dim" style="font-size:12.5px;line-height:1.5;">
+            Substring keyword matching on the JD: tech stack, greenfield vs. process-upcycling language, pricing model, sector, work arrangement, plus founder type and churn signals pulled from company research. Fast, transparent, brittle — kept on purpose as a fixed signal layer alongside the LLM judgments.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Layer 1: Auto-Reject ──────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Layer 1 — Auto-Reject (hard dealbreakers)</h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:20px;">
+
+      <div>
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Salary Floor</div>
+        <p style="font-size:13px;margin:0 0 8px;line-height:1.6;">
+          <strong>$175,000 base minimum.</strong> Extracted via regex from JD text. Below floor → auto-reject. <strong>If no salary is detected, the role is NOT rejected</strong> — benefit of the doubt is given (many strong roles never list salary).
+        </p>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:20px;">
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Blocked Sectors</div>
+        <p style="font-size:13px;margin:0 0 12px;">Case-insensitive substring match. Any hit → score = 0.0.</p>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);">
+                <th style="text-align:left;padding:8px;font-weight:600;">Sector</th>
+                <th style="text-align:left;padding:8px;font-weight:600;">Trigger Keywords</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>Healthcare / HealthTech</strong></td><td style="padding:8px;"><code class="mono">healthcare, health tech, healthtech, medical device, clinical, hospital system, pharma, life sciences</code></td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>Government / Public Sector</strong></td><td style="padding:8px;"><code class="mono">government, federal agency, public sector, department of, ministry of, military, defense contractor</code></td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>Utilities</strong></td><td style="padding:8px;"><code class="mono">electric utility, water utility, gas utility, power grid</code></td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>Adult / Pornography</strong></td><td style="padding:8px;"><code class="mono">adult content, pornography, adult entertainment, onlyfans</code></td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>Gambling</strong></td><td style="padding:8px;"><code class="mono">gambling, casino, poker, wagering, sports betting, online gaming, igaming, lottery</code></td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>Predatory Lending</strong></td><td style="padding:8px;"><code class="mono">payday loan, predatory lending, check cashing</code></td></tr>
+              <tr><td style="padding:8px;"><strong>Hate / Racism</strong></td><td style="padding:8px;"><code class="mono">white supremac, racist, hate group</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Layer 2: Match to Candidate ───────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Layer 2 — Match to Candidate <span class="dim" style="font-weight:400;">(−3.0 to +3.0)</span></h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+      <p style="font-size:13.5px;margin:0;line-height:1.7;">
+        This is the highest-weight layer and the one that makes the engine actually score the candidate against the job. One Gemini call takes three inputs:
+      </p>
+      <ol style="font-size:13px;margin:0;padding-left:20px;line-height:1.8;">
+        <li><strong>Candidate profile</strong> — preferences, identity, target titles, comp floor (from <code class="mono">candidate_profile.yaml</code>).</li>
+        <li><strong>Candidate corpus</strong> — the parsed <code class="mono">data/Accomplishments_Inventory.docx</code>: every metric, achievement, and bullet from resume, LinkedIn, leadership deck, blog posts, and brand-pivot notes, tagged by domain.</li>
+        <li><strong>The job description</strong> — full text (capped at 10k chars).</li>
+      </ol>
+
+      <p style="font-size:13.5px;margin:0;line-height:1.7;">It returns:</p>
+      <ul style="font-size:13px;margin:0;padding-left:20px;line-height:1.8;">
+        <li><code class="mono">match_score</code> — a float in [−3.0, +3.0]. See scale below.</li>
+        <li><code class="mono">match_summary</code> — 2–3 sentences explaining the score in plain language.</li>
+        <li><code class="mono">evidence[]</code> — each entry pairs a specific JD requirement with the corpus bullet that backs it, and rates the strength (Strong / Moderate / Weak).</li>
+        <li><code class="mono">mismatches[]</code> — each entry names a JD requirement and what's missing or thin in the corpus, with severity.</li>
+        <li><code class="mono">differentiator_themes[]</code> — themes in the JD that hit Jeff's moats (finance+ops bridge, AI-native ops, consumption-pricing fluency, systems thinking, GitLab-scale).</li>
+        <li><code class="mono">tailored_bullets[]</code> — 3–5 resume bullets pulled directly from the corpus that should appear on the version of the resume sent to this company.</li>
+        <li><code class="mono">cover_letter_hooks[]</code> — 1–3 lines that could open a cover letter, citing corpus evidence.</li>
+      </ul>
+
+      <div style="border-top:1px solid var(--border);padding-top:16px;">
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Match score scale</div>
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>+2.5 to +3.0</strong></td><td style="padding:8px;">Direct, recent, scaled evidence. Multiple Strong matches, no High-severity gaps.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>+1.0 to +2.4</strong></td><td style="padding:8px;">Solid partial match. Core asks have evidence at smaller scale or adjacent domain.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>−0.9 to +0.9</strong></td><td style="padding:8px;">Mixed. Some evidence, meaningful gaps on what the JD emphasizes most.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>−2.4 to −1.0</strong></td><td style="padding:8px;">Mostly mismatch. Core requirements lack corpus support even with a stretch.</td></tr>
+            <tr><td style="padding:8px;"><strong>−3.0 to −2.5</strong></td><td style="padding:8px;">Fundamental mismatch. Role asks for things never done at any scale in any related domain.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:16px;background:var(--bg-sunk);padding:14px 16px;border-radius:var(--radius);">
+        <div style="font-size:12.5px;line-height:1.6;">
+          <strong>If the Inventory docx is missing</strong>, Layer 2 contributes 0.0 and surfaces a high-severity mismatch entry pointing at the missing file. The other layers still run. Keep your canonical Inventory wherever you maintain your resume source, and sync it into <code class="mono">data/Accomplishments_Inventory.docx</code> on each update.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Layer 3: LLM Qualitative ──────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Layer 3 — LLM Qualitative Adjustment <span class="dim" style="font-weight:400;">(−1.0 to +1.0)</span></h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+      <p style="font-size:13.5px;margin:0;line-height:1.7;">
+        Layer 2 asks "does Jeff have what this role needs?" Layer 3 asks "is the role actually shaped the way the title suggests?" One Gemini call returns a ±1.0 nudge plus structured role-shape signals: IC vs leadership balance, expected team size, reporting line, strategy-vs-execution skew, plus the existing pros/cons and tech-stack extraction.
+      </p>
+
+      <div>
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Adjusts UP (+0.5 to +1.0)</div>
+        <ul style="font-size:13px;margin:0;padding-left:20px;line-height:1.8;">
+          <li>Real authority — P&amp;L, headcount, strategy ownership</li>
+          <li>High-growth company with modern GTM thinking</li>
+          <li>AI/automation is central to the role, not bolted on</li>
+          <li>Reporting line and team size signal a true leadership seat</li>
+        </ul>
+      </div>
+
+      <div>
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Adjusts DOWN (−0.5 to −1.0)</div>
+        <ul style="font-size:13px;margin:0;padding-left:20px;line-height:1.8;">
+          <li>Reads as a "firefighter" role — all tactical, no strategy</li>
+          <li>Heavily IC despite a leadership title</li>
+          <li>Company in decline or pivoting away from CS</li>
+          <li>Red flags in culture, leadership, or business model</li>
+        </ul>
+      </div>
+
+      <p style="font-size:12.5px;margin:0;color:var(--text-dim);line-height:1.6;">
+        Layer 3 also extracts pricing model, sector, salary range (if stated), tech-stack guesses (CRM, CS tool, comms, OS, cloud), recommended positioning angle, and whether the role looks like an FDE model — all for display purposes.
+      </p>
+
+    </div>
+  </div>
+
+  {# ── Layer 4: Adjustment Weights ───────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Layer 4 — Adjustment Weights (deterministic signals)</h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:20px;">
+
+      <p style="font-size:13.5px;margin:0;line-height:1.7;">
+        Fast substring matching on the JD text plus a few flags from company research. No LLM. Brittle by design — paraphrases will miss, and that's fine because Layer 3's LLM call catches the same ideas semantically. Layer 4 is here for a fixed, auditable signal that doesn't depend on a model.
+      </p>
+
+      <div>
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Adjustment Weights</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);">
+                <th style="text-align:left;padding:10px;font-weight:600;">Category</th>
+                <th style="text-align:left;padding:10px;font-weight:600;">Trigger</th>
+                <th style="text-align:right;padding:10px;font-weight:600;width:80px;">Weight</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border);background:var(--bg-sunk);"><td colspan="3" style="padding:10px;font-weight:600;font-size:12px;">Tech Stack</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">Windows/Teams stack</td><td style="padding:10px;"><code class="mono">microsoft teams, ms teams, windows environment, microsoft 365, o365</code></td><td style="padding:10px;text-align:right;color:var(--red-400);font-weight:600;">−2.0</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">Mac/Slack/Google stack</td><td style="padding:10px;"><code class="mono">slack, macbook, macos, mac environment, google workspace, g suite</code></td><td style="padding:10px;text-align:right;color:var(--accent);font-weight:600;">+1.0</td></tr>
+              <tr style="border-bottom:1px solid var(--border);background:var(--bg-sunk);"><td colspan="3" style="padding:10px;font-weight:600;font-size:12px;">Founder Type (from company research)</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">2nd-time founder</td><td style="padding:10px;">Research data flag</td><td style="padding:10px;text-align:right;color:var(--accent);font-weight:600;">+1.0</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">1st-time founder</td><td style="padding:10px;">Research data flag</td><td style="padding:10px;text-align:right;color:var(--red-400);font-weight:600;">−1.0</td></tr>
+              <tr style="border-bottom:1px solid var(--border);background:var(--bg-sunk);"><td colspan="3" style="padding:10px;font-weight:600;font-size:12px;">Greenfield vs. Maintenance</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">Greenfield bonus</td><td style="padding:10px;"><code class="mono">build from scratch, greenfield, first hire, founding team, 0 to 1, create the function, build the team, define the strategy, stand up, architect</code></td><td style="padding:10px;text-align:right;color:var(--accent);font-weight:600;">+2.0</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">Process upcycling</td><td style="padding:10px;"><code class="mono">clean up, fix broken, optimize existing, improve current, streamline, reduce manual, automate existing</code></td><td style="padding:10px;text-align:right;color:var(--red-400);font-weight:600;">−1.0</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td colspan="3" style="padding:8px;font-size:11px;color:var(--text-dim);">⚠ If greenfield is detected, the upcycling penalty is NOT applied.</td></tr>
+              <tr style="border-bottom:1px solid var(--border);background:var(--bg-sunk);"><td colspan="3" style="padding:10px;font-weight:600;font-size:12px;">Pricing Model</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">Consumption / outcome-based</td><td style="padding:10px;"><code class="mono">consumption, usage-based, pay-as-you-go, metered, token-based, credit-based, outcome-based</code></td><td style="padding:10px;text-align:right;color:var(--accent);font-weight:600;">+1.0</td></tr>
+              <tr style="border-bottom:1px solid var(--border);background:var(--bg-sunk);"><td colspan="3" style="padding:10px;font-weight:600;font-size:12px;">Sector Match (from company research)</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">AI-native</td><td style="padding:10px;">Matches: <code class="mono">ai, ai-native, machine learning</code></td><td style="padding:10px;text-align:right;color:var(--accent);font-weight:600;">+2.0</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">DevTools</td><td style="padding:10px;">Matches: <code class="mono">developer tools, devtools, dev ops</code></td><td style="padding:10px;text-align:right;color:var(--accent);font-weight:600;">+1.5</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">Fintech</td><td style="padding:10px;">Matches: <code class="mono">fintech, finance</code></td><td style="padding:10px;text-align:right;color:var(--accent);font-weight:600;">+1.0</td></tr>
+              <tr style="border-bottom:1px solid var(--border);background:var(--bg-sunk);"><td colspan="3" style="padding:10px;font-weight:600;font-size:12px;">Work Arrangement &amp; Other</td></tr>
+              <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">Fully remote</td><td style="padding:10px;"><code class="mono">100% remote, fully remote, remote-first, work from anywhere</code></td><td style="padding:10px;text-align:right;color:var(--accent);font-weight:600;">+0.5</td></tr>
+              <tr><td style="padding:10px;">CS shrinking + Sales growing</td><td style="padding:10px;">Research data flag (Churn &amp; Burn)</td><td style="padding:10px;text-align:right;color:var(--red-400);font-weight:600;">−1.0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Warning Flags (no score impact)</div>
+        <ul style="font-size:13px;margin:0;padding-left:20px;line-height:1.8;">
+          <li>CFO/CRO antagonism signal from research</li>
+          <li>Runway &lt; 18 months</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Score tiers ───────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Score tiers</h3></div>
+    <div class="card-body">
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border);">
+              <th style="text-align:left;padding:10px;font-weight:600;">Score</th>
+              <th style="text-align:left;padding:10px;font-weight:600;">Tier</th>
+              <th style="text-align:left;padding:10px;font-weight:600;">Interpretation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;"><strong>9.0–10.0</strong></td><td style="padding:10px;"><span class="score-badge tier-dream"><span class="dot"></span>Dream Job</span></td><td style="padding:10px;">Exceptional fit on both role and candidate — apply immediately.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;"><strong>7.0–8.9</strong></td><td style="padding:10px;"><span class="score-badge tier-solid"><span class="dot"></span>Solid Bet</span></td><td style="padding:10px;">Strong fit — prioritize.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;"><strong>5.0–6.9</strong></td><td style="padding:10px;"><span class="score-badge tier-worth"><span class="dot"></span>Worth a Look</span></td><td style="padding:10px;">Neutral-to-positive. Read the Match Analysis panel before applying.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;"><strong>3.0–4.9</strong></td><td style="padding:10px;"><span class="score-badge tier-skip"><span class="dot"></span>Probably Skip</span></td><td style="padding:10px;">Weak fit — low priority.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;"><strong>0.1–2.9</strong></td><td style="padding:10px;"><span class="score-badge tier-pass"><span class="dot"></span>Hard Pass</span></td><td style="padding:10px;">Rejected or fundamental mismatch.</td></tr>
+            <tr><td style="padding:10px;"><strong>0.0</strong></td><td style="padding:10px;"><span class="score-badge tier-reject"><span class="dot"></span>Auto-Rejected</span></td><td style="padding:10px;">Layer 1 dealbreaker triggered.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {# ── Worked example: high match ────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Worked example — high match</h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+      <p style="font-size:13px;margin:0;color:var(--text-dim);">
+        VP RevOps role at a Series C AI-native devtools company. Greenfield language, modern stack, Jeff's GitLab CS-Ops-through-IPO arc maps directly to the JD.
+      </p>
+      <div style="background:var(--bg-sunk);padding:12px;border-radius:var(--radius);font-family:'JetBrains Mono','Courier New',monospace;font-size:12px;line-height:1.6;overflow-x:auto;">
+Layer 1: pass (no blocked sectors, salary $250k base detected)
+
+Layer 4 (Adjustment Weights, deterministic):
+  + 2.0 (greenfield language)
+  + 2.0 (AI-native sector)
+  + 1.0 (Mac/Slack stack)
+  + 1.0 (consumption pricing)
+  + 0.5 (fully remote)
+  = +6.5
+
+Layer 2 (Match to Candidate, corpus-grounded):
+  match_score = <span style="color:var(--accent);">+2.6</span>
+  evidence: 7 Strong matches (CS Ops build-out, NRR scaling, exec partnership,
+            forecast accuracy, AI-native workflows, finance+ops bridge, consumption pricing fluency)
+  mismatches: 1 Medium (no explicit "developer-led growth" experience)
+
+Layer 3 (LLM Qualitative, role shape):
+  llm_adjustment = <span style="color:var(--accent);">+0.7</span>
+  role_shape: Balanced leadership, reports to CRO, ~12 to lead, Strategy-Heavy
+
+Final = 5.0 (base) + 6.5 + 2.6 + 0.7 = 14.8 → <span style="color:var(--red-400);">clamped to 10.0</span>
+      </div>
+      <p style="font-size:12.5px;margin:0;line-height:1.6;color:var(--text-dim);">
+        <strong>Result:</strong> 10.0 (Dream Job). The Match Analysis panel on the job detail page exposes the 7 evidence rows, the 1 mismatch, the 3–5 tailored resume bullets to swap in, and a cover-letter hook tying GitLab to this company's stage.
+      </p>
+    </div>
+  </div>
+
+  {# ── Worked example: high look, weak match ─────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Worked example — looks good, doesn't match</h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+      <p style="font-size:13px;margin:0;color:var(--text-dim);">
+        A flashy "Founding RevOps Engineer" role at an AI-native devtools shop. Layer 4 lights up like a Christmas tree. But the role is 80% Salesforce admin + Snowflake modeling — work Jeff has directed but not personally executed at depth. The new Layer 2 catches it.
+      </p>
+      <div style="background:var(--bg-sunk);padding:12px;border-radius:var(--radius);font-family:'JetBrains Mono','Courier New',monospace;font-size:12px;line-height:1.6;overflow-x:auto;">
+Layer 1: pass
+Layer 4 (deterministic): +6.5  (same signals as above)
+Layer 2 (match):  <span style="color:var(--red-400);">−2.1</span>  (6 Moderate gaps: SFDC build/admin depth,
+                       Snowflake DBT fluency, IC engineering)
+Layer 3 (LLM):    <span style="color:var(--red-400);">−0.6</span>  (heavily IC despite "founding" framing)
+
+Final = 5.0 + 6.5 − 2.1 − 0.6 = 8.8 → <span style="color:var(--accent);">8.8 (Solid Bet)</span>
+      </div>
+      <p style="font-size:12.5px;margin:0;line-height:1.6;color:var(--text-dim);">
+        <strong>Result:</strong> 8.8 instead of the old engine's 9.5–10.0. Old engine would have wasted a week on this. New engine surfaces the gaps explicitly so the decision is "still apply, but acknowledge the IC stretch" rather than "Dream Job, drop everything."
+      </p>
+    </div>
+  </div>
+
+  {# ── Worked example: auto-reject ───────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Worked example — auto-reject</h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+      <p style="font-size:13px;margin:0;color:var(--text-dim);">
+        VP Customer Success role at a healthtech platform, $200k base.
+      </p>
+      <div style="background:var(--bg-sunk);padding:12px;border-radius:var(--radius);font-family:'JetBrains Mono','Courier New',monospace;font-size:12px;line-height:1.6;overflow-x:auto;">
+Layer 1: <span style="color:var(--red-400);">REJECT</span> — "healthcare" matched in JD.
+Layers 2/3/4: skipped.
+Final = <span style="color:var(--red-400);">0.0</span>
+      </div>
+    </div>
+  </div>
+
+  {# ── Design philosophy ─────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Design principles</h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--accent);">1. Auto-reject first, match next, vibe last</div>
+        <p style="font-size:12.5px;margin:0;color:var(--text-dim);line-height:1.6;">Layer 1 saves LLM tokens on obvious rejects. Layer 2 (highest weight) is the substantive question: is the candidate qualified? Layer 3 handles role-shape nuance. Layer 4 is the fixed-signal baseline.</p>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--accent);">2. Evidence over vibes</div>
+        <p style="font-size:12.5px;margin:0;color:var(--text-dim);line-height:1.6;">Layer 2 must cite the corpus literally. "(none found in corpus)" is a legitimate finding. No hallucinated metrics, ever.</p>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--accent);">3. Clamp once, at the end</div>
+        <p style="font-size:12.5px;margin:0;color:var(--text-dim);line-height:1.6;">The old engine clamped the deterministic layer to [0,10] before adding the LLM, which made any max-deterministic role insensitive to the LLM nudge. New engine adds everything, then clamps.</p>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--accent);">4. The output is more than a score</div>
+        <p style="font-size:12.5px;margin:0;color:var(--text-dim);line-height:1.6;">Every scored job produces evidence rows, mismatches, tailored resume bullets, and cover-letter hooks. A score tells you whether to apply. The Match Analysis panel tells you how.</p>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--accent);">5. The Inventory is the heart of Layer 2</div>
+        <p style="font-size:12.5px;margin:0;color:var(--text-dim);line-height:1.6;">If the Accomplishments Inventory drifts from reality, Layer 2 drifts too. Cowork owns updating it whenever a new metric or accomplishment lands. Then sync to <code class="mono">data/</code> and redeploy.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,47 @@
+<div class="prep-hero">
+  <div class="prep-hero-inner">
+    <div class="prep-hero-eyebrow">Interview Prep</div>
+    <h1 class="prep-hero-title">Pick a company to prep for.</h1>
+    <p class="prep-hero-sub">You can have prep open for every active company in your pipeline. Switch instantly with <span class="kbd">⌘</span> <span class="kbd">K</span>.</p>
+    <div class="prep-hero-search">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.5" cy="6.5" r="4.5"/><path d="m10 10 4 4"/></svg>
+      <input id="hero-search" placeholder="Search by company or role…" autocomplete="off"/>
+      <span class="dim mono" style="font-size:11px" id="hero-count">0</span>
+    </div>
+    <div class="prep-hero-list" id="hero-list"></div>
+    <div class="prep-hero-foot dim">Eligible stages: Researching · Outreach · Recruiter · HM · Panel · Final / Offer.</div>
+  </div>
+</div>
+
+<script>
+const heroSearch = document.getElementById('hero-search');
+const heroList = document.getElementById('hero-list');
+const heroCount = document.getElementById('hero-count');
+const eligibleJobs = {{ eligible_jobs|tojson }};
+
+function renderHeroList() {
+  const q = heroSearch.value.toLowerCase();
+  const filtered = eligibleJobs.filter(j =>
+    !q || j.company.toLowerCase().includes(q) || (j.job_title || '').toLowerCase().includes(q)
+  );
+  heroCount.textContent = filtered.length;
+  heroList.innerHTML = filtered.map(j => `
+    <button class="prep-hero-row" hx-get="/prep/${j.id}" hx-target=".prep-shell" hx-swap="outerHTML">
+      <div class="logo-sq sm" style="background: #ddd">${j.company.substring(0,2).toUpperCase()}</div>
+      <div class="prep-hero-row-text">
+        <div class="prep-hero-row-co">${j.company}</div>
+        <div class="prep-hero-row-title">${j.job_title || 'Role TBD'}</div>
+      </div>
+      <span class="dim mono" style="font-size:11px">${j.pipeline_stage}</span>
+      <span class="dim mono" style="font-size:11px">${(j.final_score||0).toFixed(1)}</span>
+    </button>
+  `).join('');
+  if (filtered.length === 0) {
+    heroList.innerHTML = '<div class="empty" style="padding:16px; text-align:center"><strong>No results</strong></div>';
+  }
+}
+
+heroSearch.addEventListener('input', renderHeroList);
+renderHeroList();
+heroSearch.focus();
+</script>

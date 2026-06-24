@@ -1,0 +1,33 @@
+<tr>
+  <td>
+    <div style="font-weight:500;font-size:13px;">{{ r.name }}</div>
+    {% if r.email %}<div class="dim" style="font-size:11px;margin-top:2px;"><a href="mailto:{{ r.email }}" style="color:var(--accent);">{{ r.email }}</a></div>{% endif %}
+  </td>
+  <td class="muted" style="font-size:12px;">{{ r.firm or '—' }}</td>
+  <td class="muted" style="font-size:12px;">{{ r.specialty or '—' }}</td>
+  <td>
+    {%- if r.relationship_status == 'Active' -%}
+    <span class="need-pill tier-dream"><span class="dot"></span>Active</span>
+    {%- elif r.relationship_status == 'Warm' -%}
+    <span class="need-pill tier-worth"><span class="dot"></span>Warm</span>
+    {%- else -%}
+    <span class="need-pill tier-skip"><span class="dot"></span>Cold</span>
+    {%- endif -%}
+    {% if r.days_since and r.stale_alert_days and r.days_since > r.stale_alert_days %}
+    <span class="tag amber" style="margin-left:4px;">{{ r.days_since|int }}d stale</span>
+    {% endif %}
+  </td>
+  <td class="dim mono" style="font-size:11px;">{{ r.last_contact_date or '—' }}</td>
+  <td style="text-align:right;">
+    <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;">
+      {% if r.linkedin_url %}
+      <a href="{{ r.linkedin_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-ghost">LinkedIn</a>
+      {% endif %}
+      <button hx-post="/recruiters/{{ r.id }}/contact"
+              hx-vals='{"note": ""}'
+              hx-swap="outerHTML"
+              hx-target="closest tr"
+              class="btn btn-sm btn-primary">Log Contact</button>
+    </div>
+  </td>
+</tr>

@@ -1,0 +1,8 @@
+# Ruff config — keeps `ruff check` (and CI) consistent across machines.
+# CI invokes: ruff check app/ tests/ --select E,F,W --ignore E501,W291,W293
+# The per-file-ignores below still apply on top of those CLI flags.
+
+[lint.per-file-ignores]
+# Test modules set os.environ (SESSION_SECRET, API keys) before importing
+# app modules so config picks them up — imports legitimately follow that setup.
+"tests/*" = ["E402"]

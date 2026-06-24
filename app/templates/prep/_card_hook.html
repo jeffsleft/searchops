@@ -1,0 +1,17 @@
+<div class="card prep-card">
+  <div class="card-head">
+    <h3>Opening hook</h3>
+    <div class="spacer"></div>
+  </div>
+  <div class="card-body">
+    {% if active_session.opening_hook %}
+      <div style="font-size:15.5px; line-height:1.6; font-style:italic; font-family:Georgia,serif">{{ active_session.opening_hook }}</div>
+    {% else %}
+      <textarea name="value" class="textarea prep-scratchpad"
+        hx-patch="/prep/sessions/{{ active_session.id }}/hook"
+        hx-trigger="input changed delay:600ms"
+        hx-swap="none"
+        placeholder="What's the angle for this conversation? e.g. 'Lead with the pricing-transition story.'" style="min-height:80px"></textarea>
+    {% endif %}
+  </div>
+</div>

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Vetting Queue — Recruiting Engine{% endblock %}
+{% block page_title %}Vetting{% endblock %}
+
+{% block content %}
+{% from "components/_macros.html" import logo %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Vetting Queue</h1>
+    <div class="sub">Scored jobs awaiting ethics confirmation before progressing</div>
+  </div>
+  <span class="dim mono" style="font-size:12px;">{{ jobs|length }} pending</span>
+</div>
+
+{% if ethics_reasons %}
+<div class="card" style="margin-bottom:18px;">
+  <div class="card-head"><h3>Ethics checklist</h3></div>
+  <div class="card-body">
+    <div class="dim" style="font-size:12px;margin-bottom:10px;">
+      Consider these before confirming. Edit the list in
+      <a href="/settings" style="color:var(--accent);">Settings → Ethics Vetting Reasons</a>.
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+      {% for e in ethics_reasons %}
+      <span style="font-size:12px;padding:4px 10px;background:var(--bg-sunk);border-radius:var(--radius);">{{ e.reason }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if jobs %}
+<div class="card">
+  <table class="tbl">
+    <thead><tr>
+      <th style="width:32%;">Company / Role</th>
+      <th>Sector</th>
+      <th>Score</th>
+      <th>Stage</th>
+      <th>Ethics</th>
+    </tr></thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr id="job-row-{{ job.id }}" class="row-hover" style="cursor:pointer;" onclick="window.location='/job/{{ job.id }}'">
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;">
+            {{ logo(job.company, 'sm') }}
+            <div>
+              <div style="font-weight:500;">{{ job.company }}</div>
+              <div class="dim" style="font-size:11px;">{{ job.job_title }}</div>
+            </div>
+          </div>
+        </td>
+        <td class="muted" style="font-size:12px;">{{ job.sector or '—' }}</td>
+        <td>
+          {%- set s = job.final_score or 0 -%}
+          <span class="score-badge
+            {%- if s >= 9 %} tier-dream
+            {%- elif s >= 7 %} tier-solid
+            {%- elif s >= 5 %} tier-worth
+            {%- elif s >= 3 %} tier-skip
+            {%- else %} tier-pass{%- endif %}">
+            <span class="dot"></span>{{ "%.1f"|format(s) }}
+          </span>
+        </td>
+        <td>
+          <span class="stage {{ job.pipeline_stage or '' }}">
+            {{ stages.get(job.pipeline_stage or '', {}).get('label', '—') }}
+          </span>
+        </td>
+        <td onclick="event.stopPropagation()">
+          <form hx-post="/job/{{ job.id }}/ethics"
+                hx-target="closest tr"
+                hx-swap="outerHTML">
+            <button type="submit" class="btn btn-sm btn-primary">Confirm ✓</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card">
+  <div class="empty" style="padding:60px 24px;">
+    <strong>All clear</strong>
+    <span style="display:block;margin-top:6px;color:var(--text-muted);font-size:12.5px;">
+      No jobs pending ethics review.
+    </span>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

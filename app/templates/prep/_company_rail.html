@@ -1,0 +1,23 @@
+<aside class="prep-rail">
+  <div class="prep-rail-head">
+    <div class="prep-rail-title">Active prep</div>
+    <span class="dim mono" style="font-size:10px">{{ sessions|length }}</span>
+  </div>
+  <div class="prep-rail-list">
+    {% for j in eligible_jobs %}
+      <button class="prep-rail-item {% if j.id == active_job.id %}selected{% endif %}"
+        hx-get="/prep/{{ j.id }}" hx-target=".prep-shell" hx-swap="outerHTML"
+        title="{{ j.job_title }}">
+        <div class="logo-sq sm" style="background: #ddd">{{ j.company[:2]|upper }}</div>
+        <div class="prep-rail-item-text">
+          <div class="prep-rail-item-co">{{ j.company }}</div>
+          <div class="prep-rail-item-stage">{{ j.pipeline_stage }}</div>
+        </div>
+        <span class="dim mono" style="font-size:11px">{{ (j.final_score or 0)|round(1) }}</span>
+      </button>
+    {% endfor %}
+  </div>
+  <div class="prep-rail-foot dim">
+    <span class="kbd">⌘</span> <span class="kbd">K</span> to switch
+  </div>
+</aside>

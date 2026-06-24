@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+{% block title %}Outreach Targets — Recruiting Engine{% endblock %}
+{% block page_title %}Outreach{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-sm"
+        hx-post="/companies/research-batch"
+        hx-target="#batch-result"
+        hx-swap="innerHTML"
+        hx-indicator="#batch-result">Research Next 5</button>
+<span id="batch-result" class="dim" style="font-size:12px;"></span>
+{% endblock %}
+
+{% block content_wrap %}
+<div class="split" id="outreach-split">
+  <div class="split-list">
+    <div class="page">
+{% block content %}
+{% from "components/_macros.html" import logo %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Outreach Targets</h1>
+    <div class="sub">Crunchbase-sourced companies in target sectors · cold-reach candidates</div>
+  </div>
+</div>
+
+<div id="outreach-content">
+
+  <div class="filterbar" style="margin-bottom:16px;">
+    <div class="tgroup">
+      {% set tabs = [
+        ('Watchlist', 'Queued'),
+        ('Researching', 'Researching'),
+        ('Reached Out', 'Reached out'),
+        ('Replied', 'Replied'),
+        ('All', 'All'),
+      ] %}
+      {% for val, label in tabs %}
+      <button aria-pressed="{{ 'true' if tab == val else 'false' }}"
+              hx-get="/companies?tab={{ val }}&sort={{ sort }}&order={{ order }}"
+              hx-target="#outreach-content"
+              hx-select="#outreach-content"
+              hx-swap="outerHTML">
+        {{ label }}{% if val != 'All' %} · {{ count_map.get(val, 0) }}{% else %} · {{ total }}{% endif %}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if companies %}
+  <div class="card">
+    <table class="tbl">
+      <thead><tr>
+        <th style="width:28%;">
+          <button type="button"
+                  hx-get="/companies?tab={{ tab }}&sort=name&order={{ 'asc' if sort == 'name' and order == 'desc' else 'desc' }}"
+                  hx-target="#outreach-content" hx-select="#outreach-content" hx-swap="outerHTML"
+                  style="background:none;border:none;padding:0;cursor:pointer;color:inherit;font:inherit;font-weight:inherit;white-space:nowrap;">
+            Company{% if sort == 'name' %} {{ '↑' if order == 'asc' else '↓' }}{% endif %}
+          </button>
+        </th>
+        <th>Sector</th>
+        <th>
+          <button type="button"
+                  hx-get="/companies?tab={{ tab }}&sort=funding_stage&order={{ 'asc' if sort == 'funding_stage' and order == 'desc' else 'desc' }}"
+                  hx-target="#outreach-content" hx-select="#outreach-content" hx-swap="outerHTML"
+                  style="background:none;border:none;padding:0;cursor:pointer;color:inherit;font:inherit;font-weight:inherit;white-space:nowrap;">
+            Stage / Size{% if sort == 'funding_stage' %} {{ '↑' if order == 'asc' else '↓' }}{% endif %}
+          </button>
+        </th>
+        <th>
+          <button type="button"
+                  hx-get="/companies?tab={{ tab }}&sort=need_assessment&order={{ 'asc' if sort == 'need_assessment' and order == 'desc' else 'desc' }}"
+                  hx-target="#outreach-content" hx-select="#outreach-content" hx-swap="outerHTML"
+                  style="background:none;border:none;padding:0;cursor:pointer;color:inherit;font:inherit;font-weight:inherit;white-space:nowrap;">
+            Need{% if sort == 'need_assessment' %} {{ '↑' if order == 'asc' else '↓' }}{% endif %}
+          </button>
+        </th>
+        <th>
+          <button type="button"
+                  hx-get="/companies?tab={{ tab }}&sort=fit_score&order={{ 'asc' if sort == 'fit_score' and order == 'desc' else 'desc' }}"
+                  hx-target="#outreach-content" hx-select="#outreach-content" hx-swap="outerHTML"
+                  style="background:none;border:none;padding:0;cursor:pointer;color:inherit;font:inherit;font-weight:inherit;white-space:nowrap;">
+            Fit{% if sort == 'fit_score' %} {{ '↑' if order == 'asc' else '↓' }}{% endif %}
+          </button>
+        </th>
+        <th>Status</th>
+        <th>Matches</th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        {% for co in companies %}
+        <tr data-co-id="{{ co.id }}" style="cursor:pointer;"
+            hx-get="/companies/{{ co.id }}/detail"
+            hx-target="#co-detail-panel"
+            hx-swap="innerHTML"
+            onclick="window.openOutreachPanel && window.openOutreachPanel(this)">
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              {{ logo(co.name, 'sm') }}
+              <div style="min-width:0;">
+                <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                  {% if co.website %}
+                  <a href="{{ co.website }}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;">
+                    {{ co.name }}
+                  </a>
+                  {% else %}{{ co.name }}{% endif %}
+                </div>
+                {% if co.why_interesting %}
+                <div class="dim" style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">
+                  {{ co.why_interesting }}
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+          <td class="muted" style="font-size:12px;">{{ co.sector or '—' }}</td>
+          <td class="muted mono" style="font-size:11px;">
+            {{ co.funding_stage or '—' }}{% if co.headcount_estimate %} · {{ co.headcount_estimate }}{% endif %}
+          </td>
+          <td>
+            {%- if co.need_assessment == 'High' -%}
+            <span class="tag green">High</span>
+            {%- elif co.need_assessment == 'Medium' -%}
+            <span class="tag amber">Medium</span>
+            {%- elif co.need_assessment and co.need_assessment != 'Unknown' -%}
+            <span class="stage dim">{{ co.need_assessment }}</span>
+            {%- else -%}
+            <span class="dim">—</span>
+            {%- endif -%}
+          </td>
+          <td>
+            {%- set fs = co.fit_score or 0 -%}
+            {%- if co.fit_score -%}
+            <span class="score-badge
+              {%- if fs >= 9 %} tier-dream
+              {%- elif fs >= 7 %} tier-solid
+              {%- elif fs >= 5 %} tier-worth
+              {%- elif fs >= 3 %} tier-skip
+              {%- else %} tier-pass{%- endif %}">
+              <span class="dot"></span>{{ "%.1f"|format(fs) }}
+            </span>
+            {%- else -%}
+            <span class="dim">—</span>
+            {%- endif -%}
+          </td>
+          <td>
+            <span class="stage dim">{{ co.status }}</span>
+          </td>
+          <td id="match-cell-{{ co.id }}">
+            {% with refresh_url = '/companies/' ~ co.id ~ '/refresh-matches' %}
+              {% include 'components/match_cell.html' %}
+            {% endwith %}
+          </td>
+          <td onclick="event.stopPropagation()">
+            <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;">
+              {% if not co.research_date %}
+              <button class="btn btn-sm"
+                      hx-post="/companies/{{ co.id }}/research"
+                      hx-target="body"
+                      hx-swap="none"
+                      hx-indicator="this"
+                      hx-disabled-elt="this">Research</button>
+              {% endif %}
+              <form hx-post="/companies/{{ co.id }}/status"
+                    hx-target="closest tr"
+                    hx-swap="none"
+                    style="display:inline;">
+                <select name="status" class="select" style="font-size:11px;padding:3px 22px 3px 8px;"
+                        onchange="this.closest('form').requestSubmit()">
+                  {% for s in ['Watchlist','Researching','Reached Out','Replied'] %}
+                  <option {% if co.status == s %}selected{% endif %}>{{ s }}</option>
+                  {% endfor %}
+                </select>
+              </form>
+              <details style="position:relative;">
+                <summary style="list-style:none;cursor:pointer;">
+                  <span class="btn btn-sm btn-ghost">Promote →</span>
+                </summary>
+                <div style="position:absolute;right:0;top:30px;z-index:50;width:280px;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px;box-shadow:var(--shadow);">
+                  <form hx-post="/companies/{{ co.id }}/promote"
+                        hx-target="#promote-result-{{ co.id }}"
+                        hx-swap="innerHTML"
+                        style="display:flex;flex-direction:column;gap:8px;">
+                    <div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:2px;">Promote {{ co.name }} to Pipeline</div>
+                    <input type="text" name="job_title" placeholder="Job title *" class="input" required style="font-size:12px;">
+                    <input type="url" name="url" placeholder="JD URL (optional)" class="input" style="font-size:12px;">
+                    <button type="submit" class="btn btn-sm btn-primary">Create Job →</button>
+                  </form>
+                  <div id="promote-result-{{ co.id }}" style="margin-top:6px;"></div>
+                </div>
+              </details>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="empty" style="padding:40px 24px;">
+      <strong>No companies in this view</strong>
+      <span style="display:block;margin-top:6px;color:var(--text-muted);font-size:12.5px;">
+        Switch tabs or add a target company below.
+      </span>
+    </div>
+  </div>
+  {% endif %}
+
+</div>{# /outreach-content #}
+
+{# Add company #}
+<details style="margin-top:16px;">
+  <summary style="cursor:pointer;list-style:none;display:inline-block;">
+    <span class="btn btn-ghost btn-sm">+ Add Company</span>
+  </summary>
+  <div class="card" style="margin-top:8px;">
+    <div class="card-head"><h3>Add Target Company</h3></div>
+    <form method="post" action="/companies" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Company Name *</label>
+          <input type="text" name="name" required class="input">
+        </div>
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Website</label>
+          <input type="url" name="website" placeholder="https://…" class="input">
+        </div>
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Sector</label>
+          <input type="text" name="sector" placeholder="DevTools, Fintech…" class="input">
+        </div>
+        <div>
+          <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Funding Stage</label>
+          <select name="funding_stage" class="select">
+            <option value="">Unknown</option>
+            <option>Series A</option><option>Series B</option><option>Series C</option>
+            <option>Series D</option><option>Late Stage</option><option>Public</option>
+            <option>Bootstrapped</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Why Interesting</label>
+        <textarea name="why_interesting" class="textarea" placeholder="Why this company? What's the hook?"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary" style="align-self:flex-start;">Add Company</button>
+    </form>
+  </div>
+</details>
+
+{# Background task status — live polling #}
+<div style="margin-top:16px;">
+  <details>
+    <summary style="cursor:pointer;list-style:none;display:inline-block;">
+      <span class="btn btn-ghost btn-sm">⏱ Task Log</span>
+    </summary>
+    <div class="card" style="margin-top:8px;">
+      <div class="card-head">
+        <h3>Background Task Log</h3>
+        <div class="spacer"></div>
+        <span class="dim" style="font-size:11px;">Auto-refreshes every 30s while open</span>
+      </div>
+      <div style="padding:8px 16px 12px;"
+           id="task-log-content"
+           hx-get="/api/task-status"
+           hx-trigger="load, every 30s"
+           hx-swap="innerHTML">
+        <span class="dim" style="font-size:12px;">Loading…</span>
+      </div>
+    </div>
+  </details>
+</div>
+
+<script>
+  window.openOutreachPanel = function(row) {
+    document.querySelectorAll('#outreach-content tr.row-selected').forEach(function(tr) {
+      tr.classList.remove('row-selected');
+    });
+    if (row) row.classList.add('row-selected');
+    var split = document.getElementById('outreach-split');
+    if (split) split.setAttribute('data-open', 'true');
+    var panel = document.getElementById('co-detail-panel');
+    if (panel) panel.style.display = 'flex';
+  };
+  window.closeOutreachPanel = function() {
+    document.querySelectorAll('#outreach-content tr.row-selected').forEach(function(tr) {
+      tr.classList.remove('row-selected');
+    });
+    var split = document.getElementById('outreach-split');
+    if (split) split.removeAttribute('data-open');
+    var panel = document.getElementById('co-detail-panel');
+    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+  };
+</script>
+
+{% endblock %}{# /content #}
+    </div>{# /page #}
+  </div>{# /split-list #}
+  <aside class="split-panel" id="co-detail-panel" aria-label="Company detail" style="display:none;"></aside>
+</div>{# /split #}
+{% endblock %}{# /content_wrap #}

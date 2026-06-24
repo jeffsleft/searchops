@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Lint + Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install ruff (linter)
+        run: pip install ruff
+
+      - name: Lint
+        run: ruff check app/ tests/ --select E,F,W --ignore E501,W291,W293
+        continue-on-error: false
+
+      - name: Run tests
+        env:
+          # Fake secrets — tests stub all LLM calls; no real API traffic occurs
+          SESSION_SECRET: "0000000000000000000000000000000000000000000000000000000000000000"
+          APP_PASSWORD: "test-password"
+          GEMINI_API_KEY: "test-key"
+          ANTHROPIC_API_KEY: "test-key"
+          OPENAI_API_KEY: "test-key"
+        run: pytest tests/ -v --tb=short

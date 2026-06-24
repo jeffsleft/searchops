@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>{{ job.company }} — {{ session.label }}</title>
+  <style>
+    :root { --ink:#1d1916; --muted:#5b554d; --dim:#9b948a; --accent:#a85a32; --rule:#e3ddd3; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Inter", system-ui, sans-serif; margin: 0; padding: 0.55in; color: var(--ink); line-height: 1.55; font-size: 12.5px; }
+    .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 14px; border-bottom: 2px solid var(--ink); margin-bottom: 18px; }
+    .sheet-head h1 { font-size: 24px; margin: 0; letter-spacing: -0.025em; font-weight: 600; }
+    .sheet-head .role { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .sheet-head .meta { font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 10.5px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; text-align: right; }
+    .sheet-head .sess-badge { display: inline-block; background: var(--accent); color: #fff; padding: 3px 9px; border-radius: 4px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; }
+    .hook { font-family: Georgia, "Source Serif 4", serif; font-size: 16px; font-style: italic; padding: 12px 16px; background: #f7f3ec; border-left: 3px solid var(--accent); margin-bottom: 22px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+    .col h2 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0 0 8px; font-weight: 700; border-bottom: 1px solid var(--rule); padding-bottom: 4px; }
+    ol, ul { padding-left: 18px; margin: 0 0 16px; }
+    li { margin-bottom: 7px; font-size: 12.5px; line-height: 1.5; }
+    li .persona { font-family: ui-monospace, monospace; font-size: 10px; color: var(--dim); text-transform: uppercase; margin-left: 4px; }
+    .tq { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed var(--rule); }
+    .tq:last-child { border: 0; }
+    .tq-q { font-weight: 600; font-size: 12.5px; margin-bottom: 4px; }
+    .tq-a { color: var(--muted); font-size: 11.5px; line-height: 1.5; padding-left: 12px; border-left: 2px solid var(--rule); }
+    .anchor { padding: 8px 0; border-bottom: 1px dashed var(--rule); }
+    .anchor:last-child { border: 0; }
+    .anchor strong { font-size: 12.5px; }
+    .anchor p { margin: 3px 0 0; font-size: 11.5px; color: var(--muted); }
+    .flags li { color: #8a3a1e; }
+    .sheet-foot { margin-top: 28px; padding-top: 10px; border-top: 1px solid var(--rule); font-size: 10px; font-family: ui-monospace, monospace; color: var(--dim); display: flex; justify-content: space-between; }
+    @page { size: letter; margin: 0.4in; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <header class="sheet-head">
+    <div>
+      <h1>{{ job.company }}</h1>
+      <div class="role">{{ job.job_title }}</div>
+      <div style="margin-top:8px"><span class="sess-badge">{{ session.label }}</span></div>
+    </div>
+    <div class="meta">
+      {% if session.schedule_date %}
+        <div><strong>{{ session.schedule_date }}</strong></div>
+      {% endif %}
+      <div>{{ job.pipeline_stage }}</div>
+      <div>Score · {{ (job.final_score or 0)|round(1) }}</div>
+    </div>
+  </header>
+
+  {% if session.opening_hook %}
+    <div class="hook">{{ session.opening_hook }}</div>
+  {% endif %}
+
+  <div class="two-col">
+    <section class="col">
+      {% if questions_to_ask %}
+        <h2>Questions I'm asking <span style="font-family:monospace; font-size:10px; color:var(--dim); font-weight:400; text-transform:none">({{ questions_to_ask|length }})</span></h2>
+        <ol>
+          {% for q in questions_to_ask %}
+            <li>{{ q.text }}{% if q.persona and q.persona != 'Any' %} <span class="persona">→ {{ q.persona }}</span>{% endif %}</li>
+          {% endfor %}
+        </ol>
+      {% endif %}
+
+      {% if all_anchors and pinned_anchor_ids %}
+        <h2>Anchor stories <span style="font-family:monospace; font-size:10px; color:var(--dim); font-weight:400; text-transform:none">({{ pinned_anchor_ids|length }})</span></h2>
+        {% for a in all_anchors %}
+          {% if a.id in pinned_anchor_ids %}
+            <div class="anchor"><strong>{{ a.title }}</strong><p>{{ a.summary }}</p></div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+
+      {% if session.interviewers_notes %}
+        <h2>Interviewers</h2>
+        <div style="font-size:11.5px; line-height:1.6; color:var(--muted); white-space:pre-wrap">{{ session.interviewers_notes }}</div>
+      {% endif %}
+    </section>
+
+    <section class="col">
+      {% if questions_they_ask %}
+        <h2>Likely questions they'll ask <span style="font-family:monospace; font-size:10px; color:var(--dim); font-weight:400; text-transform:none">({{ questions_they_ask|length }})</span></h2>
+        {% for q in questions_they_ask %}
+          <div class="tq">
+            <div class="tq-q">{{ q.prompt }}</div>
+            {% if q.my_answer %}
+              <div class="tq-a">{{ q.my_answer|replace('\n', '<br>') }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      {% if red_flags %}
+        <h2>Watch for / red flags <span style="font-family:monospace; font-size:10px; color:var(--dim); font-weight:400; text-transform:none">({{ red_flags|length }})</span></h2>
+        <ul class="flags">
+          {% for f in red_flags %}
+            <li>{{ f.text }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+  </div>
+
+  <footer class="sheet-foot">
+    <span>Reverse ATS · Beaumont 2026</span>
+    <span>{{ now() }}</span>
+  </footer>
+</body>
+</html>

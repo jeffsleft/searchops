@@ -1,0 +1,188 @@
+{% from "components/_macros.html" import logo %}
+<div class="drawer-head prospect-head">
+  {{ logo(target.name) }}
+  <div style="flex:1;min-width:0;">
+    <div style="font-weight:600;font-size:18px;letter-spacing:-0.02em;line-height:1.2;display:flex;align-items:center;gap:8px;">
+      {{ target.name }}
+      {% if target.tier_a %}
+      <span class="tag clay" style="font-size:10px;font-weight:600;letter-spacing:.03em;">TIER A</span>
+      {% endif %}
+    </div>
+    <div class="dim" style="font-size:12px;margin-top:3px;">
+      {{ target.industry_category or target.sector or 'Sector unknown' }}{% if target.funding_stage %} · {{ target.funding_stage[:40] }}{% endif %}
+    </div>
+  </div>
+  {% if target.website %}
+  <a href="{{ target.website }}" target="_blank" rel="noopener" class="weblink">Website ↗</a>
+  {% elif target.careers_url %}
+  <a href="{{ target.careers_url }}" target="_blank" rel="noopener" class="weblink">Careers ↗</a>
+  {% endif %}
+  <button onclick="window.closeTargetsPanel && window.closeTargetsPanel()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
+</div>
+
+<div class="drawer-body prospect-body">
+
+  {% if target.tier_a %}
+  {# Tier A profile cards #}
+  <section class="info-section">
+    <div class="info-section-head">Company Profile</div>
+    <div class="info-section-body">
+      <dl class="dl" style="display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px;margin:0;">
+        <dt class="dim">Category</dt><dd>{{ target.industry_category or '—' }}</dd>
+        <dt class="dim">Headcount</dt><dd>{{ target.headcount_estimate or '—' }}</dd>
+        <dt class="dim">Funding</dt><dd style="font-size:12px;">{{ target.funding_stage or '—' }}</dd>
+        <dt class="dim">Remote</dt><dd>{{ target.remote_friendly or '—' }}</dd>
+        <dt class="dim">Nearest HQ</dt><dd style="font-size:12px;">{{ target.nearest_hq or '—' }}</dd>
+      </dl>
+    </div>
+  </section>
+
+  {# What they do #}
+  {% if target.why_interesting %}
+  <section class="info-section">
+    <div class="info-section-head">What They Do</div>
+    <div class="info-section-body" style="font-size:13.5px;line-height:1.6;">{{ target.why_interesting }}</div>
+  </section>
+  {% endif %}
+
+  {# Gap Hypothesis #}
+  <section class="info-section" id="gap-section-{{ target.id }}">
+    <div class="info-section-head" style="display:flex;align-items:center;justify-content:space-between;">
+      Gap Hypothesis
+      <button class="btn btn-sm"
+              hx-post="/targets/{{ target.id }}/research"
+              hx-target="#gap-section-{{ target.id }}"
+              hx-swap="outerHTML"
+              onclick="this.textContent='Generating…';this.disabled=true;">
+        {% if target.gap_hypothesis %}Re-run{% else %}Generate{% endif %}
+      </button>
+    </div>
+    <div class="info-section-body">
+      {% if target.gap_hypothesis %}
+        <div style="font-size:13.5px;line-height:1.65;white-space:pre-wrap;">{{ target.gap_hypothesis }}</div>
+        {% if target.gap_hypothesis_date %}
+        <div class="dim mono" style="font-size:10px;margin-top:8px;">Generated {{ target.gap_hypothesis_date[:10] }}</div>
+        {% endif %}
+      {% else %}
+        <div class="dim" style="font-size:13px;">Not yet generated. Click <strong>Generate</strong> to run the research pipeline.</div>
+      {% endif %}
+    </div>
+  </section>
+
+  {# GTM Motion #}
+  {% if target.gtm_motion %}
+  <section class="info-section">
+    <div class="info-section-head">GTM Motion</div>
+    <div class="info-section-body" style="font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ target.gtm_motion }}</div>
+  </section>
+  {% endif %}
+
+  {# CS / RevOps Setup #}
+  {% if target.csrevops_setup %}
+  <section class="info-section">
+    <div class="info-section-head">CS / RevOps Setup</div>
+    <div class="info-section-body" style="font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ target.csrevops_setup }}</div>
+  </section>
+  {% endif %}
+
+  {% else %}
+  {# Non-Tier-A detail: why watching #}
+  {% if target.why_interesting or target.fit_rationale %}
+  <section class="info-section">
+    <div class="info-section-head">Why Watching</div>
+    <div class="info-section-body" style="font-size:13.5px;line-height:1.6;">{{ target.fit_rationale or target.why_interesting }}</div>
+  </section>
+  {% endif %}
+  {% endif %}
+
+  {# Matching roles #}
+  <section class="info-section">
+    <div class="info-section-head">Matching Roles ({{ matches|length }})</div>
+    <div class="info-section-body" style="padding:0;">
+      {% if matches %}
+        {% for j in matches %}
+        <div class="signal-row good">
+          <span class="signal-icon">✓</span>
+          <div class="signal-text" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <a href="/job/{{ j.id }}" style="color:var(--text);">{{ j.job_title or 'Untitled role' }}</a>
+            {% if j.match_score %}
+            <span class="score-badge
+              {%- if j.match_score >= 9 %} tier-dream
+              {%- elif j.match_score >= 7 %} tier-solid
+              {%- elif j.match_score >= 5 %} tier-worth
+              {%- elif j.match_score >= 3 %} tier-skip
+              {%- else %} tier-pass{%- endif %}"><span class="dot"></span>{{ "%.1f"|format(j.match_score) }}</span>
+            {% endif %}
+            <span class="dim" style="font-size:11px;">{{ j.date_added or j.date_found }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="padding:14px 16px;"><span class="empty-inline">No matching roles yet. Use <strong>Scan now</strong> below to fetch open roles.</span></div>
+      {% endif %}
+    </div>
+  </section>
+
+  {# Scan / Monitoring Status #}
+  {% if target.careers_url or target.ats_type %}
+  <section class="info-section" id="scan-status-{{ target.id }}">
+    <div class="info-section-head">Scan Status</div>
+    <div class="info-section-body">
+      <dl class="dl" style="display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px;margin:0;">
+        <dt class="dim">ATS</dt><dd class="mono" style="font-size:12px;">{{ target.ats_type or '—' }}{% if target.ats_handle %} · {{ target.ats_handle }}{% endif %}</dd>
+        <dt class="dim">Last scan</dt><dd class="mono" style="font-size:12px;">{{ target.last_scanned[:16] if target.last_scanned else '—' }}</dd>
+        <dt class="dim">Monitoring</dt><dd>
+          {% if target.hunt_enabled %}<span class="stage dim">Active</span>
+          {% else %}<span class="tag">Paused</span>{% endif %}
+        </dd>
+        {% if target.scan_error %}
+        <dt class="dim">Error</dt><dd style="color:var(--tier-pass);font-size:12px;">{{ target.scan_error[:120] }}</dd>
+        {% endif %}
+      </dl>
+    </div>
+  </section>
+  {% endif %}
+
+  {# Actions #}
+  <section class="info-section">
+    <div class="info-section-head">Actions</div>
+    <div class="info-section-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        {% if target.careers_url %}
+        <button class="btn btn-sm"
+                hx-post="/targets/{{ target.id }}/scan-now"
+                hx-target="#scan-status-{{ target.id }}"
+                hx-swap="outerHTML"
+                hx-indicator="this"
+                onclick="this.textContent='Scanning…';this.disabled=true;">
+          Scan now
+        </button>
+        <form hx-post="/targets/{{ target.id }}/toggle" hx-swap="none" style="display:inline;">
+          <button type="submit" class="btn btn-sm btn-ghost">
+            {% if target.hunt_enabled %}Pause{% else %}Enable Monitoring{% endif %}
+          </button>
+        </form>
+        {% else %}
+        <div class="dim" style="font-size:12px;">Add a careers URL to enable ATS scanning.</div>
+        {% endif %}
+        <button class="btn btn-sm btn-ghost"
+                hx-post="/targets/{{ target.id }}/research"
+                hx-target="#research-status-{{ target.id }}"
+                hx-swap="innerHTML"
+                onclick="this.textContent='Researching…';this.disabled=true;">
+          Research
+        </button>
+        <button class="btn btn-sm btn-ghost"
+                hx-post="/targets/{{ target.id }}/research?force=1"
+                hx-target="#research-status-{{ target.id }}"
+                hx-swap="innerHTML"
+                title="Overwrites existing remote/HQ/headcount/funding/industry data"
+                onclick="this.textContent='Refreshing…';this.disabled=true;">
+          Force Refresh
+        </button>
+      </div>
+    </div>
+    <div id="research-status-{{ target.id }}" style="margin-top:8px;font-size:12px;color:var(--text-muted);"></div>
+  </section>
+
+</div>

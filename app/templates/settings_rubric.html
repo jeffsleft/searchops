@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Scoring Rubric — Recruiting Engine{% endblock %}
+{% block page_title %}Scoring Rubric Guide{% endblock %}
+
+{% block content %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
+        <a href="/settings" class="dim" style="text-decoration:none;font-size:13px;">Settings</a>
+        <span class="dim" style="font-size:13px;">/</span>
+        <span style="font-size:13px;font-weight:500;">Scoring Rubric</span>
+    </div>
+    <h1>Scoring Rubric & Logic</h1>
+    <div class="sub">How the "GTM Ops & Strategy" engine evaluates role alignment</div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:24px;max-width:800px;">
+
+  {# ── Identity Section ──────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Core Identity: GTM Operations & Strategy</h3></div>
+    <div class="card-body">
+      <p style="font-size:14px;line-height:1.6;margin:0;">
+        The engine no longer looks for "Systems Architects" or "Salesforce Admins." It is tuned to find 
+        <strong>strategic leadership seats</strong> where you can build the "revenue operating system."
+      </p>
+      <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="background:var(--bg-sunk);padding:12px;border-radius:var(--radius);">
+          <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;">High Confidence Signals</div>
+          <ul style="font-size:13px;margin:8px 0 0;padding-left:18px;line-height:1.6;">
+            <li>Greenfield builds (+)</li>
+            <li>Direct reporting to CRO/COO (+)</li>
+            <li>Consumption/Outcome pricing (+)</li>
+            <li>Buy AND Build AI philosophy (+)</li>
+          </ul>
+        </div>
+        <div style="background:var(--bg-sunk);padding:12px;border-radius:var(--radius);">
+          <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;">Low Confidence Signals</div>
+          <ul style="font-size:13px;margin:8px 0 0;padding-left:18px;line-height:1.6;">
+            <li>Maintenance/Steady-state (-)</li>
+            <li>IC-heavy slideware creation (-)</li>
+            <li>Heavily regulated silos (-)</li>
+            <li>Legacy Microsoft tech stack (-)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Deterministic Weights ───────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Deterministic Weights (Hard Rules)</h3></div>
+    <div style="padding:4px 0;">
+      {% set weights = [
+        ('Greenfield Opportunity', '+2.5', 'Building something from scratch / starting new.'),
+        ('Maintenance Only', '-3.0', 'Tuning an existing machine. High boredom risk.'),
+        ('Board/Strategy Involvement', '+1.5', 'High-level strategic influence.'),
+        ('IC Presentation Heavy', '-2.0', 'Doing all the slideware yourself (Veradata warning).'),
+        ('Google / Slack / Mac', '+1.5', 'Modern tech stack alignment.'),
+        ('Microsoft / Teams / Windows', '-2.5', 'Legacy tech stack penalty.'),
+        ('AI-Native Sector', '+2.0', 'Mission alignment with AI-first companies.'),
+        ('DevTools Sector', '+1.5', 'High interest in freedom/autonomy.'),
+        ('Fully Remote', '+1.0', 'Maximum flexibility bonus.')
+      ] %}
+      {% for label, weight, desc in weights %}
+      <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:500;">{{ label }}</div>
+          <div class="dim" style="font-size:11.5px;margin-top:2px;">{{ desc }}</div>
+        </div>
+        <div class="mono" style="font-size:14px;font-weight:600;color:{% if weight.startswith('+') %}var(--accent){% else %}var(--red-400){% endif %};">
+          {{ weight }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── LLM Qualitative Layer ───────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>LLM Qualitative Adjustment (±1.0)</h3></div>
+    <div class="card-body">
+      <p style="font-size:13.5px;line-height:1.6;margin-bottom:16px;">
+        Gemini 2.5 Flash reads the full job description to find signals that raw data misses. 
+        It applies a <strong>±1.0 nudge</strong> based on the following logic:
+      </p>
+      
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="border-left:3px solid var(--accent);padding-left:16px;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Nudge Up (+0.5 to +1.0)</div>
+          <div class="dim" style="font-size:12.5px;">
+            Evidence of high autonomy, "Buy and Build" philosophy, or a direct link between operations and NRR/Consumption.
+          </div>
+        </div>
+        
+        <div style="border-left:3px solid var(--red-400);padding-left:16px;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Nudge Down (-0.5 to -1.0)</div>
+          <div class="dim" style="font-size:12.5px;">
+            Signs of a "firefighter" role, marketing-heavy focus (copywriting/events), or leadership churn/instability.
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;padding:12px;background:var(--bg-sunk);border-radius:var(--radius);border:1px dashed var(--border);">
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Example Analysis: Veradata</div>
+        <div style="font-size:12px;line-height:1.5;font-style:italic;">
+          "The JD focuses heavily on client-facing presentations and IC-level marketing work. While the title is leadership, the daily tasks are tactical. **Nudge: -1.0** (IC-Heavy signal)."
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Filters ──────────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Hard Filters (Auto-Reject)</h3></div>
+    <div class="card-body">
+      <ul style="font-size:13px;margin:0;padding-left:18px;line-height:1.8;display:flex;flex-direction:column;gap:6px;">
+        <li><strong>Salary Floor:</strong> Auto-reject if base < $120k.</li>
+        <li><strong>Commute:</strong> Auto-reject if in-office daily or weekly.</li>
+        <li><strong>Geography:</strong> SF commute (2x/week) requires $275k+ base salary.</li>
+        <li><strong>Sectors:</strong> Gambling, Predatory Lending, Healthcare (default), and Government.</li>
+        <li><strong>Ethics:</strong> Must be manually vetted; auto-rejected if ethical red flags are detected.</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

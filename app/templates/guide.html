@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% block title %}User Guide — Recruiting Engine{% endblock %}
+{% block page_title %}User Guide{% endblock %}
+
+{% block content %}
+
+<div class="page-head" style="margin-bottom:24px;">
+  <div>
+    <h1>User Guide</h1>
+    <div class="sub">How to get the most out of the Recruiting Engine</div>
+  </div>
+</div>
+
+<div style="display:flex;gap:24px;max-width:1100px;">
+
+  {# ── Table of Contents (Sticky Sidebar) ──────────────────────────────── #}
+  <nav class="toc" style="flex-shrink:0;width:200px;position:sticky;top:20px;height:fit-content;">
+    <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:12px;">On this page</div>
+    <ul style="list-style:none;margin:0;padding:0;font-size:13px;line-height:1.8;">
+      <li><a href="#getting-jobs" style="color:var(--accent);text-decoration:none;">Getting jobs into the system</a></li>
+      <li><a href="#understanding-scores" style="color:var(--accent);text-decoration:none;">Understanding scores</a></li>
+      <li><a href="#match-analysis" style="color:var(--accent);text-decoration:none;">The Match Analysis tab</a></li>
+      <li><a href="#app-areas" style="color:var(--accent);text-decoration:none;">Three areas of the app</a></li>
+      <li><a href="#pipeline-stages" style="color:var(--accent);text-decoration:none;">Pipeline stages</a></li>
+      <li><a href="#interview-prep" style="color:var(--accent);text-decoration:none;">Interview prep workflow</a></li>
+      <li><a href="#notes" style="color:var(--accent);text-decoration:none;">Adding notes to a job</a></li>
+      <li><a href="#keeping-corpus-current" style="color:var(--accent);text-decoration:none;">Keeping the corpus current</a></li>
+      <li><a href="#re-scoring" style="color:var(--accent);text-decoration:none;">Re-scoring existing jobs</a></li>
+    </ul>
+  </nav>
+
+  {# ── Main Content ────────────────────────────────────────────────────── #}
+  <div style="flex:1;min-width:0;">
+
+    {# ── Section 1: Getting jobs into the system ────────────────────── #}
+    <div class="card" id="getting-jobs" style="scroll-margin-top:40px;">
+      <div class="card-head"><h3>Getting jobs into the system</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Google Sheet (recommended)</div>
+          <p style="font-size:13px;line-height:1.7;margin:0;">
+            Paste a job URL into the "To Evaluate" tab of the recruiting Sheet. The scheduler runs every 6 hours (midnight, 6am, noon, 6pm UTC) and automatically fetches the JD, scores it, and adds it to the Dashboard. This is the primary inbound path for volume.
+          </p>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Score manually</div>
+          <p style="font-size:13px;line-height:1.7;margin:0;">
+            Use the "Score a Job" form on the Dashboard — paste a URL or raw JD text. Scored immediately, no wait for the scheduler. Best for one-offs you want to evaluate right now.
+          </p>
+        </div>
+
+      </div>
+    </div>
+
+    {# ── Section 2: Understanding scores ──────────────────────────── #}
+    <div class="card" id="understanding-scores" style="scroll-margin-top:40px;margin-top:16px;">
+      <div class="card-head"><h3>Understanding scores</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+        <div>
+          <p style="font-size:13px;line-height:1.7;margin:0 0 12px;">Scores run 0–10 through four layers, in order:</p>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Layer 1: Auto-Reject</div>
+          <p style="font-size:13px;line-height:1.7;margin:0;">
+            Deterministic. Checks salary floor ($175k), blocked sectors (Healthcare, Gov, Gambling, Adult), and other hard filters. If triggered, final = 0.0 and the rest is skipped. No LLM calls fired.
+          </p>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Layer 2: Match to Candidate</div>
+          <p style="font-size:13px;line-height:1.7;margin:0;">
+            Highest weight, ±3.0 range. One Gemini call compares the JD to the Accomplishments Inventory corpus. Returns a match score plus evidence rows, mismatches, tailored resume bullets, and cover-letter hooks. This is what the Match Analysis tab shows.
+          </p>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Layer 3: LLM Qualitative Adjustment</div>
+          <p style="font-size:13px;line-height:1.7;margin:0;">
+            ±1.0 range. Role-shape vibe check: IC vs. leadership balance, authority level, reporting line, firefighter signals.
+          </p>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Layer 4: Adjustment Weights</div>
+          <p style="font-size:13px;line-height:1.7;margin:0;">
+            Additive, deterministic. Keyword signals: tech stack (Slack/Mac = +1, Teams/Windows = −2), greenfield language (+2), consumption pricing (+1), AI-native sector (+2), DevTools (+1.5), etc.
+          </p>
+        </div>
+
+        <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:12px 14px;font-size:12px;line-height:1.7;">
+          <strong>Formula:</strong> <span class="mono" style="font-size:11px;">final = clamp(5.0 + Layer4 + Layer2 + Layer3, 0, 10)</span><br>
+          Single clamp at the end.
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Score tiers</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">
+            {% for label, cls, desc in [
+              ('9.0+', 'tier-dream', 'Dream Job'),
+              ('7.0+', 'tier-solid', 'Solid Bet'),
+              ('5.0+', 'tier-worth', 'Worth a Look'),
+              ('3.0+', 'tier-skip', 'Probably Skip'),
+              ('>0.0', 'tier-pass', 'Hard Pass'),
+              ('0.0', 'tier-reject', 'Auto-Rejected'),
+            ] %}
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+              <span class="score-badge {{ cls }}" style="flex-shrink:0;"><span class="dot"></span>{{ desc }}</span>
+              <span class="dim" style="font-size:11px;">{{ label }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    {# ── Section 3: The Match Analysis tab ──────────────────────── #}
+    <div class="card" id="match-analysis" style="scroll-margin-top:40px;margin-top:16px;">
+      <div class="card-head"><h3>The Match Analysis tab</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+        <p style="font-size:13px;line-height:1.7;margin:0;">
+          Only appears on Job detail pages (not Outreach Targets or Discovered). Only populated for jobs scored after May 17, 2026 (when Layer 2 was deployed).
+        </p>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">What's shown</div>
+          <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+            <li><strong>Match score</strong> — ±3.0 float with a 2-3 sentence fit summary</li>
+            <li><strong>Evidence table</strong> — JD requirement → matched corpus accomplishment → Strong/Moderate/Weak</li>
+            <li><strong>Mismatches</strong> — what the JD asks for that your corpus doesn't cover (your tailoring targets)</li>
+            <li><strong>Tailored resume bullets</strong> — 3-5 pre-written bullets pulled from the Inventory for this specific role</li>
+            <li><strong>Cover-letter hooks</strong> — 1-3 opening sentences anchored to corpus evidence</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">How to use tailored bullets</div>
+          <ol style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+            <li>Open the <strong>Match Analysis</strong> tab on the job detail page.</li>
+            <li>Review the <strong>Evidence table</strong> — it shows which of your accomplishments maps to each JD requirement. If a match is Weak, that's a gap to address in your cover letter.</li>
+            <li>Copy the <strong>Tailored Resume Bullets</strong> — swap these into the relevant experience section of your resume before submitting. They're written to match the exact language in this JD.</li>
+            <li>Use one or two <strong>Cover Letter Hooks</strong> as your opening paragraph — they're anchored to corpus evidence and reference the company directly.</li>
+            <li>For a print-ready resume with bullets pre-injected, click <strong>⬇ Print Tailored Resume</strong> in the tab header, then Cmd+P → Save as PDF.</li>
+          </ol>
+        </div>
+
+        <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:12px 14px;font-size:12px;line-height:1.6;border-left:3px solid var(--accent);">
+          If a job shows "No summary recorded," it was scored before Layer 2 deployed. Go to <strong>Admin → Rescore All</strong> to backfill all missing Layer 2 data in one batch, or paste the original URL into the Dashboard "Score a Job" form to re-score a single job.
+        </div>
+
+      </div>
+    </div>
+
+    {# ── Section 4: Three areas of the app ────────────────────── #}
+    <div class="card" id="app-areas" style="scroll-margin-top:40px;margin-top:16px;">
+      <div class="card-head"><h3>Three areas of the app</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Inbound (jobs with a specific open role)</div>
+          <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+            <li><strong>Dashboard</strong> — Score new jobs, see everything scored in the last 30 days</li>
+            <li><strong>Discovered</strong> — Jobs auto-found by the discovery scanner from Hunt Target ATS feeds. Review and promote (→ Dashboard/Pipeline) or dismiss.</li>
+            <li><strong>Pipeline</strong> — All jobs you've moved past Watchlist. Your active candidates.</li>
+            <li><strong>Auto-rejected</strong> — Jobs that hit a hard filter. Review occasionally to confirm the filter is working as expected.</li>
+            <li><strong>Ethics Vetting</strong> — Jobs that need your manual ethics sign-off before advancing.</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Outbound (no open role yet — cold outreach)</div>
+          <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+            <li><strong>Outreach Targets</strong> — Companies you want to cold-reach. Add them, run research, track outreach status. These are <em>not</em> scored jobs — no JD, no Layer 2.</li>
+            <li><strong>Hunt Targets</strong> — Companies in your active discovery scan. The scanner checks their ATS for new openings and creates Discovered jobs automatically.</li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Interview & Pipeline tools</div>
+          <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+            <li><strong>Interview Prep</strong> — Per-job interview hub: opening hook, question bank, cheat sheet generator, transcript analysis, interviewer research, coaching debrief.</li>
+            <li><strong>Recruiters</strong> — Log recruiter contacts and track conversations.</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+    {# ── Section 5: Pipeline stages ────────────────────────────── #}
+    <div class="card" id="pipeline-stages" style="scroll-margin-top:40px;margin-top:16px;">
+      <div class="card-head"><h3>Pipeline stages</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+        <p style="font-size:13px;line-height:1.7;margin:0;">
+          Watchlist → Researching → Outreach → Applied → Screening → Interviewing → Offer → Accepted
+        </p>
+
+        <p style="font-size:13px;line-height:1.7;margin:0;">
+          Two exit paths: "I Declined" (you passed) and "They Declined" (they passed).
+        </p>
+
+        <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:12px 14px;font-size:12px;line-height:1.6;border-left:3px solid var(--accent);">
+          Moving to <strong>Researching</strong> seeds the question bank automatically.
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Stage guide</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">
+            {% set stage_info = [
+              ('Watchlist', 'Scored, not yet applied'),
+              ('Researching', 'Deep-dive in progress'),
+              ('Outreach', 'Contacted recruiter/HM'),
+              ('Applied', 'Application submitted'),
+              ('Screening', 'Recruiter / HR screen'),
+              ('Interviewing', 'Active interview loop'),
+              ('Offer', 'Offer received'),
+              ('Accepted', 'Offer accepted'),
+              ('I Declined', 'You passed on it'),
+              ('They Declined', 'They passed on you'),
+            ] %}
+            {% for stage, desc in stage_info %}
+            <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:8px 10px;">
+              <div style="font-size:12px;font-weight:500;">{{ stage }}</div>
+              <div class="dim" style="font-size:11px;margin-top:2px;">{{ desc }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    {# ── Section 6: Interview prep workflow ──────────────────── #}
+    <div class="card" id="interview-prep" style="scroll-margin-top:40px;margin-top:16px;">
+      <div class="card-head"><h3>Interview prep workflow</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+        <ol style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+          <li>Move a job to <strong>Researching</strong> — seeds the question bank with role-specific questions automatically. These are organized by persona (CFO, CRO, VP Eng, etc.) and priority.</li>
+          <li>Open the job's detail page and click <strong>Interview prep →</strong> in the top-right action bar. This takes you to the dedicated Interview Prep page for that job (<code style="background:var(--bg-sunk);padding:1px 5px;border-radius:3px;font-size:11px;">/prep/&lt;job-id&gt;</code>).</li>
+          <li><strong>Before each round — generate a Cheat Sheet:</strong> scroll to the <em>Cheat Sheet</em> card, enter the round name (e.g. "HM Interview") and the interviewer name(s), then click <strong>Generate Cheat Sheet</strong>. Output is a one-pager with top likely questions, anchor story matches, talking points, and your opening hook. Print or save it as a PDF via Cmd+P before the call.</li>
+          <li><strong>Research your interviewer:</strong> scroll to <em>Interviewer Research</em>, enter their name and title, and click <strong>Research Interviewer</strong>. You get a background brief — likely concerns, communication style, and what they'll probably probe on.</li>
+          <li><strong>After each round — analyze the transcript:</strong> scroll to <em>Analyze Transcript</em>. Paste the full raw transcript in the first field (required — copy from Granola, Zoom, or any recorder). If Granola generated a summary or analysis, paste that in the second field (optional). Enter the interviewer's name and title, then click <strong>Analyze Transcript</strong>. Output includes answer scoring, filler word tracking, and a debrief with gaps to close in the next round.</li>
+          <li><strong>Drill specific answers:</strong> scroll to <em>Interview Coaching</em>, paste the transcript, and click <strong>Analyze Coaching</strong>. Gets per-answer feedback on any response you want to sharpen.</li>
+          <li><strong>Close out the round:</strong> check off questions as asked in the <em>Question Bank</em> at the bottom of the page. Unchecked questions roll forward to the next round automatically.</li>
+        </ol>
+
+        <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:12px 14px;font-size:12px;line-height:1.6;border-left:3px solid var(--accent);">
+          <strong>Divergence detection:</strong> if you ask the same question to multiple interviewers (CFO + CRO, for example), the app flags when their answers contradict — useful signal about org alignment before you decide to accept.
+        </div>
+
+        <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:12px 14px;font-size:12px;line-height:1.6;">
+          <strong>Transcript format:</strong> plain text is fine — paste directly from Granola's transcript view, Zoom's auto-transcript, or any recording tool. No special formatting required. Speaker labels ("Jeff:", "Sarah:") help the analysis but aren't required.
+        </div>
+
+      </div>
+    </div>
+
+    {# ── Section 6b: Notes ─────────────────────────────────── #}
+    <div class="card" id="notes" style="scroll-margin-top:40px;margin-top:16px;">
+      <div class="card-head"><h3>Adding notes to a job</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+        <p style="font-size:13px;line-height:1.7;margin:0;">
+          Every job has a free-form <strong>My Notes</strong> field at the top of its summary tab. Use it for anything that doesn't fit the structured fields: prep reminders, research tasks, concerns to track, or strategy notes.
+        </p>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Examples</div>
+          <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+            <li>"Applied 2026-06-01. Need to prep a case study on GitLab ARR growth before the HM screen."</li>
+            <li>"They require on-site 3 days/week — I'll probably be ruled out early. Try the relocation-flexibility angle."</li>
+            <li>"Check LinkedIn — the VP of CS joined 4 months ago, might be rebuilding the team."</li>
+          </ul>
+        </div>
+
+        <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:12px 14px;font-size:12px;line-height:1.6;border-left:3px solid var(--accent);">
+          Notes auto-save as you type (1.2s after you stop). A 📝 icon appears on dashboard and pipeline cards when a job has notes so you can spot them at a glance.
+        </div>
+
+      </div>
+    </div>
+
+    {# ── Section 7: Keeping the corpus current ─────────────── #}
+    <div class="card" id="keeping-corpus-current" style="scroll-margin-top:40px;margin-top:16px;">
+      <div class="card-head"><h3>Keeping the corpus current</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+        <p style="font-size:13px;line-height:1.7;margin:0;">
+          The Match Analysis quality depends on the Accomplishments Inventory. Update it:
+        </p>
+
+        <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+          <li>After every new major project, initiative, or metric you can cite</li>
+          <li>After any public talk, podcast, or published piece</li>
+          <li>When you have a new verified number to add</li>
+        </ul>
+
+        <p style="font-size:13px;line-height:1.7;margin:0;">
+          <strong>SSOT:</strong> <code style="background:var(--bg-sunk);padding:2px 6px;border-radius:4px;font-size:11.5px;">~/path/to/your/Accomplishments_Inventory.docx</code>
+        </p>
+
+        <p style="font-size:13px;line-height:1.7;margin:0 0 12px;">
+          Maintained in Cowork sessions. To deploy an update:
+        </p>
+
+        <pre style="background:var(--bg-sunk);border-radius:var(--radius);padding:12px 14px;font-size:11.5px;overflow-x:auto;margin:0;"><code>cd ~/Projects/recruiting-engine
+cp "/path/to/your/Accomplishments_Inventory.docx" data/Accomplishments_Inventory.docx
+modal deploy app/main.py
+git add data/Accomplishments_Inventory.docx && git commit -m "Update Inventory: [what changed]"</code></pre>
+
+      </div>
+    </div>
+
+    {# ── Section 8: Re-scoring existing jobs ────────────────── #}
+    <div class="card" id="re-scoring" style="scroll-margin-top:40px;margin-top:16px;">
+      <div class="card-head"><h3>Re-scoring existing jobs</h3></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
+
+        <p style="font-size:13px;line-height:1.7;margin:0;">
+          Re-scoring overwrites the existing score with a fresh run of all four layers — useful after updating the Accomplishments Inventory or when you want Layer 2 data on an older job.
+        </p>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Batch re-score (all jobs missing Layer 2)</div>
+          <p style="font-size:13px;line-height:1.7;margin:0;">Go to <strong>Settings → Admin → Rescore All</strong>. This re-runs scoring on every job that has no Layer 2 (match_score IS NULL). Progress is shown inline. Rate-limited to avoid quota exhaustion — expect ~5 seconds per job.</p>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Single job re-score</div>
+          <p style="font-size:13px;line-height:1.7;margin:0;">Paste the original JD URL into the "Score a Job" form on the Dashboard. The new score overwrites the old one — final score, Layer 2 data, tailored bullets, and cover-letter hooks all update.</p>
+        </div>
+
+        <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:12px 14px;font-size:12px;line-height:1.6;border-left:3px solid var(--accent);">
+          Only Jobs (inbound pipeline) need re-scoring. Outreach Targets and Discovered jobs use a different scoring model and are unaffected.
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<style>
+  @media (max-width: 1000px) {
+    .toc {
+      display: none;
+    }
+  }
+
+  .toc ul li {
+    margin-bottom: 6px;
+  }
+
+  .toc a:hover {
+    text-decoration: underline;
+  }
+
+  .card {
+    scroll-behavior: smooth;
+  }
+</style>
+
+{% endblock %}

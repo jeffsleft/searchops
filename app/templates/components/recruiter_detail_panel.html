@@ -1,0 +1,80 @@
+{% from "components/_macros.html" import logo %}
+<div class="drawer-head prospect-head">
+  {{ logo(r.name) }}
+  <div style="flex:1;min-width:0;">
+    <div style="font-weight:600;font-size:18px;letter-spacing:-0.02em;line-height:1.2;">{{ r.name }}</div>
+    <div class="dim" style="font-size:12px;margin-top:3px;">
+      {{ r.firm or 'Independent' }}{% if r.specialty %} · {{ r.specialty }}{% endif %}
+    </div>
+  </div>
+  {% if r.linkedin_url %}
+  <a href="{{ r.linkedin_url }}" target="_blank" rel="noopener" class="weblink">LinkedIn ↗</a>
+  {% endif %}
+  <button onclick="window.closeRecruitersPanel && window.closeRecruitersPanel()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
+</div>
+
+<div class="drawer-body prospect-body">
+
+  <div class="dim mono" style="font-size:11px;letter-spacing:0.04em;margin-bottom:14px;">
+    Last contact {{ r.last_contact_date or 'never' }}{% if r.days_since %} · {{ r.days_since|int }} days ago{% endif %}
+  </div>
+
+  <div class="info-grid-2">
+    <section class="info-section">
+      <div class="info-section-head">Relationship</div>
+      <div class="info-section-body" style="display:grid;place-items:center;padding:20px 16px;">
+        {%- if r.relationship_status == 'Active' -%}
+        <span class="need-pill tier-dream"><span class="dot"></span>Active</span>
+        {%- elif r.relationship_status == 'Warm' -%}
+        <span class="need-pill tier-worth"><span class="dot"></span>Warm</span>
+        {%- else -%}
+        <span class="need-pill tier-skip"><span class="dot"></span>Cold</span>
+        {%- endif -%}
+      </div>
+    </section>
+    <section class="info-section">
+      <div class="info-section-head">Cadence</div>
+      <div class="info-section-body" style="display:grid;place-items:center;padding:20px 16px;">
+        {% if r.days_since and r.stale_alert_days and r.days_since > r.stale_alert_days %}
+        <span class="need-pill tier-skip"><span class="dot"></span>{{ r.days_since|int }}d stale</span>
+        {% else %}
+        <span class="empty-inline">On track</span>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <section class="info-section">
+    <div class="info-section-head">Contact</div>
+    <div class="info-section-body">
+      <dl class="dl" style="display:grid;grid-template-columns:90px 1fr;gap:6px 12px;font-size:13px;margin:0;">
+        {% if r.email %}<dt class="dim">Email</dt><dd><a href="mailto:{{ r.email }}" style="color:var(--accent);">{{ r.email }}</a></dd>{% endif %}
+        {% if r.phone %}<dt class="dim">Phone</dt><dd class="mono" style="font-size:12px;">{{ r.phone }}</dd>{% endif %}
+        {% if r.firm %}<dt class="dim">Firm</dt><dd>{{ r.firm }}</dd>{% endif %}
+        {% if r.specialty %}<dt class="dim">Specialty</dt><dd>{{ r.specialty }}</dd>{% endif %}
+        <dt class="dim">Added</dt><dd class="dim mono" style="font-size:12px;">{{ r.created_at[:10] if r.created_at else '—' }}</dd>
+      </dl>
+    </div>
+  </section>
+
+  {% if r.notes %}
+  <section class="info-section">
+    <div class="info-section-head">Notes</div>
+    <div class="info-section-body serif" style="font-size:14px;line-height:1.6;font-style:italic;">{{ r.notes }}</div>
+  </section>
+  {% endif %}
+
+  <section class="info-section">
+    <div class="info-section-head">Log contact</div>
+    <div class="info-section-body">
+      <form hx-post="/recruiters/{{ r.id }}/contact"
+            hx-target="#recruiters-panel"
+            hx-swap="innerHTML"
+            style="display:flex;flex-direction:column;gap:8px;">
+        <textarea name="note" placeholder="What did you discuss? (optional)" class="textarea" style="min-height:60px;font-size:12.5px;"></textarea>
+        <button type="submit" class="btn btn-sm btn-primary" style="align-self:flex-start;">Log contact today</button>
+      </form>
+    </div>
+  </section>
+
+</div>

@@ -1,0 +1,49 @@
+<div class="card prep-card">
+  <div class="card-head">
+    <h3>Transcript & debrief</h3>
+    <div class="spacer"></div>
+    <button class="btn btn-sm" hx-post="/prep/sessions/{{ active_session.id }}/analyze" hx-target="closest .prep-card" hx-swap="outerHTML" {% if not active_session.transcript %}disabled{% endif %}>
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><circle cx="5.5" cy="5.5" r="4.5" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="5.5" cy="5.5" r="1.5" fill="currentColor"/></svg> Extract insights
+    </button>
+  </div>
+  <div class="card-body">
+    <textarea class="textarea" placeholder="Paste a transcript or your raw notes from the call…"
+      hx-patch="/prep/sessions/{{ active_session.id }}/transcript" hx-trigger="input changed delay:600ms" hx-swap="none" name="value" rows="5" style="font-size:12px">{{ active_session.transcript or '' }}</textarea>
+    {% if active_session.transcript_insights_json %}
+      <div class="prep-insights">
+        {% set insights = active_session.transcript_insights_json|fromjson %}
+        {% if insights.answered %}
+          <div>
+            <div class="prep-insights-title">Answered ({{ insights.answered|length }})</div>
+            {% for a in insights.answered %}
+              <div class="prep-insight-row">
+                <div class="prep-insight-q">Q: {{ a.q }}</div>
+                <div class="prep-insight-a">A: {{ a.a }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% if insights.newQuestions %}
+          <div style="margin-top:10px">
+            <div class="prep-insights-title">New questions for next round</div>
+            <ul style="margin:4px 0 0; padding-left:18px; font-size:12.5px">
+              {% for q in insights.newQuestions %}
+                <li>{{ q }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+        {% if insights.signals %}
+          <div style="margin-top:10px">
+            <div class="prep-insights-title">Signals</div>
+            {% for s in insights.signals %}
+              <div class="prep-signal prep-signal-{{ s.type }}">
+                <span class="prep-signal-dot"></span>{{ s.note }}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>

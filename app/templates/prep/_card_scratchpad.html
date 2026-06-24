@@ -1,0 +1,11 @@
+<div class="card prep-card">
+  <div class="card-head">
+    <h3>Scratchpad</h3>
+    <span class="dim mono" style="font-size:10.5px">auto-saved</span>
+  </div>
+  <textarea name="value" class="textarea prep-scratchpad"
+    hx-patch="/prep/sessions/{{ active_session.id }}/scratchpad"
+    hx-trigger="input changed delay:600ms"
+    hx-swap="none"
+    placeholder="During the call: jot anything — names, follow-ups, questions to circle back on…">{{ active_session.scratchpad or '' }}</textarea>
+</div>

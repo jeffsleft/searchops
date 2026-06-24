@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% block title %}Settings — Recruiting Engine{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Settings</h1>
+    <div class="sub">System status, connections, and how to use this app</div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:16px;max-width:760px;">
+
+  {# ── How to use ───────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>How to use this app</h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:20px;">
+
+      <div>
+        <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Adding jobs to evaluate</div>
+        <p style="font-size:13px;line-height:1.7;margin:0 0 8px;">There are two ways to get jobs into the system:</p>
+        <ol style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+          <li><strong>Google Sheet (recommended for inbound).</strong> Paste a job URL into the "To Evaluate" tab of your recruiting sheet. The scheduler runs every 6 hours and automatically fetches the JD, scores it, and adds it to the dashboard. This is the primary inbound path.</li>
+          <li><strong>Score manually from the dashboard.</strong> Use the "Score a Job" form on the Dashboard — paste a URL or raw JD text. Scored immediately, no wait for the scheduler.</li>
+        </ol>
+      </div>
+
+      <div>
+        <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Outreach Targets vs. Jobs</div>
+        <p style="font-size:13px;line-height:1.7;margin:0;">
+          <strong>Outreach Targets</strong> (<a href="/companies" style="color:var(--accent);">/companies</a>) are companies you want to cold-reach — sourced from Crunchbase, no open role yet. Add them here to track research and outreach status. They are <em>not</em> scored jobs.<br><br>
+          <strong>Jobs</strong> (Dashboard, Pipeline) are scored JDs with a specific open role. These come in through the Sheet or manual scoring.
+        </p>
+      </div>
+
+      <div>
+        <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Pipeline stages</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">
+          {% set stage_info = [
+            ('Watchlist', 'Scored, not yet applied'),
+            ('Researching', 'Deep-dive in progress'),
+            ('Outreach', 'Contacted recruiter/HM'),
+            ('Applied', 'Application submitted'),
+            ('Screening', 'Recruiter / HR screen'),
+            ('Interviewing', 'Active interview loop'),
+            ('Offer', 'Offer received'),
+            ('Accepted', 'Offer accepted'),
+            ('I Declined', 'You passed on it'),
+            ('They Declined', 'They passed on you'),
+          ] %}
+          {% for stage, desc in stage_info %}
+          <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:8px 10px;">
+            <div style="font-size:12px;font-weight:500;">{{ stage }}</div>
+            <div class="dim" style="font-size:11px;margin-top:2px;">{{ desc }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Scoring system</div>
+        <p style="font-size:13px;line-height:1.7;margin:0 0 8px;">Scores are 0–10. Two layers:</p>
+        <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+          <li><strong>Deterministic layer</strong> — hard rules: dealbreakers (comp floor, geography, sector blacklist), weighted criteria (greenfield scope, tech stack, company stage). Runs first; auto-rejects before touching the LLM.</li>
+          <li><strong>LLM adjustment</strong> — Gemini reads the full JD and adjusts ±2 points based on qualitative signals not captured by the rules.</li>
+        </ul>
+        <div style="margin-top:12px;">
+          <a href="/settings/rubric" class="btn btn-sm btn-ghost" style="text-decoration:none;">View Detailed Scoring Rubric →</a>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          {% for label, cls in [('9–10 Dream', 'tier-dream'), ('7–8 Solid', 'tier-solid'), ('5–6 Worth it', 'tier-worth'), ('3–4 Skip', 'tier-skip'), ('<3 Pass', 'tier-pass'), ('Auto-rejected', 'tier-reject')] %}
+          <span class="score-badge {{ cls }}"><span class="dot"></span>{{ label }}</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Interview prep workflow</div>
+        <ol style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
+          <li>Move a job to <strong>Researching</strong> — this seeds the question bank automatically.</li>
+          <li>Go to <strong>Interview Prep</strong> for that job to see your opening hook, top unanswered questions, and anchor stories.</li>
+          <li>Before each interview: generate a <strong>Cheat Sheet</strong> (round + interviewer → one-pager).</li>
+          <li>After: paste the transcript into <strong>Analyze Transcript</strong> or <strong>Interview Coaching</strong> for scoring and debrief.</li>
+          <li>Use <strong>Interviewer Research</strong> to get a brief on who you're meeting before the call.</li>
+        </ol>
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Connections ──────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Connections</h3></div>
+    <div style="padding:4px 0;">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-size:13px;font-weight:500;">Google Sheets</div>
+          <div class="dim" style="font-size:11px;margin-top:2px;">Sheet ID: {{ sheet_id_preview }}</div>
+        </div>
+        <span class="stage {% if sheets_ok %}{% else %}dim{% endif %}">
+          {% if sheets_ok %}Connected{% else %}Not set{% endif %}
+        </span>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-size:13px;font-weight:500;">Slack Webhook</div>
+          <div class="dim" style="font-size:11px;margin-top:2px;">High-score alerts + weekly digest</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="stage dim">{% if slack_ok %}Configured{% else %}Not set{% endif %}</span>
+          {% if slack_ok %}
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button hx-post="/settings/test-slack"
+                    hx-target="#slack-test-result"
+                    hx-swap="innerHTML"
+                    class="btn btn-sm btn-ghost">Test</button>
+            <button hx-post="/settings/send-digest"
+                    hx-target="#slack-test-result"
+                    hx-swap="innerHTML"
+                    class="btn btn-sm btn-ghost">Send Digest</button>
+            <span id="slack-test-result" class="dim" style="font-size:11px;"></span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-size:13px;font-weight:500;">LLM Provider</div>
+          <div class="dim" style="font-size:11px;margin-top:2px;">
+            Active: <strong>{{ llm_provider|default("gemini") }}</strong>
+            — set <code>LLM_PROVIDER</code> to <code>gemini</code>, <code>anthropic</code>, or <code>openai</code>
+          </div>
+        </div>
+        <span class="stage dim">{% if gemini_ok %}Gemini key set{% else %}Gemini key missing{% endif %}</span>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-size:13px;font-weight:500;">Accomplishments Inventory</div>
+          <div class="dim" style="font-size:11px;margin-top:2px;">Layer 2 corpus (data/Accomplishments_Inventory.docx)</div>
+        </div>
+        <span class="stage dim" style="font-family:monospace;font-size:10px;">
+          {% if inventory_sha %}{{ inventory_sha }}{% else %}Not found{% endif %}
+        </span>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;">
+        <div>
+          <div style="font-size:13px;font-weight:500;">Writing Voice</div>
+          <div class="dim" style="font-size:11px;margin-top:2px;">
+            De-AI pass on generated cover letters · Guide: <strong>{{ voice_guide }}</strong>
+            — toggle with <code>VOICE_ENABLED</code>, override with <code>VOICE_GUIDE_PATH</code>
+          </div>
+        </div>
+        <span class="tag {% if voice_enabled %}green{% endif %}">{% if voice_enabled %}On{% else %}Off{% endif %}</span>
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Manual sync ──────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Manual Sync</h3></div>
+    <div class="card-body">
+      <p class="dim" style="font-size:13px;line-height:1.6;margin-bottom:12px;">
+        Scheduler runs automatically at midnight, 6am, noon, and 6pm UTC. Trigger a manual sync to process new Sheet URLs in the background.
+      </p>
+      <button hx-post="/sync"
+              hx-target="#sync-result"
+              hx-swap="innerHTML"
+              hx-indicator="#sync-spinner"
+              class="btn btn-primary">Run Sync Now</button>
+      <span id="sync-spinner" class="htmx-indicator dim" style="font-size:12px;margin-left:8px;">
+        <span class="spinner-small"></span> Starting background sync...
+      </span>
+      <div id="sync-result" class="dim" style="margin-top:10px;font-size:13px;"></div>
+      <button hx-post="/settings/fix-sheet-headers"
+              hx-target="#headers-result"
+              hx-swap="innerHTML"
+              class="btn btn-ghost"
+              style="margin-top:8px;">Fix Sheet Headers</button>
+      <div id="headers-result" class="dim" style="margin-top:6px;font-size:13px;"></div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        <div class="dim" style="font-size:12px;margin-bottom:6px;">Stub jobs — URLs that failed JD fetch (max 3 attempts each)</div>
+        <button hx-post="/admin/retry-stubs"
+                hx-target="#retry-stubs-result"
+                hx-swap="innerHTML"
+                class="btn btn-sm btn-ghost">Retry Stub Jobs</button>
+        <div id="retry-stubs-result" class="dim" style="margin-top:6px;font-size:13px;"></div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="dim" style="font-size:12px;margin-bottom:6px;">Story anchor tags</div>
+        <button hx-post="/prep/backfill-themes"
+                hx-target="#backfill-result"
+                hx-swap="innerHTML"
+                class="btn btn-sm btn-ghost">Backfill story tags</button>
+        <span id="backfill-result" style="margin-left:8px;font-size:12px;"></span>
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        <div class="dim" style="font-size:12px;margin-bottom:6px;">Tier A companies — import from Google Sheet (safe to re-run; upserts by name)</div>
+        <button hx-post="/admin/import-tier-a"
+                hx-target="#import-tier-a-result"
+                hx-swap="innerHTML"
+                class="btn btn-sm btn-ghost">Import Tier A from Sheet</button>
+        <div id="import-tier-a-result" class="dim" style="margin-top:6px;font-size:13px;"></div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Candidate profile ────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head">
+      <h3>Candidate Profile</h3>
+      <div class="spacer"></div>
+      <span id="profile-save-result" class="dim" style="font-size:11px;"></span>
+    </div>
+    <form hx-post="/settings/profile/save"
+          hx-target="#profile-save-result"
+          hx-swap="innerHTML">
+      <div style="padding:4px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;">
+          <span class="dim">Name</span>
+          <span>{{ profile.get('candidate', {}).get('name', '—') }}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;">
+          <span class="dim">Salary floor</span>
+          <input name="comp_floor" type="number" value="{{ profile.get('compensation', {}).get('base_min', 175000) }}"
+                 class="input" style="font-size:12px;width:120px;text-align:right;">
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;">
+          <span class="dim">Target range</span>
+          <input name="target_range" type="text" value="{{ profile.get('compensation', {}).get('target_range', '') }}"
+                 class="input" style="font-size:12px;width:240px;text-align:right;">
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;">
+          <span class="dim">Base score</span>
+          <input name="base_score" type="number" step="0.1" min="0" max="10" value="{{ profile.get('scoring', {}).get('base_score', 5.0) }}"
+                 class="input" style="font-size:12px;width:80px;text-align:right;">
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:10px 16px;font-size:13px;">
+          <span class="dim">High-score threshold</span>
+          <span>{{ high_score_threshold }}</span>
+        </div>
+      </div>
+      <div class="card-body" style="padding-top:0;">
+        <button type="submit" class="btn btn-sm btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+
+  {# ── Title filters ─────────────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Title Filters</h3></div>
+    <div class="card-body" id="filter-card-body"
+         hx-get="/settings/filters"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <div class="dim" style="font-size:12px;">Loading…</div>
+    </div>
+  </div>
+
+  {# ── No-go industries (auto-reject) ────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>No-Go Industries</h3></div>
+    <div class="card-body" id="no-go-card-body"
+         hx-get="/settings/no-go"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <div class="dim" style="font-size:12px;">Loading…</div>
+    </div>
+  </div>
+
+  {# ── Ethics reasons (vetting checklist) ────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Ethics Vetting Reasons</h3></div>
+    <div class="card-body" id="ethics-card-body"
+         hx-get="/settings/ethics"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      <div class="dim" style="font-size:12px;">Loading…</div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,149 @@
+[
+  {
+    "id": "seed_001",
+    "company": "Forgeline",
+    "job_title": "VP of GTM Operations",
+    "final_score": 6.0,
+    "deterministic_score": 6.0,
+    "llm_adjustment": 0.0,
+    "auto_rejected": false,
+    "reject_reason": null,
+    "tier": "Strong Fit",
+    "pros": "Greenfield build opportunity reporting to CRO. Consumption-based pricing aligns with the candidate's desired metric framework. Remote-first with modern tech stack (Salesforce, Gainsight, Slack, Mac). Series D with $425M raised suggests stability with growth runway. Team of 8-12 is an ideal size.",
+    "cons": "Series D may mean less equity upside than earlier stage. Enterprise sales transition could mean heavy process buildout before greenfield innovation. No mention of AI-native strategy. Need to verify founder type and leadership culture.",
+    "greenfield": "Yes",
+    "greenfield_rationale": "Explicitly described as building the GTM operating system from scratch during a PLG-to-enterprise transition.",
+    "pricing_model": "Consumption",
+    "sector": "Developer Tools",
+    "recommended_angle": "Lead with the AcmeSaaS NRR story — scaling GTM ops during a pricing model transition is directly transferable.",
+    "tech_stack_detected": {
+      "crm": "Salesforce",
+      "cs_tool": "Gainsight",
+      "comms": "Slack",
+      "os": "Mac",
+      "cloud": "Unknown"
+    },
+    "flags": [
+      "greenfield",
+      "modern_tech",
+      "modern_pricing",
+      "target_sector",
+      "remote"
+    ],
+    "_scoring_breakdown": "base 3.5 + Layer-4 positives (greenfield, modern_tech, modern_pricing, target_sector, remote) stacked past the +2.5 cap = 6.0 deterministic. LLM adjustment 0.0. A strong-fit role, but under ruthless scoring the deterministic ceiling is 6.0 — an 8+ requires the Layer-2 corpus match plus the top-band gate's must-haves."
+  },
+  {
+    "id": "seed_002",
+    "company": "Acme Corp",
+    "job_title": "Director of Revenue Operations",
+    "final_score": 1.5,
+    "deterministic_score": 1.5,
+    "llm_adjustment": 0.0,
+    "auto_rejected": false,
+    "reject_reason": null,
+    "tier": "Low Fit",
+    "pros": "RevOps leadership scope; reports to CFO; renewal-process focus.",
+    "cons": "Windows/Teams shop; hybrid 3 days in office; process-cleanup (upcycling) role, not greenfield.",
+    "greenfield": "No",
+    "greenfield_rationale": "Optimizing existing Salesforce/renewal processes — maintenance, not net-new build.",
+    "pricing_model": "Unknown",
+    "sector": "Healthcare Technology (HealthTech SaaS — allowed; not Traditional Healthcare)",
+    "recommended_angle": "N/A",
+    "tech_stack_detected": {
+      "crm": "HubSpot",
+      "cs_tool": "Unknown",
+      "comms": "Teams",
+      "os": "Windows",
+      "cloud": "Unknown"
+    },
+    "flags": [
+      "windows_penalty"
+    ],
+    "_scoring_breakdown": "HealthTech SaaS is allowed (the example profile blocks only Traditional Healthcare: hospital systems, pharma, managed care). No auto-reject. base 3.5 + windows_penalty(-2.0) = 1.5 deterministic."
+  },
+  {
+    "id": "seed_003",
+    "company": "Sentora",
+    "job_title": "Head of GTM Strategy and Operations",
+    "final_score": 6.0,
+    "deterministic_score": 6.0,
+    "llm_adjustment": 0.0,
+    "auto_rejected": false,
+    "reject_reason": null,
+    "tier": "Strong Fit",
+    "pros": "Newly created greenfield role reporting to COO. DevTools sector with strong growth (80% YoY). Pricing transition from seat to consumption — the candidate can architect the operational model. Financial rigor emphasis in the JD directly matches a CPA background. Fully remote, modern stack, meaningful equity.",
+    "cons": "200 employees is at the lower end of the target range. Pricing transition is complex and could consume all bandwidth for 12-18 months. Need to verify founder type and CS team health.",
+    "greenfield": "Yes",
+    "greenfield_rationale": "Newly created role with a mandate to build the GTM operating model from scratch during a pricing model transition.",
+    "pricing_model": "Hybrid",
+    "sector": "Developer Tools",
+    "recommended_angle": "Lead with the financial-rigor angle — a CPA who can build board-ready reporting while designing consumption-era GTM systems.",
+    "tech_stack_detected": {
+      "crm": "Salesforce",
+      "cs_tool": "Unknown",
+      "comms": "Slack",
+      "os": "Mac",
+      "cloud": "Unknown"
+    },
+    "flags": [
+      "greenfield",
+      "modern_tech",
+      "target_sector",
+      "remote",
+      "modern_pricing"
+    ],
+    "_scoring_breakdown": "base 3.5 + Layer-4 positives (greenfield, modern_tech, target_sector, remote, modern_pricing) stacked past the +2.5 cap = 6.0 deterministic. LLM adjustment 0.0. Whether this clears into the 7+ band depends on the Layer-2 corpus match and the top-band gate."
+  },
+  {
+    "id": "seed_004",
+    "company": "MidCo Analytics",
+    "job_title": "Director of Business Operations",
+    "final_score": 4.3,
+    "deterministic_score": 4.5,
+    "llm_adjustment": -0.2,
+    "auto_rejected": false,
+    "reject_reason": null,
+    "tier": "Worth a Look",
+    "pros": "Good tech stack (Salesforce, Slack, Mac). Sacramento-based hybrid is convenient geography. Series B with 150 employees is within target company size. Analytics sector is adjacent to AI/Data.",
+    "cons": "Reports to VP of Sales, not C-level — limited strategic authority. Scope is narrow: pipeline reporting, territory management, quota setting. No mention of CS or full GTM mandate. Salary range ($185k-$210k) is above floor but below target. No equity mentioned. No greenfield signals.",
+    "greenfield": "Partial",
+    "greenfield_rationale": "Series B may have greenfield needs, but the JD scope is narrowly operational (pipeline/territory/quota). Limited blue-ocean opportunity visible.",
+    "pricing_model": "Unknown",
+    "sector": "IT / Software",
+    "recommended_angle": "If pursuing, frame as an opportunity to expand scope beyond Sales ops into full GTM operations — but verify appetite for that during the recruiter screen.",
+    "tech_stack_detected": {
+      "crm": "Salesforce",
+      "cs_tool": "Unknown",
+      "comms": "Slack",
+      "os": "Mac",
+      "cloud": "Unknown"
+    },
+    "flags": [
+      "modern_tech"
+    ],
+    "_scoring_breakdown": "base 3.5 + modern_tech(+1.0) = 4.5 deterministic. No greenfield, no consumption pricing, no sector bonus (generic analytics). LLM -0.2 for narrow scope and a VP-Sales reporting line — final 4.3."
+  },
+  {
+    "id": "seed_005",
+    "company": "PokerStars Tech",
+    "job_title": "VP of Operations",
+    "final_score": 0.0,
+    "deterministic_score": 0.0,
+    "llm_adjustment": 0.0,
+    "auto_rejected": true,
+    "reject_reason": "Blocked sector: Gambling",
+    "tier": "Hard Pass",
+    "pros": "N/A — auto-rejected",
+    "cons": "N/A — auto-rejected",
+    "greenfield": "N/A",
+    "greenfield_rationale": "N/A",
+    "pricing_model": "Unknown",
+    "sector": "Gambling",
+    "recommended_angle": "N/A",
+    "tech_stack_detected": {},
+    "flags": [
+      "auto_rejected"
+    ],
+    "_scoring_breakdown": "Auto-rejected: Gambling sector is in the hard_no list (ethics). Would have scored well on comp and remote otherwise, but the ethics filter fires first."
+  }
+]

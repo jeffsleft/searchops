@@ -1,0 +1,50 @@
+# Pinned 2026-06-11 (audit: supply-chain reproducibility).
+# Exact versions captured from the known-good local env (tests pass, app boots).
+# To re-pin after an intentional upgrade: bump here, test, then deploy.
+
+# Core
+modal==1.4.1
+jinja2==3.1.6
+starlette==1.3.1  # 1.0.x had CVE-2026-48818/48817/54283/54282; 1.0.0 had PYSEC-2026-161
+python-multipart==0.0.31  # 0.0.27 had CVE-2026-53538/53539/53540
+itsdangerous==2.2.0
+pydantic==2.12.5
+
+# LLM
+google-genai==2.0.0
+anthropic==0.97.0
+openai==1.109.1  # WP-B: OpenAI provider (BYO key, set LLM_PROVIDER=openai)
+
+# Google Sheets
+google-api-python-client==2.196.0
+google-auth==2.51.0
+google-auth-oauthlib==1.4.0
+
+# Web scraping
+beautifulsoup4==4.14.3
+requests==2.33.0  # 2.32.5 had CVE-2026-25645
+httpx==0.28.1
+# firecrawl-py: exact-pinned to the newest 1.x. The code uses the v1.x API
+# (firecrawl.FirecrawlApp + scrape_url(formats=...) + result.markdown); 2.x
+# removed it, and 1.17.0 is the last release before that break. If scraping
+# regresses, step back within the 1.x line (1.6.0–1.17.0 share the API).
+firecrawl-py==1.17.0
+
+# Notifications
+slack_sdk==3.41.0
+
+# Data
+pyyaml==6.0.3
+python-docx==1.2.0
+# WP-E: resume + cover-letter rendered from locked .docx masters via docxtpl.
+# docxtpl pulls docxcompose (subdoc assembly) + babel (locale) as transitive deps;
+# pin all three for reproducible image builds.
+docxtpl==0.20.1
+docxcompose==2.2.0
+babel==2.18.0
+
+# Tests
+pytest==9.0.3
+
+# HTMX (served via CDN, no Python package needed)
+# Tailwind CSS (served via CDN, no Python package needed)

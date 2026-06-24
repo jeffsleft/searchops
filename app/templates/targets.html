@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Hunt Targets — Recruiting Engine{% endblock %}
+{% block page_title %}Hunt Targets{% endblock %}
+
+{% block topbar_actions %}
+<button class="btn btn-sm"
+        onclick="document.getElementById('add-target-form').style.display = (document.getElementById('add-target-form').style.display === 'none') ? 'block' : 'none';">
+  + Add Target
+</button>
+{% endblock %}
+
+{% block content_wrap %}
+<div class="split" id="targets-split">
+  <div class="split-list">
+    <div class="page">
+{% block content %}
+{% from "components/_macros.html" import logo %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Hunt Targets</h1>
+    <div class="sub">57 Tier A companies · proactive monitoring · no hook required to track</div>
+  </div>
+</div>
+
+{% if request.query_params.get('added') == '1' %}
+<div id="add-success-toast" style="position:fixed;bottom:20px;right:20px;display:flex;align-items:center;gap:8px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:var(--radius-lg);padding:12px 16px;font-size:12px;color:var(--text);box-shadow:var(--shadow);z-index:100;">
+  <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;"></span>
+  Company added
+</div>
+<script>
+  setTimeout(function() {
+    var el = document.getElementById('add-success-toast');
+    if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.4s'; setTimeout(function(){ el.style.display='none'; }, 400); }
+    history.replaceState({}, '', '/targets');
+  }, 3000);
+</script>
+{% endif %}
+
+<!-- Add Target Form -->
+<div id="add-target-form" style="display:none;margin-bottom:18px;">
+  <div class="card" style="padding:16px;">
+    <form hx-post="/targets" hx-target="body" hx-swap="outerHTML">
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
+        <div>
+          <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px;">Company Name</label>
+          <input type="text" name="name" placeholder="Acme SaaS" required class="input" />
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px;">Careers URL (optional)</label>
+          <input type="url" name="careers_url" placeholder="https://jobs.greenhouse.io/acme" class="input" />
+        </div>
+        <button type="submit" class="btn btn-sm">Add</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="filterbar" style="margin-bottom:16px;">
+  <div class="tgroup">
+    {% set tabs = [
+      ('tier_a',     'Tier A'),
+      ('researched', 'Researched'),
+      ('matches',    'Matches found'),
+      ('monitoring', 'Monitoring'),
+      ('all',        'All'),
+    ] %}
+    {% for val, label in tabs %}
+    <button aria-pressed="{{ 'true' if tab == val else 'false' }}"
+            hx-get="/targets?tab={{ val }}"
+            hx-target="body"
+            hx-swap="outerHTML"
+            hx-push-url="true">
+      {{ label }} · {{ counts.get(val, 0) }}
+    </button>
+    {% endfor %}
+  </div>
+</div>
+
+{% if targets %}
+<div class="card">
+  <table class="tbl">
+    {% macro sth(label, col, w='') %}
+      {% set base = '/targets?tab=' ~ tab %}
+      <th{% if w %} style="width:{{ w }};"{% endif %}>
+        {% if sort == col and order == 'asc' %}
+          <button type="button" hx-get="{{ base }}&sort={{ col }}&order=desc" hx-target="body" hx-swap="outerHTML" hx-push-url="true">{{ label }} ↑</button>
+        {% elif sort == col and order == 'desc' %}
+          <button type="button" hx-get="{{ base }}" hx-target="body" hx-swap="outerHTML" hx-push-url="true">{{ label }} ↓</button>
+        {% else %}
+          <button type="button" hx-get="{{ base }}&sort={{ col }}&order=asc" hx-target="body" hx-swap="outerHTML" hx-push-url="true">{{ label }}</button>
+        {% endif %}
+      </th>
+    {% endmacro %}
+    <thead><tr>
+      {{ sth('Company',    'name',              '24%') }}
+      {{ sth('Category',   'industry_category', '14%') }}
+      {{ sth('Remote',     'remote_friendly',   '12%') }}
+      {{ sth('Nearest HQ', 'nearest_hq',        '18%') }}
+      {{ sth('Funding',    'funding_stage',     '12%') }}
+      {{ sth('Research',   'gap_hypothesis',    '10%') }}
+      {{ sth('Matches',    'match_count',       '10%') }}
+    </tr></thead>
+    <tbody>
+      {% for t in targets %}
+      <tr data-target-id="{{ t.id }}" style="cursor:pointer;"
+          hx-get="/targets/{{ t.id }}/detail"
+          hx-target="#targets-panel"
+          hx-swap="innerHTML"
+          onclick="window.openTargetsPanel && window.openTargetsPanel(this)">
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;">
+            {{ logo(t.name, 'sm') }}
+            <div style="min-width:0;">
+              <div style="font-weight:500;display:flex;align-items:center;gap:6px;">
+                {{ t.name }}
+                {% if t.tier_a %}
+                <span class="tag clay" style="font-size:9px;font-weight:600;padding:1px 5px;letter-spacing:.03em;">A</span>
+                {% endif %}
+              </div>
+              <div class="dim" style="font-size:11px;">{{ t.headcount_estimate or '—' }}</div>
+            </div>
+          </div>
+        </td>
+        <td class="muted" style="font-size:12px;">{{ t.industry_category or t.sector or '—' }}</td>
+        <td>
+          {% set remote = t.remote_friendly or '' %}
+          {% if 'remote-first' in remote.lower() or 'remote first' in remote.lower() %}
+            <span class="tag green" style="font-size:10px;">Remote-first</span>
+          {% elif 'remote-friendly' in remote.lower() or 'remote friendly' in remote.lower() %}
+            <span class="tag green" style="font-size:10px;">Remote-friendly</span>
+          {% elif 'hybrid' in remote.lower() %}
+            <span class="tag" style="font-size:10px;">Hybrid</span>
+          {% elif remote %}
+            <span class="dim" style="font-size:11px;">{{ remote[:20] }}</span>
+          {% else %}
+            <span class="dim">—</span>
+          {% endif %}
+        </td>
+        <td class="muted" style="font-size:11px;">{{ t.nearest_hq or '—' }}</td>
+        <td class="muted" style="font-size:11px;">
+          {% set fs = t.funding_stage or '' %}
+          {{ fs[:28] if fs else '—' }}
+        </td>
+        <td>
+          {% if t.gap_hypothesis %}
+            <span class="tag green" style="font-size:10px;">Done</span>
+          {% elif t.gtm_motion %}
+            <span class="tag amber" style="font-size:10px;">Partial</span>
+          {% else %}
+            <span class="dim" style="font-size:11px;">—</span>
+          {% endif %}
+        </td>
+        <td id="match-cell-{{ t.id }}">
+          {% with co = t, refresh_url = '/targets/' ~ t.id ~ '/refresh-matches' %}
+            {% include 'components/match_cell.html' %}
+          {% endwith %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding:32px;text-align:center;">
+  <div class="dim" style="font-size:14px;margin-bottom:12px;">No companies in this view</div>
+  <div style="font-size:12px;color:var(--text-muted);">Switch tabs or click <strong>+ Add Target</strong> to add a company.</div>
+</div>
+{% endif %}
+
+<script>
+  window.openTargetsPanel = function(row) {
+    document.querySelectorAll('#targets-split tr.row-selected').forEach(function(tr) { tr.classList.remove('row-selected'); });
+    if (row) row.classList.add('row-selected');
+    var split = document.getElementById('targets-split');
+    if (split) split.setAttribute('data-open', 'true');
+    var panel = document.getElementById('targets-panel');
+    if (panel) panel.style.display = 'flex';
+  };
+  window.closeTargetsPanel = function() {
+    document.querySelectorAll('#targets-split tr.row-selected').forEach(function(tr) { tr.classList.remove('row-selected'); });
+    var split = document.getElementById('targets-split');
+    if (split) split.removeAttribute('data-open');
+    var panel = document.getElementById('targets-panel');
+    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+  };
+</script>
+
+{% endblock %}{# /content #}
+    </div>{# /page #}
+  </div>{# /split-list #}
+  <aside class="split-panel" id="targets-panel" aria-label="Hunt target detail" style="display:none;"></aside>
+</div>{# /split #}
+{% endblock %}{# /content_wrap #}

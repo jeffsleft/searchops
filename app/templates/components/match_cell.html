@@ -1,0 +1,23 @@
+{#
+  Match-summary cell for the target lists (Hunt Targets + Outreach).
+  Expects: co (company dict with match_count, match_best_score, careers_url, ats_handle, id)
+           refresh_url (POST endpoint that re-fetches roles and returns this fragment)
+  Swap target on refresh is the enclosing #match-cell-{{ co.id }}.
+#}
+{% if co.match_count and co.match_count > 0 %}
+  <span class="tag green" style="white-space:nowrap;">
+    {{ co.match_count }} role{{ '' if co.match_count == 1 else 's' }} match{% if co.match_best_score %} · best {{ "%.1f"|format(co.match_best_score) }}{% endif %}
+  </span>
+{% else %}
+  <span class="dim" style="font-size:11px;">no current match</span>
+{% endif %}
+{% if co.careers_url or co.ats_handle %}
+<button type="button" class="btn btn-icon btn-sm btn-ghost"
+        title="Refresh open roles"
+        hx-post="{{ refresh_url }}"
+        hx-target="#match-cell-{{ co.id }}"
+        hx-swap="innerHTML"
+        hx-indicator="this"
+        onclick="event.stopPropagation()"
+        style="margin-left:6px;">↻</button>
+{% endif %}

@@ -1,0 +1,98 @@
+{% from "components/_macros.html" import logo, stage_label %}
+<div class="drawer-backdrop" onclick="window.closeJobDrawer && window.closeJobDrawer()"></div>
+<div class="drawer" role="dialog" aria-label="Job detail">
+  <div class="drawer-head">
+    {{ logo(job.company) }}
+    <div style="flex:1;min-width:0;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <h2 style="margin:0;font-size:18px;font-weight:600;letter-spacing:-0.015em;line-height:1.2;">{{ job.job_title or 'Untitled role' }}</h2>
+        {%- set s = job.final_score or 0 -%}
+        {%- if s -%}
+        <span class="score-badge
+          {%- if job.auto_rejected %} tier-reject
+          {%- elif s >= 9 %} tier-dream
+          {%- elif s >= 7 %} tier-solid
+          {%- elif s >= 5 %} tier-worth
+          {%- elif s >= 3 %} tier-skip
+          {%- else %} tier-pass{%- endif %}"><span class="dot"></span>{{ "%.1f"|format(s) }}</span>
+        {%- endif -%}
+      </div>
+      <div class="dim" style="font-size:12.5px;margin-top:3px;">
+        {{ job.company }}{% if job.sector %} · {{ job.sector }}{% endif %}{% if job.salary_range_detected %} · {{ job.salary_range_detected }}{% endif %}
+      </div>
+    </div>
+    {% if job.url %}
+    <a href="{{ job.url }}" target="_blank" rel="noopener" class="weblink">JD ↗</a>
+    {% endif %}
+    <a href="/job/{{ job.id }}" class="btn btn-sm btn-primary">Open full view ↗</a>
+    <button onclick="window.closeJobDrawer && window.closeJobDrawer()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close drawer">✕</button>
+  </div>
+
+  <div class="drawer-body" style="padding:18px 22px 32px;">
+
+    {% if job.auto_rejected %}
+    <section class="info-section">
+      <div class="info-section-head" style="color:var(--tier-reject);">Auto-rejected</div>
+      <div class="info-section-body" style="font-size:13px;line-height:1.55;">{{ job.reject_reason or 'Triggered an auto-reject rule.' }}</div>
+    </section>
+    {% endif %}
+
+    {% if job.recommended_angle %}
+    <section class="info-section">
+      <div class="info-section-head">Recommended angle</div>
+      <div class="info-section-body serif" style="font-size:14px;line-height:1.65;font-style:italic;">{{ job.recommended_angle }}</div>
+    </section>
+    {% endif %}
+
+    <div class="info-grid-2">
+      {% if job.pros %}
+      <section class="info-section">
+        <div class="info-section-head">Pros</div>
+        <div class="info-section-body" style="font-size:13px;line-height:1.55;">{{ job.pros }}</div>
+      </section>
+      {% endif %}
+      {% if job.cons %}
+      <section class="info-section">
+        <div class="info-section-head">Cons</div>
+        <div class="info-section-body" style="font-size:13px;line-height:1.55;">{{ job.cons }}</div>
+      </section>
+      {% endif %}
+    </div>
+
+    {% if job.match_summary %}
+    <section class="info-section">
+      <div class="info-section-head">Match to candidate</div>
+      <div class="info-section-body" style="font-size:13px;line-height:1.6;">{{ job.match_summary }}</div>
+    </section>
+    {% endif %}
+
+    <section class="info-section">
+      <div class="info-section-head">Score breakdown</div>
+      <div class="info-section-body">
+        <dl class="dl" style="display:grid;grid-template-columns:160px 1fr;gap:6px 12px;font-size:13px;margin:0;">
+          <dt class="dim">Final</dt><dd class="mono">{{ "%.1f"|format(job.final_score or 0) }}</dd>
+          {% if job.deterministic_score is not none %}<dt class="dim">Adjustment weights</dt><dd class="mono">{{ "%.1f"|format(job.deterministic_score) }}</dd>{% endif %}
+          {% if job.match_score is not none %}<dt class="dim">Match to candidate</dt><dd class="mono">{{ "%+.1f"|format(job.match_score) }}</dd>{% endif %}
+          {% if job.llm_adjustment is not none %}<dt class="dim">LLM nudge</dt><dd class="mono">{{ "%+.1f"|format(job.llm_adjustment) }}</dd>{% endif %}
+          <dt class="dim">Stage</dt><dd>{{ stage_label(job.pipeline_stage) }}</dd>
+          <dt class="dim">Greenfield</dt><dd>{{ job.greenfield or '—' }}</dd>
+        </dl>
+      </div>
+    </section>
+
+    {% if flags_fired %}
+    <section class="info-section">
+      <div class="info-section-head">Flags fired</div>
+      <div class="info-section-body" style="padding:0;">
+        {% for f in flags_fired %}
+        <div class="signal-row {{ 'good' if f.weight and f.weight > 0 else ('warn' if f.weight and f.weight < 0 else '') }}">
+          <span class="signal-icon">{% if f.weight and f.weight > 0 %}✓{% elif f.weight and f.weight < 0 %}⚠{% else %}◎{% endif %}</span>
+          <div class="signal-text"><strong>{{ f.label }}</strong> <span class="dim mono" style="font-size:11px;">{{ "%+.1f"|format(f.weight) }}</span></div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+  </div>
+</div>

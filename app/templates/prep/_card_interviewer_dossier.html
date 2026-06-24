@@ -1,0 +1,57 @@
+<div class="card prep-card">
+  <div class="card-head">
+    <h3>Logistics & interviewers</h3>
+    {% if active_session.schedule_date %}
+      <span class="dim mono" style="font-size:11px">{{ active_session.schedule_date }}{% if active_session.schedule_time %} {{ active_session.schedule_time }}{% if active_session.schedule_tz %} {{ active_session.schedule_tz }}{% endif %}{% endif %}</span>
+    {% endif %}
+  </div>
+  <div class="card-body">
+    <div class="prep-schedule-grid">
+      <div class="prep-field">
+        <label>Date</label>
+        <input type="date" class="input prep-schedule-input" value="{{ active_session.schedule_date or '' }}"
+          hx-patch="/prep/sessions/{{ active_session.id }}/schedule" hx-trigger="change" hx-swap="none" name="date"/>
+      </div>
+      <div class="prep-field">
+        <label>Time</label>
+        <input type="time" class="input prep-schedule-input" value="{{ active_session.schedule_time or '' }}"
+          hx-patch="/prep/sessions/{{ active_session.id }}/schedule" hx-trigger="change" hx-swap="none" name="time"/>
+      </div>
+      <div class="prep-field">
+        <label>TZ</label>
+        <select class="select prep-schedule-input"
+          hx-patch="/prep/sessions/{{ active_session.id }}/schedule" hx-trigger="change" hx-swap="none" name="tz">
+          <option value="">—</option>
+          <option {% if active_session.schedule_tz == 'PT' %}selected{% endif %}>PT</option>
+          <option {% if active_session.schedule_tz == 'MT' %}selected{% endif %}>MT</option>
+          <option {% if active_session.schedule_tz == 'CT' %}selected{% endif %}>CT</option>
+          <option {% if active_session.schedule_tz == 'ET' %}selected{% endif %}>ET</option>
+          <option {% if active_session.schedule_tz == 'GMT' %}selected{% endif %}>GMT</option>
+          <option {% if active_session.schedule_tz == 'CET' %}selected{% endif %}>CET</option>
+        </select>
+      </div>
+      <div class="prep-field">
+        <label>Mode</label>
+        <select class="select prep-schedule-input"
+          hx-patch="/prep/sessions/{{ active_session.id }}/schedule" hx-trigger="change" hx-swap="none" name="mode">
+          <option value="">—</option>
+          <option {% if active_session.schedule_mode == 'Video' %}selected{% endif %}>Video</option>
+          <option {% if active_session.schedule_mode == 'Phone' %}selected{% endif %}>Phone</option>
+          <option {% if active_session.schedule_mode == 'Onsite' %}selected{% endif %}>Onsite</option>
+        </select>
+      </div>
+    </div>
+    {% if active_session.schedule_mode == 'Video' or active_session.schedule_link %}
+      <div class="prep-field" style="margin-top:10px">
+        <label>Meeting link</label>
+        <input type="url" class="input" placeholder="https://…" value="{{ active_session.schedule_link or '' }}"
+          hx-patch="/prep/sessions/{{ active_session.id }}/schedule" hx-trigger="input changed delay:600ms" hx-swap="none" name="link"/>
+      </div>
+    {% endif %}
+    <div class="prep-field" style="margin-top:12px">
+      <label>Who's in the room</label>
+      <textarea class="textarea" placeholder="Names, titles, persona, what to lean into…"
+        hx-patch="/prep/sessions/{{ active_session.id }}/interviewers" hx-trigger="input changed delay:600ms" hx-swap="none" name="value" rows="4">{{ active_session.interviewers_notes or '' }}</textarea>
+    </div>
+  </div>
+</div>

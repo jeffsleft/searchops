@@ -1,0 +1,34 @@
+{# score_card.html — reusable job score display #}
+{# expects: job dict with final_score, company, job_title, greenfield, tier, color, flags #}
+<div class="bg-gray-900 border border-gray-800 rounded-lg p-4 flex gap-4 items-start">
+
+  {# Score badge #}
+  <div class="score-{{ job.color }} rounded-lg w-14 h-14 flex items-center justify-center font-bold text-xl flex-shrink-0">
+    {{ job.final_score }}
+  </div>
+
+  <div class="flex-1 min-w-0">
+    <div class="flex items-center gap-2 mb-1">
+      <a href="/job/{{ job.id }}" class="font-semibold text-white hover:text-blue-400 truncate">
+        {{ job.company }}
+      </a>
+      {% if job.greenfield == 'Yes' %}
+        <span class="text-xs bg-green-900 text-green-300 px-2 py-0.5 rounded-full flex-shrink-0">Greenfield</span>
+      {% elif job.greenfield == 'Partial' %}
+        <span class="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full flex-shrink-0">Partial GF</span>
+      {% endif %}
+      <span class="text-xs text-gray-500 flex-shrink-0">{{ job.tier }}</span>
+    </div>
+    <div class="text-sm text-gray-400 truncate mb-2">{{ job.job_title }}</div>
+    {% if job.pros %}
+      <div class="text-xs text-gray-500 line-clamp-2">{{ job.pros }}</div>
+    {% endif %}
+    <div class="flex gap-2 mt-2 flex-wrap">
+      {% for flag in job.flags_list %}
+        <span class="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded">{{ flag }}</span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="text-xs text-gray-600 flex-shrink-0">{{ job.pipeline_stage }}</div>
+</div>

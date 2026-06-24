@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ header.name }} — {{ job.company }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500&display=swap" rel="stylesheet">
+<style>
+  /* ── Screen chrome ─────────────────────────────────────── */
+  :root {
+    --bg:        oklch(20% 0.012 60);
+    --bg-elev:   oklch(24% 0.013 60);
+    --border:    oklch(30% 0.013 60);
+    --text:      oklch(94% 0.012 80);
+    --muted:     oklch(72% 0.012 75);
+    --accent:    oklch(68% 0.12 45);
+    --accent-fg: oklch(18% 0.02 45);
+    --radius: 5px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text);
+    background: var(--bg);
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .print-bar {
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .print-bar-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .print-bar .label { font-size: 12px; color: var(--muted); }
+  .print-bar .label strong { color: var(--text); font-weight: 500; }
+  .print-bar .actions { display: flex; gap: 8px; align-items: center; }
+  .print-bar a {
+    font-size: 12px; color: var(--muted); text-decoration: none;
+    padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .print-bar a:hover { color: var(--text); }
+  .print-bar button.print-btn {
+    background: var(--accent); color: var(--accent-fg); border: none;
+    padding: 6px 14px; border-radius: var(--radius); cursor: pointer;
+    font-size: 12px; font-weight: 600; font-family: inherit;
+  }
+  .print-bar button.print-btn:hover { background: oklch(72% 0.13 45); }
+
+  /* Section toggle pills */
+  .section-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+  .toggle-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-right: 2px;
+    white-space: nowrap;
+  }
+  .section-pill {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    color: var(--text);
+    font-family: inherit;
+    transition: background 0.1s, color 0.1s, opacity 0.1s;
+  }
+  .section-pill:hover { border-color: var(--muted); }
+  .section-pill.on  { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .section-pill.off { opacity: 0.45; }
+
+  .page-wrap { padding: 32px 24px 60px; }
+
+  /* ── Resume page — variant-a-traditional ───────────────── */
+  .page {
+    background: white;
+    max-width: 816px;
+    margin: 0 auto;
+    padding: 0.55in 0.65in 0.5in;
+    box-shadow: 0 8px 40px oklch(0% 0 0 / 0.5);
+    border-radius: 4px;
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: 10.25pt;
+    line-height: 1.38;
+    color: #111;
+  }
+
+  /* Header — centered, large letter-spaced name */
+  .resume-header { text-align: center; }
+
+  h1.resume-name {
+    font-size: 24pt;
+    font-weight: 700;
+    letter-spacing: 0.35em;
+    margin: 0 0 6px;
+    color: #0a0a0a;
+    font-family: "Source Serif 4", Georgia, serif;
+  }
+  .tagline {
+    font-style: italic;
+    font-size: 10.5pt;
+    color: #333;
+    margin: 0 0 7px;
+    letter-spacing: 0.01em;
+  }
+  .contact {
+    font-size: 9.5pt;
+    color: #333;
+    margin: 0 0 12px;
+    letter-spacing: 0.02em;
+  }
+
+  hr.rule { border: none; border-top: 1px solid #111; margin: 12px 0 10px; }
+  hr.rule-thin { border: none; border-top: 0.5px solid #ccc; margin: 8px 0 0; }
+
+  /* Section headings — spaced caps with underline */
+  h2.section-heading {
+    font-size: 9.5pt;
+    font-weight: 400;
+    letter-spacing: 0.5em;
+    text-transform: uppercase;
+    color: #0a0a0a;
+    margin: 14px 0 6px;
+    border-bottom: 0.75px solid #333;
+    padding-bottom: 3px;
+    font-family: "Source Serif 4", Georgia, serif;
+    /* Keep heading attached to its first content line */
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Prose sections (Profile, Competencies, Speaking, Education) */
+  .prose-line {
+    font-size: 10.25pt;
+    margin: 0 0 4px;
+    line-height: 1.38;
+  }
+  ul.prose-bullets {
+    margin: 2px 0 0;
+    padding-left: 16px;
+  }
+  ul.prose-bullets li { margin-bottom: 2px; }
+
+  /* Experience entries */
+  .rt-job {
+    margin-top: 10px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .rt-job-row1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .rt-org { font-weight: 700; font-size: 11pt; color: #111; }
+  .rt-dates { font-style: italic; font-size: 9.5pt; color: #333; white-space: nowrap; }
+
+  .rt-job-row2 {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 10pt;
+    margin-top: 1px;
+  }
+  .rt-role { font-style: italic; }
+  .rt-loc { font-size: 9.5pt; color: #444; }
+
+  .rt-meta { font-size: 9.5pt; color: #444; margin: 1px 0 3px; }
+  .rt-summary { margin: 3px 0 2px; font-size: 9.75pt; color: #1d1d1d; }
+
+  ul.rt-bullets { margin: 2px 0 0; padding-left: 16px; }
+  ul.rt-bullets li { margin-bottom: 2px; line-height: 1.38; }
+
+  /* ── Print ─────────────────────────────────────────────── */
+  @media print {
+    body { background: white; }
+    .print-bar { display: none !important; }
+    .page-wrap { padding: 0; }
+    .page {
+      box-shadow: none;
+      padding: 0.55in 0.65in 0.5in;
+      max-width: none;
+      border-radius: 0;
+    }
+    @page { size: Letter; margin: 0; }
+    /* Hidden sections stay hidden in print */
+    .resume-section[data-hidden="true"] { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+{# Build list of section names for JS #}
+{% set ns = namespace(drop_json='[') %}
+{% for s in sections_to_drop %}
+  {% set ns.drop_json = ns.drop_json + ('"' + s + '"') %}
+  {% if not loop.last %}{% set ns.drop_json = ns.drop_json + ',' %}{% endif %}
+{% endfor %}
+{% set ns.drop_json = ns.drop_json + ']' %}
+
+<div class="print-bar">
+  <div class="print-bar-top">
+    <span class="label">
+      Tailored for <strong>{{ job.company }}</strong> — {{ job.job_title }}
+      {% if job.final_score %}&nbsp;·&nbsp; Score {{ job.final_score }}/10{% endif %}
+    </span>
+    <div class="actions">
+      <a href="/job/{{ job.id }}">← Back</a>
+      <a href="/job/{{ job.id }}/resume/download">Download .docx</a>
+      <button class="print-btn" onclick="window.print()">Print / Save PDF</button>
+    </div>
+  </div>
+  <div class="section-toggles" id="section-toggles">
+    <span class="toggle-label">Sections:</span>
+    {% for section in sections %}
+      {% set sname = section.company if section.type == 'experience' else section.heading %}
+      {% set dropped = sname in sections_to_drop %}
+      <button class="section-pill {% if not dropped %}on{% else %}off{% endif %}"
+              data-name="{{ sname }}"
+              onclick="toggleSection(this)">{{ sname }}</button>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="page-wrap">
+<div class="page">
+
+  {# ── Header ──────────────────────────────────────────── #}
+  <div class="resume-header">
+    <h1 class="resume-name">{{ header.name }}</h1>
+    {% if header.tagline %}<div class="tagline">{{ header.tagline }}</div>{% endif %}
+    {% if header.contact %}<div class="contact">{{ header.contact }}</div>{% endif %}
+  </div>
+  <hr class="rule">
+
+  {# ── Sections ─────────────────────────────────────────── #}
+  {% for section in sections %}
+    {% set sname = section.company if section.type == 'experience' else section.heading %}
+    {% set dropped = sname in sections_to_drop %}
+
+    <div class="resume-section"
+         data-name="{{ sname }}"
+         {% if dropped %}data-hidden="true" style="display:none"{% endif %}>
+
+      {% if not loop.first %}<hr class="rule-thin">{% endif %}
+
+      {% if section.type == 'prose' %}
+        <h2 class="section-heading">{{ section.heading }}</h2>
+        {% if tailored_summary and section.heading|lower == 'profile' %}
+          <div class="prose-line">{{ tailored_summary }}</div>
+        {% else %}
+          {% for line in section.paragraphs %}
+            <div class="prose-line">{{ line }}</div>
+          {% endfor %}
+          {% if section.bullets %}
+            <ul class="prose-bullets">
+              {% for b in section.bullets %}<li>{{ b }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+        {% endif %}
+
+      {% elif section.type == 'experience' %}
+        {# heading = "CompanyName\tDates" #}
+        {% set dates = section.heading.split('\t')[1] if '\t' in section.heading else '' %}
+        {# paragraphs[0] = role line, possibly "Role\tLocation" #}
+        {% if section.paragraphs %}
+          {% set role_line = section.paragraphs[0] %}
+          {% set role = role_line.split('\t')[0] if '\t' in role_line else role_line %}
+          {% set loc   = role_line.split('\t')[1] if '\t' in role_line else '' %}
+          {% set rest  = section.paragraphs[1:] %}
+        {% else %}
+          {% set role = '' %}{% set loc = '' %}{% set rest = [] %}
+        {% endif %}
+
+        <div class="rt-job">
+          <div class="rt-job-row1">
+            <span class="rt-org">{{ section.company }}</span>
+            <span class="rt-dates">{{ dates }}</span>
+          </div>
+          <div class="rt-job-row2">
+            <span class="rt-role">{{ role }}</span>
+            {% if loc %}<span class="rt-loc">{{ loc }}</span>{% endif %}
+          </div>
+          {% for para in rest %}
+            {% if loop.first and (para.startswith('$') or 'Team:' in para or 'ARR' in para or '→' in para) %}
+              <div class="rt-meta">{{ para }}</div>
+            {% else %}
+              <p class="rt-summary">{{ para }}</p>
+            {% endif %}
+          {% endfor %}
+
+          {# Replace mode: tailored bullets replace originals; originals kept where no tailored version exists #}
+          {% set co_tailored = company_bullets.get(section.company, []) %}
+          <ul class="rt-bullets">
+            {% if co_tailored %}
+              {% for b in co_tailored %}<li>{{ b }}</li>{% endfor %}
+            {% else %}
+              {% for b in section.bullets %}<li>{{ b }}</li>{% endfor %}
+            {% endif %}
+          </ul>
+        </div>
+
+      {% endif %}
+    </div>
+
+  {% endfor %}
+
+</div>
+</div>
+
+<script>
+  // Section names the LLM suggested dropping (pre-hidden on load)
+  var SECTIONS_TO_DROP = {{ ns.drop_json | safe }};
+
+  function toggleSection(btn) {
+    var name = btn.dataset.name;
+    var el = document.querySelector('.resume-section[data-name="' + name + '"]');
+    if (!el) return;
+    var isHidden = el.style.display === 'none';
+    el.style.display = isHidden ? '' : 'none';
+    el.dataset.hidden = isHidden ? 'false' : 'true';
+    btn.classList.toggle('on', isHidden);
+    btn.classList.toggle('off', !isHidden);
+  }
+
+  // Auto-bold lead-in phrases:
+  // Bullets: "Lead phrase — body" → <b>Lead phrase</b> — body  (em dash, lead < 45 chars)
+  // Prose lines: "Label: detail" → <b>Label</b>: detail  (colon, label < 35 chars)
+  (function() {
+    document.querySelectorAll('.rt-bullets li').forEach(function(li) {
+      var t = li.textContent;
+      var idx = t.indexOf(' — ');
+      if (idx > 0 && idx < 45) {
+        li.innerHTML = '<b>' + t.slice(0, idx) + '</b> — ' + t.slice(idx + 3);
+      }
+    });
+    document.querySelectorAll('.prose-line').forEach(function(el) {
+      var t = el.textContent;
+      // "Label: detail" pattern (competencies, speaking)
+      var idx = t.indexOf(': ');
+      if (idx > 0 && idx < 35 && !/[a-z]/.test(t[0])) {
+        el.innerHTML = '<b>' + t.slice(0, idx) + '</b>: ' + t.slice(idx + 2);
+        return;
+      }
+      // "Label — detail" pattern (speaking podcasts line)
+      idx = t.indexOf(' — ');
+      if (idx > 0 && idx < 25) {
+        el.innerHTML = '<b>' + t.slice(0, idx) + '</b> — ' + t.slice(idx + 3);
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

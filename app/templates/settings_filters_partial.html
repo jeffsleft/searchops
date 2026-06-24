@@ -1,0 +1,51 @@
+<div id="filter-list">
+  {% for label, items in [('Positive (must match)', positives), ('Negative (must not match)', negatives)] %}
+  <div style="margin-bottom:16px;">
+    <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">{{ label }}</div>
+    {% if items %}
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      {% for f in items %}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg-sunk);border-radius:var(--radius);{% if not f.enabled %}opacity:0.45;{% endif %}">
+        <span style="font-size:13px;font-family:monospace;">{{ f.value }}</span>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button hx-post="/settings/filters/{{ f.id }}/toggle"
+                  hx-target="#filter-card-body"
+                  hx-swap="innerHTML"
+                  class="btn btn-sm btn-ghost"
+                  style="font-size:11px;padding:2px 8px;">
+            {% if f.enabled %}Disable{% else %}Enable{% endif %}
+          </button>
+          <button hx-post="/settings/filters/{{ f.id }}/delete"
+                  hx-target="#filter-card-body"
+                  hx-swap="innerHTML"
+                  hx-confirm="Remove '{{ f.value }}'?"
+                  class="btn btn-sm btn-ghost"
+                  style="font-size:11px;padding:2px 8px;color:var(--text-muted);">
+            ✕
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="dim" style="font-size:12px;">None configured.</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <div style="padding-top:12px;border-top:1px solid var(--border);">
+    <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Add Filter</div>
+    <form hx-post="/settings/filters/add"
+          hx-target="#filter-card-body"
+          hx-swap="innerHTML"
+          style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <select name="filter_type" class="select" style="font-size:12px;width:auto;">
+        <option value="positive">Positive</option>
+        <option value="negative">Negative</option>
+      </select>
+      <input name="value" type="text" placeholder="e.g. Chief of Staff" class="input"
+             style="font-size:12px;flex:1;min-width:160px;" required>
+      <button type="submit" class="btn btn-sm btn-primary">Add</button>
+    </form>
+  </div>
+</div>

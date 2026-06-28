@@ -1,0 +1,37 @@
+.git/
+.env
+.env.*
+!.env.example
+
+# Personal data — mount at runtime, don't bake into the image
+candidate_profile.yaml
+app/discovery/hunt_targets.yaml
+data/*.docx
+data/*.db
+data/*.db-shm
+data/*.db-wal
+*.db
+
+# Session and credentials
+credentials.json
+token.json
+
+# Dev artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# Internal docs (private, not part of the forkable artifact)
+HANDOFF.md
+CLAUDE.md
+GEMINI.md
+AGENTS.md
+CONTEXT.md
+outcome_charter.md
+memory/
+design-files/
+docs/anchor-stories-*.md
+docs/audit-*.md
+docs/plan-*.md

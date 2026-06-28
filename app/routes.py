@@ -15,7 +15,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 
 from app.auth import AuthMiddleware, SESSION_COOKIE, create_session_token, login_page
-from app.config import load_profile, HIGH_SCORE_THRESHOLD, GOOGLE_SHEET_ID, APP_PASSWORD
+from app.config import load_profile, HIGH_SCORE_THRESHOLD, APP_PASSWORD
 from app.models import get_db
 from app.scoring.engine import classify_score
 from app.scoring.research import research_interviewer, coach_interview
@@ -41,6 +41,9 @@ from app.services.company_actions import (
     import_tier_a_companies, research_companies_batch, scan_target_company,
     refresh_company_matches,
 )
+from app.services.dashboard_service import build_dashboard_data
+from app.services.job_service import build_job_detail_data
+from app.services.pipeline_service import build_pipeline_view_data
 from app.routes_prep import (
     prep_index, prep_for_job, session_create, session_select, session_update, session_delete,
     sessions_reorder, session_set_hook, session_set_schedule, session_set_interviewers,
@@ -211,105 +214,24 @@ async def dashboard(request: Request):
         logging.warning(f"Invalid archetype ignored: {selected_archetype}")
         selected_archetype = ""
 
-    with get_db() as conn:
-        # All live (non-auto-rejected, scored) jobs
-        query = "SELECT * FROM jobs WHERE auto_rejected = 0 AND final_score IS NOT NULL"
-        params = []
-        if selected_archetype:
-            query += " AND role_archetype = ?"
-            params.append(selected_archetype)
-        query += " ORDER BY final_score DESC"
-        live_rows = conn.execute(query, params).fetchall()
-        live_list = [_enrich_job(dict(r)) for r in live_rows]
-
-        # Stages that should be excluded from dashboard surface views
-        terminal_stages = {'accepted', 'i_declined', 'they_declined', 'job_listing_closed',
-                           'duplicate', 'identified', 'evaluated', 'discovered'}
-
-        # High-score jobs (≥ 7.0), top 6 — exclude terminal/triage stages
-        high = [j for j in live_list
-                if j.get('final_score', 0) >= 7.0
-                and j.get('pipeline_stage') not in terminal_stages][:6]
-
-        # Recently added — sorted by date_found DESC, top 5 — exclude terminal/triage stages
-        recent_pool = [j for j in live_list if j.get('pipeline_stage') not in terminal_stages]
-        recent = sorted(recent_pool, key=lambda x: x.get('date_found') or '', reverse=True)[:5]
-        in_pipeline = [j for j in live_list if j.get('pipeline_stage') not in terminal_stages]
-
-        # Interviewing (advanced stages)
-        interviewing_stages = {'recruiter', 'hm_interview', 'panel', 'final_offer'}
-        interviewing = [j for j in live_list if j.get('pipeline_stage') in interviewing_stages]
-
-        # Average score
-        avg_score = (
-            sum(j.get('final_score', 0) for j in live_list) / len(live_list)
-            if live_list else 0.0
-        )
-
-        # Outreach queue — top 4 Watchlist companies by fit_score
-        outreach_rows = conn.execute(
-            "SELECT * FROM companies WHERE status = 'Watchlist' ORDER BY fit_score DESC LIMIT 4"
-        ).fetchall()
-        outreach_queue = [dict(r) for r in outreach_rows]
-
-        # Total scored count
-        total_scored = conn.execute(
-            "SELECT COUNT(*) as c FROM jobs WHERE final_score IS NOT NULL"
-        ).fetchone()["c"]
-
-        # Newly discovered count
-        discovered_count = conn.execute(
-            "SELECT COUNT(*) as c FROM jobs WHERE pipeline_stage = 'discovered'"
-        ).fetchone()["c"]
-
-        followups_due = get_followups_due(conn)
-        upcoming = get_upcoming_interviews(conn)
-
-        # Last scan time from task_log
-        scan_row = conn.execute(
-            "SELECT logged_at FROM task_log WHERE status = 'completed' ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        if scan_row:
-            from datetime import datetime
-            # logged_at is CURRENT_TIMESTAMP (UTC)
-            try:
-                dt = datetime.fromisoformat(scan_row["logged_at"].replace("Z", "+00:00"))
-                delta = datetime.now(timezone.utc) - dt
-                if delta.total_seconds() < 60:
-                    last_scan_time = "just now"
-                elif delta.total_seconds() < 3600:
-                    last_scan_time = f"{int(delta.total_seconds() // 60)}m ago"
-                elif delta.total_seconds() < 86400:
-                    last_scan_time = f"{int(delta.total_seconds() // 3600)}h ago"
-                else:
-                    last_scan_time = f"{int(delta.total_seconds() // 86400)}d ago"
-            except Exception:
-                last_scan_time = "recently"
-        else:
-            last_scan_time = "never"
-
-        # New since last (jobs added in last 7 days)
-        new_since_last = conn.execute(
-            "SELECT COUNT(*) as c FROM jobs WHERE date_found >= date('now', '-7 days')"
-        ).fetchone()["c"]
-
+    data = build_dashboard_data(selected_archetype, _enrich_job)
     return render(
         "dashboard.html",
         request=request,
-        live=live_list,
-        high=high,
-        recent=recent,
-        in_pipeline=in_pipeline,
-        interviewing=interviewing,
-        avg_score=avg_score,
-        outreach_queue=outreach_queue,
-        total_scored=total_scored,
-        discovered_count=discovered_count,
+        live=data['live'],
+        high=data['high'],
+        recent=data['recent'],
+        in_pipeline=data['in_pipeline'],
+        interviewing=data['interviewing'],
+        avg_score=data['avg_score'],
+        outreach_queue=data['outreach_queue'],
+        total_scored=data['total_scored'],
+        discovered_count=data['discovered_count'],
         selected_archetype=selected_archetype,
-        followups_due=followups_due,
-        upcoming=upcoming,
-        last_scan_time=last_scan_time,
-        new_since_last=new_since_last,
+        followups_due=data['followups_due'],
+        upcoming=data['upcoming'],
+        last_scan_time=data['last_scan_time'],
+        new_since_last=data['new_since_last'],
         today=str(date.today()),
     )
 
@@ -361,54 +283,19 @@ async def score_job_post(request: Request):
 
 async def job_detail(request: Request):
     job_id = int(request.path_params["job_id"])
-    with get_db() as conn:
-        row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-        contacts = conn.execute("SELECT * FROM contacts WHERE job_id = ?", (job_id,)).fetchall()
-        questions = conn.execute(
-            "SELECT * FROM questions WHERE job_id = ? ORDER BY CASE priority WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 ELSE 3 END, created_at",
-            (job_id,)
-        ).fetchall()
-    if not row:
+    data = build_job_detail_data(job_id, _enrich_job)
+    if not data:
         return HTMLResponse("Job not found", status_code=404)
-
-    job = _enrich_job(dict(row))
-
-    FLAGS = {
-        "windows_penalty":    ("Windows + Teams stack",          -2.0),
-        "modern_tech":        ("Mac + Slack stack",              +1.0),
-        "experienced_founder":("2nd-time founder",              +1.0),
-        "first_time_founder": ("1st-time founder",              -1.0),
-        "greenfield":         ("Greenfield / 0→1 opportunity",  +2.0),
-        "process_upcycling":  ("Process cleanup only",          -1.0),
-        "modern_pricing":     ("Consumption/Outcome pricing",   +1.0),
-        "target_sector":      ("Target sector match",           +1.5),
-        "moderate_sector":    ("Moderate sector match",         +0.5),
-        "low_interest_sector":("Low-interest sector",           -0.5),
-        "remote":             ("Fully remote",                  +0.5),
-        "churn_burn":         ("CS shrinking, Sales growing",   -1.0),
-        "cfo_cro_warning":    ("CFO/CRO tension signal",         0.0),
-        "low_runway_warning": ("Low runway (<18 mo)",            0.0),
-    }
-    flags_fired = [
-        {"id": fid, "label": FLAGS[fid][0], "weight": FLAGS[fid][1]}
-        for fid in job.get("flags_list", [])
-        if fid in FLAGS
-    ]
-
-    questions_list = [dict(q) for q in questions]
-    questions_answered = sum(1 for q in questions_list if q.get("status") == "answered")
-
-    tech_stack = job.get("tech_stack", {})
 
     return render(
         "job_detail.html",
         request=request,
-        job=job,
-        contacts=[dict(c) for c in contacts],
-        questions=questions_list,
-        questions_answered=questions_answered,
-        flags_fired=flags_fired,
-        tech_stack=tech_stack,
+        job=data['job'],
+        contacts=data['contacts'],
+        questions=data['questions'],
+        questions_answered=data['questions_answered'],
+        flags_fired=data['flags_fired'],
+        tech_stack=data['tech_stack'],
         all_stages=STAGES,
         i_declined_reasons=I_DECLINED_REASONS,
         they_declined_reasons=THEY_DECLINED_REASONS,
@@ -1066,45 +953,23 @@ async def pipeline_view(request: Request):
         logging.warning(f"Invalid archetype ignored: {selected_archetype}")
         selected_archetype = ""
 
-    with get_db() as conn:
-        query = "SELECT * FROM jobs WHERE auto_rejected = 0"
-        params = []
-        if selected_archetype:
-            query += " AND role_archetype = ?"
-            params.append(selected_archetype)
-        query += " ORDER BY final_score DESC"
-        rows = conn.execute(query, params).fetchall()
-
-    jobs_by_stage: dict = {}
-    for r in rows:
-        j = _enrich_job(dict(r))
-        stage = j.get("pipeline_stage") or "identified"
-        jobs_by_stage.setdefault(stage, []).append(j)
-
-    stale_items = get_stale_pipeline()
-    total = len(rows)
-    active = sum(
-        len(v) for k, v in jobs_by_stage.items()
-        if k not in ("accepted", "i_declined", "they_declined", "job_listing_closed", "duplicate")
-    )
-    max_stage_count = max((len(v) for v in jobs_by_stage.values()), default=1)
-
+    data = build_pipeline_view_data(selected_archetype, _enrich_job)
     stages = [(code, info["label"]) for code, info in STAGES.items()]
     return render(
         "pipeline.html",
         request=request,
         stages=stages,
-        jobs_by_stage=jobs_by_stage,
-        stale_items=stale_items,
-        total=total,
-        active=active,
+        jobs_by_stage=data['jobs_by_stage'],
+        stale_items=data['stale_items'],
+        total=data['total'],
+        active=data['active'],
         selected_archetype=selected_archetype,
         i_declined_reasons=I_DECLINED_REASONS,
         they_declined_reasons=THEY_DECLINED_REASONS,
         job_closed_reasons=JOB_CLOSED_REASONS,
         duplicate_reasons=DUPLICATE_REASONS,
         view=view,
-        max_stage_count=max_stage_count,
+        max_stage_count=data['max_stage_count'],
     )
 
 
@@ -1453,15 +1318,6 @@ async def recruiters_add(request: Request):
         phone=form.get("phone",""), specialty=form.get("specialty",""),
         notes=form.get("notes",""), relationship_status=form.get("relationship_status","Cold"),
     )
-    with get_db() as conn:
-        r = dict(conn.execute("SELECT * FROM recruiters WHERE id = ?", (r_id,)).fetchone())
-    from app.config import is_google_configured
-    if is_google_configured():
-        try:
-            from app.sheets.sync import write_recruiter_to_sheet
-            write_recruiter_to_sheet(r)
-        except Exception:
-            pass
     # New layout swaps the full body; redirect back so the list refreshes.
     return RedirectResponse(url="/recruiters", status_code=303)
 
@@ -1578,15 +1434,12 @@ async def settings_view(request: Request):
     import hashlib
     import os
     profile = load_profile()
-    sheet_id_preview = GOOGLE_SHEET_ID[:8] + "…" if GOOGLE_SHEET_ID else "Not set"
     inventory_sha = None
     if INVENTORY_PATH.exists():
         inventory_sha = hashlib.sha256(INVENTORY_PATH.read_bytes()).hexdigest()[:16] + "…"
     return render("settings.html",
                   request=request,
                   profile=profile,
-                  sheet_id_preview=sheet_id_preview,
-                  sheets_ok=bool(GOOGLE_SHEET_ID),
                   slack_ok=bool(os.environ.get("SLACK_WEBHOOK_URL")),
                   gemini_ok=bool(os.environ.get("GEMINI_API_KEY")),
                   llm_provider=LLM_PROVIDER,
@@ -1836,22 +1689,7 @@ _SYNC_POLLING_FRAGMENT = (
 
 
 async def manual_sync(request: Request):
-    from app.config import is_google_configured
-    if not is_google_configured():
-        return HTMLResponse('<span style="color:var(--tier-pass);">⚠️ Google Sheets not configured — sync requires GOOGLE_SHEET_ID.</span>')
-    try:
-        run_sync_fn = request.app.state.run_sync_fn
-        if run_sync_fn:
-            run_sync_fn.spawn()
-            return HTMLResponse(_SYNC_POLLING_FRAGMENT)
-        else:
-            from app.sheets.sync import process_new_urls
-            processed = process_new_urls()
-            return HTMLResponse(f"✅ Sync complete. {len(processed)} jobs processed.")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return HTMLResponse(f'<span style="color:var(--tier-pass);">❌ Failed to start sync: {str(e)}</span>')
+    return HTMLResponse('<span style="color:var(--tier-pass);">⚠️ Google Sheets sync removed. Add jobs via the Score a Job form.</span>')
 
 
 async def api_sync_status(request: Request):
@@ -1891,16 +1729,7 @@ async def api_sync_status(request: Request):
 
 
 async def fix_sheet_headers(request: Request):
-    from app.config import is_google_configured
-    if not is_google_configured():
-        return HTMLResponse('<span style="color:var(--tier-pass);">⚠️ Google Sheets not configured — GOOGLE_SHEET_ID required.</span>')
-    try:
-        from app.sheets.sync import write_sheet_headers
-        write_sheet_headers()
-        return HTMLResponse("Sheet headers updated (A–T).")
-    except Exception as e:
-        logging.error("fix_sheet_headers error: %s", e)
-        return HTMLResponse("Failed to update headers — check app logs.")
+    return HTMLResponse("Google Sheets removed.")
 
 
 async def backfill_question_themes(request: Request):
@@ -2115,7 +1944,7 @@ async def job_promote_from_discovery(request: Request):
     # Trigger scoring
     try:
         if job.get('url'):
-            from app.sheets.sync import _fetch_jd_text
+            from app.jobs.fetch import _fetch_jd_text
             from app.scoring.research import score_job
             jd_text = _fetch_jd_text(job['url']) or job.get('jd_text', '')
             if jd_text:
@@ -2386,39 +2215,14 @@ async def admin_retry_stubs(request: Request):
     if count == 0:
         return HTMLResponse('<span class="dim" style="font-size:13px;">No retryable stubs — all have been attempted 3+ times or are already scored.</span>')
 
-    run_sync_fn = request.app.state.run_sync_fn
-    if run_sync_fn:
-        run_sync_fn.spawn()
-        return HTMLResponse(
-            f'<div id="retry-stubs-result"'
-            f' hx-get="/api/sync-status"'
-            f' hx-trigger="every 5s"'
-            f' hx-target="#retry-stubs-result"'
-            f' hx-swap="outerHTML"'
-            f' style="font-size:13px;">'
-            f'⏳ Retrying {count} stub job(s) — fetching JDs and scoring in background. '
-            f'This can take 1–3 minutes depending on how many fetch.'
-            f'</div>'
-            f'<script>'
-            f'(function(){{'
-            f'  var start = Date.now();'
-            f'  var tid = setInterval(function(){{'
-            f'    var el = document.getElementById("retry-stubs-result");'
-            f'    if (!el) {{ clearInterval(tid); return; }}'
-            f'    var elapsed = Math.round((Date.now() - start) / 1000);'
-            f'    if (elapsed >= 180) {{'
-            f'      clearInterval(tid);'
-            f'      el.removeAttribute("hx-trigger");'
-            f'      el.innerHTML = "⏱ Still running after 3 min — sync may be processing many stubs. '
-            f'<a href=\'/discovered\' style=\'text-decoration:underline;\'>Check Discovered →</a> '
-            f'or refresh this page in a few minutes.";'
-            f'      if (window.htmx) htmx.process(el);'
-            f'    }}'
-            f'  }}, 5000);'
-            f'}})();'
-            f'</script>'
-        )
-    return HTMLResponse('<span class="dim" style="font-size:13px;">Sync function unavailable.</span>')
+    from app.jobs.fetch import _retry_stubs, _reset_exhausted_stubs
+    try:
+        _reset_exhausted_stubs()
+        _retry_stubs([])
+        return HTMLResponse(f'<span style="font-size:13px;">✅ Retried stubs. <a href="/discovered" style="text-decoration:underline;">Check Discovered →</a></span>')
+    except Exception as e:
+        logging.error("admin_retry_stubs error: %s", e)
+        return HTMLResponse(f'<span style="color:var(--tier-pass);font-size:13px;">❌ Retry failed: {_html.escape(str(e))}</span>')
 
 
 async def admin_import_tier_a(request: Request):
@@ -2701,7 +2505,7 @@ async def favicon(request: Request):
     return Response(status_code=204)
 
 
-def create_app(batch_research_fn=None, run_sync_fn=None) -> Starlette:
+def create_app(batch_research_fn=None) -> Starlette:
     routes = [
         Route("/favicon.ico", favicon, methods=["GET"]),
         Route("/login",  login_get,  methods=["GET"]),
@@ -2837,6 +2641,5 @@ def create_app(batch_research_fn=None, run_sync_fn=None) -> Starlette:
         middleware=[Middleware(SecurityHeadersMiddleware), Middleware(CSRFValidationMiddleware), Middleware(AuthMiddleware)],
     )
     app.state.batch_research_fn = batch_research_fn
-    app.state.run_sync_fn = run_sync_fn
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
     return app

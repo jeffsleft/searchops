@@ -50,30 +50,25 @@ else:
     print(f"[main] WARNING: {_RESUME} not found — /job/{{id}}/resume will return a parse error.")
 
 recruiting_secrets = modal.Secret.from_name("recruiting-secrets")
-google_token_secret = modal.Secret.from_name("google-token-file")
 anthropic_secret = modal.Secret.from_name("anthropic-key")
 
 
-# Scheduler runs at midnight, 6am, noon, 6pm UTC. Sync verified locally 2026-05-09.
+# Scheduler runs at midnight, 6am, noon, 6pm UTC.
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, google_token_secret, anthropic_secret],
+    secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
     schedule=modal.Cron("0 0,6,12,18 * * *"),
 )
 def scheduler():
     """
     Single cron entry — runs at midnight, 6am, noon, 6pm UTC.
-    - Every run: check Google Sheets for new URLs and score them.
     - 6am UTC: run automated job discovery scan.
     - Monday 8am PT: also send weekly Slack digest.
     """
     from datetime import datetime, timezone, timedelta
 
     init_db()
-
-    from app.sheets.sync import process_new_urls
-    process_new_urls()
 
     # Also research a batch of 5 outreach targets if they exist
     from app.models import get_db
@@ -116,12 +111,12 @@ def scheduler():
 # and verification: `modal run app/main.py::backup_db`.
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, google_token_secret, anthropic_secret],
+    secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
     timeout=300,
 )
 def backup_db():
-    """Snapshot recruiting.db → /data/backups + Google Drive (rotates last 8)."""
+    """Snapshot recruiting.db → /data/backups (rotates last 8)."""
     init_db()
     from app.maintenance.db_backup import backup_database
     backup_database()
@@ -129,7 +124,7 @@ def backup_db():
 
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, google_token_secret, anthropic_secret],
+    secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
     timeout=300,
 )
@@ -178,7 +173,7 @@ def research_one_company_task(co_id: int):
 
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, google_token_secret, anthropic_secret],
+    secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
     timeout=600,
 )
@@ -198,7 +193,7 @@ def batch_research_companies(company_ids: list[int]):
 
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, google_token_secret, anthropic_secret],
+    secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
     timeout=1800,
 )
@@ -250,7 +245,7 @@ def backfill_legacy_research(only_name: str | None = None):
 
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, google_token_secret, anthropic_secret],
+    secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
     timeout=900,
 )
@@ -270,7 +265,7 @@ def run_discovery_scan_remote():
 
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, google_token_secret, anthropic_secret],
+    secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
     timeout=120,
 )
@@ -405,30 +400,7 @@ def probe_model_quota():
 
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, google_token_secret, anthropic_secret],
-    volumes={"/data": volume},
-    timeout=900,
-)
-def run_sheet_sync_task():
-    """Background task to sync Google Sheets."""
-    from app.sheets.sync import process_new_urls
-    from app.models import log_task_event
-    log_task_event("sheet_sync", "started", "Manual sync triggered")
-    print("[task] Starting manual background sync...")
-    try:
-        processed = process_new_urls()
-        count = len(processed)
-        print(f"[task] Background sync complete. Processed {count} jobs.")
-        log_task_event("sheet_sync", "completed", f"Processed {count} job(s)")
-        return count
-    except Exception as e:
-        log_task_event("sheet_sync", "failed", str(e)[:200])
-        raise
-
-
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, google_token_secret, anthropic_secret],
+    secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
     timeout=600,
 )
@@ -439,5 +411,4 @@ def web():
     from app.routes import create_app
     return create_app(
         batch_research_fn=batch_research_companies,
-        run_sync_fn=run_sheet_sync_task
     )

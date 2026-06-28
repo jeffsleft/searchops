@@ -9,7 +9,8 @@ from datetime import date
 from app.config import HIGH_SCORE_THRESHOLD
 from app.models import get_db, normalize_url
 from app.scoring.research import score_job
-from app.sheets.sync import _fetch_jd_text, save_job_to_db, is_linkedin_job_url, _cap_json
+from app.jobs.fetch import _fetch_jd_text, is_linkedin_job_url
+from app.jobs.persist import save_job_to_db, _cap_json
 
 
 def persist_score_record_to_job(job_id: int, score_record: dict, jd_text: str = "", transition_stage: bool = False) -> None:

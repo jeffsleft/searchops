@@ -60,8 +60,6 @@ OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")  # empty → OpenAI defa
 VOICE_ENABLED = os.environ.get("VOICE_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off", "")
 VOICE_GUIDE_PATH = os.environ.get("VOICE_GUIDE_PATH", "").strip()
 
-GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "")
-INTERVIEW_PREP_DOC_ID = os.environ.get("INTERVIEW_PREP_DOC_ID", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 JINA_API_KEY = os.environ.get("JINA_API_KEY", "")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
@@ -69,21 +67,6 @@ APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "/data/recruiting.db")
 FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY", "")
 
-
-def is_google_configured() -> bool:
-    """True when both GOOGLE_SHEET_ID and a Google OAuth token are present.
-
-    Used to gate all Google Sheets calls (WP-M: Sheets optional).
-    The token can come from the TOKEN_JSON_CONTENT env var (Modal Secret)
-    or from a local token.json file (dev).
-    """
-    if not GOOGLE_SHEET_ID:
-        return False
-    token_present = bool(os.environ.get("TOKEN_JSON_CONTENT"))
-    if not token_present:
-        token_path = Path(__file__).parent.parent / "token.json"
-        token_present = token_path.exists()
-    return token_present
 
 
 HIGH_SCORE_THRESHOLD = 8.0

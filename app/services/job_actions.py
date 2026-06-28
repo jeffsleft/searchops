@@ -12,7 +12,8 @@ from app.config import HIGH_SCORE_THRESHOLD
 from app.models import get_db, normalize_url
 from app.pipeline.tracker import STAGES
 from app.scoring.research import score_job
-from app.sheets.sync import _fetch_jd_text, save_job_to_db, is_linkedin_job_url
+from app.jobs.fetch import _fetch_jd_text, is_linkedin_job_url
+from app.jobs.persist import save_job_to_db
 from app.services.scoring_service import score_job_from_url_and_persist
 
 

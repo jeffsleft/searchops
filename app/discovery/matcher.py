@@ -13,9 +13,7 @@ Target roles: VP/Director of GTM Ops, RevOps, CS Ops, GTM Strategy
 Target companies: 200-500 person SaaS, Series B/C
 Strong-fit sectors: DevTools, AI-native SaaS, Fintech, PropTech, Construction Tech, Beverages/Logistics
 Hard no sectors: Government, Healthcare, Gambling, Adult
-Geography: Auburn CA base. Remote preferred. Hybrid Bay Area 1-2x/month OK.
-Compensation floor: $120k base (auto-reject below)
-Target: $200k-$300k base+bonus + equity
+Geography: Sacramento, CA base. Remote preferred. Hybrid Bay Area 1-2x/month OK.
 Work style preferences: Mac + Slack + Google Workspace. Strongly dislikes Windows + Teams.
 Career edge: GitLab CS Ops leadership ($72M→$550M ARR), CPA + finance rigor, AI-native builder
 Strong interest in: Greenfield builds (not just process upcycling), PLG/consumption pricing models, 2nd-time founders

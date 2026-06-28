@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # SQLite DB persists here across restarts
+      - ./data:/srv/data
+      # Corpus docs loaded at runtime (not baked into the image)
+      - ./data/Accomplishments_Inventory.docx:/srv/data/Accomplishments_Inventory.docx:ro
+    env_file:
+      - .env
+    restart: unless-stopped

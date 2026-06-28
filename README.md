@@ -51,7 +51,7 @@ might not be posted yet. Track them separately from discovery finds.
 | Storage | SQLite (local dev) · Modal Volume (production) |
 | UI | HTMX + Jinja2 templates, Tailwind CDN |
 | Notifications | Slack webhook (optional) |
-| Sheets | Google Sheets (optional — jobs can be managed entirely in-app) |
+| Inbound | Score a Job form (URL or pasted JD) · Automated ATS discovery scan |
 
 ---
 

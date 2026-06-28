@@ -74,25 +74,25 @@ can; point it at a mounted persistent disk so data survives restarts.
 ## Option A — Container / VM (recommended off Modal)
 
 The most direct port. A long-lived process with a persistent disk for the SQLite file.
+A `Dockerfile` and `docker-compose.yml` are included in the repo root.
 
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /srv
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-ENV DATABASE_PATH=/srv/data/recruiting.db
-EXPOSE 8000
-CMD ["gunicorn", "app.asgi:app", "-k", "uvicorn.workers.UvicornWorker", \
-     "-b", "0.0.0.0:8000", "--workers", "1", "--timeout", "120"]
+**Quick start:**
+
+```bash
+cp .env.example .env          # fill in APP_PASSWORD, SESSION_SECRET, and your LLM key
+docker compose up --build     # app at http://localhost:8000
 ```
 
-- Mount a volume at `/srv/data` so `recruiting.db` persists across restarts.
+The `docker-compose.yml` mounts `./data` at `/srv/data` so `recruiting.db` persists
+across restarts. Override `DATABASE_PATH` in `.env` to point elsewhere.
+
+**Key constraints:**
 - Keep `--workers 1` while on SQLite (WAL handles concurrent reads, but multiple
   worker processes writing one SQLite file invites lock contention). Scale out only
   after moving to Postgres.
-- The long `--timeout` accommodates the in-process research/sync described above.
-- Works on Fly.io, Render, Railway, a plain VPS, ECS/Cloud Run, etc.
+- The long `--timeout` (120 s) accommodates the in-process research/sync described above.
+- Works on Fly.io, Render, Railway, a plain VPS, ECS/Cloud Run, etc. — any host that
+  can run a Docker image and mount a persistent volume.
 
 ---
 

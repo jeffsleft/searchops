@@ -87,7 +87,7 @@
         </th>
         <th>Status</th>
         <th>Matches</th>
-        <th></th>
+        <th>Next</th>
       </tr></thead>
       <tbody>
         {% for co in companies %}
@@ -100,25 +100,19 @@
             <div style="display:flex;align-items:center;gap:10px;">
               {{ logo(co.name, 'sm') }}
               <div style="min-width:0;">
-                <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <div class="entity-name" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                   {% if co.website %}
-                  <a href="{{ co.website }}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;">
-                    {{ co.name }}
-                  </a>
+                  <a href="{{ co.website }}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;">{{ co.name }}</a>
                   {% else %}{{ co.name }}{% endif %}
                 </div>
                 {% if co.why_interesting %}
-                <div class="dim" style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">
-                  {{ co.why_interesting }}
-                </div>
+                <div class="entity-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">{{ co.why_interesting }}</div>
                 {% endif %}
               </div>
             </div>
           </td>
-          <td class="muted" style="font-size:12px;">{{ co.sector or '—' }}</td>
-          <td class="muted mono" style="font-size:11px;">
-            {{ co.funding_stage or '—' }}{% if co.headcount_estimate %} · {{ co.headcount_estimate }}{% endif %}
-          </td>
+          <td><div class="metaline">{{ co.sector or '—' }}</div></td>
+          <td><div class="metaline">{{ co.funding_stage or '—' }}{% if co.headcount_estimate %} · {{ co.headcount_estimate }}{% endif %}</div></td>
           <td>
             {%- if co.need_assessment == 'High' -%}
             <span class="tag green">High</span>
@@ -156,12 +150,15 @@
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;">
               {% if not co.research_date %}
-              <button class="btn btn-sm"
+              <button class="actionbtn ghost"
                       hx-post="/companies/{{ co.id }}/research"
                       hx-target="body"
                       hx-swap="none"
                       hx-indicator="this"
-                      hx-disabled-elt="this">Research</button>
+                      hx-disabled-elt="this">Research →</button>
+              {% elif co.status == 'Watchlist' or co.status == 'Researching' %}
+              <button class="actionbtn" type="button"
+                      onclick="event.stopPropagation();window.openOutreachPanel && window.openOutreachPanel(this.closest('tr'))">Draft outreach →</button>
               {% endif %}
               <form hx-post="/companies/{{ co.id }}/status"
                     hx-target="closest tr"
@@ -199,13 +196,10 @@
     </table>
   </div>
   {% else %}
-  <div class="card">
-    <div class="empty" style="padding:40px 24px;">
-      <strong>No companies in this view</strong>
-      <span style="display:block;margin-top:6px;color:var(--text-muted);font-size:12.5px;">
-        Switch tabs or add a target company below.
-      </span>
-    </div>
+  <div class="empty">
+    <div class="empty-mark">🎯</div>
+    <div class="empty-title">No companies in this view</div>
+    <div class="empty-sub">Switch tabs or use <strong>+ Add Company</strong> below to add a target.</div>
   </div>
   {% endif %}
 
@@ -218,7 +212,7 @@
   </summary>
   <div class="card" style="margin-top:8px;">
     <div class="card-head"><h3>Add Target Company</h3></div>
-    <form method="post" action="/companies" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+    <form hx-post="/companies" hx-swap="none" data-htmx-after="reload" style="padding:16px;display:flex;flex-direction:column;gap:12px;">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div>
           <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:6px;">Company Name *</label>

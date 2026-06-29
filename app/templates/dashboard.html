@@ -42,6 +42,25 @@
 
 <div id="score-result" style="margin-bottom:12px;"></div>
 
+{# ── Next-action hero ─────────────────────────────────────── #}
+{% if high %}
+<div class="next-band">
+  {% for job in high[:3] %}
+  {%- set score = job.final_score or 0 -%}
+  {%- set tier = 'dream' if score >= 9 else ('solid' if score >= 7 else 'worth') -%}
+  <a href="/job/{{ job.id }}" class="next-card {% if loop.first %}hot{% endif %}" style="text-decoration:none;color:inherit;">
+    <div class="next-card-label">{% if loop.first %}Do next · today{% else %}Also worth doing{% endif %}</div>
+    <div class="next-card-body">{{ job.company }}</div>
+    <div class="next-card-meta">{{ job.job_title or '—' }}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+      <span class="score-badge tier-{{ tier }}"><span class="dot"></span>{{ "%.1f"|format(score) }}</span>
+      <span class="actionbtn ghost" style="margin-left:auto;font-size:11px;min-height:24px;padding:3px 10px;">Open →</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
 {# ── Archetype filter ──────────────────────────────────────── #}
 <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
   <a href="?" class="pill {% if not selected_archetype %}active{% endif %}">All</a>
@@ -115,7 +134,7 @@
           <th>Score</th>
           <th style="width:120px">Breakdown</th>
           <th>Stage</th>
-          <th></th>
+          <th>Next action</th>
         </tr>
       </thead>
       <tbody>
@@ -127,16 +146,13 @@
             <div class="row" style="gap:10px;align-items:center;">
               {{ logo(job.company, 'sm') }}
               <div>
-                <div style="font-weight:500;font-size:13px;">{{ job.company }}</div>
-                <div class="dim" style="font-size:11px;">{{ job.job_title }}</div>
+                <div class="entity-name">{{ job.company }}</div>
+                <div class="entity-sub">{{ job.job_title }}</div>
               </div>
             </div>
           </td>
-          <td class="muted" style="font-size:12px;">
-            {{ job.sector or '—' }}
-            {% if job.role_archetype %}
-            <span class="stage dim" style="font-size:10px;margin-left:6px;">{{ job.role_archetype }}</span>
-            {% endif %}
+          <td>
+            <div class="metaline">{{ job.sector or '—' }}{% if job.role_archetype %} · {{ job.role_archetype }}{% endif %}</div>
           </td>
           <td>
             {%- set s = job.final_score or 0 -%}
@@ -174,8 +190,8 @@
             <span title="{{ job.notes[:80] }}" style="font-size:11px;margin-left:6px;opacity:0.7;cursor:default;">📝</span>
             {% endif %}
           </td>
-          <td>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.4;"><path d="m9 18 6-6-6-6"/></svg>
+          <td onclick="event.stopPropagation()">
+            <a href="/job/{{ job.id }}" class="actionbtn ghost" style="font-size:11px;min-height:26px;padding:3px 10px;">Open →</a>
           </td>
         </tr>
         {% endfor %}

@@ -22,6 +22,20 @@
   <button onclick="window.closeDiscoveredPanel && window.closeDiscoveredPanel()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
 </div>
 
+{% if not job.final_score and job.pipeline_stage in ('identified', 'discovered') %}
+<div class="action-rail">
+  <div class="action-rail-label">Next</div>
+  <div class="action-rail-why">Score this role to rank it in your pipeline</div>
+  <button class="actionbtn"
+          hx-post="/job/{{ job.id }}/fetch-and-score"
+          hx-target="#discovered-panel"
+          hx-swap="innerHTML"
+          hx-indicator="#discovered-panel">
+    Score it →
+  </button>
+</div>
+{% endif %}
+
 <div class="drawer-body prospect-body">
 
   <div class="dim mono" style="font-size:11px;letter-spacing:0.04em;margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">

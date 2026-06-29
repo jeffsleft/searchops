@@ -1,4 +1,4 @@
-# SearchOps — Reverse ATS
+# SearchOps
 
 A personal job search engine that flips the ATS model: instead of companies scoring
 you, you score companies against your own criteria, corpus, and career goals.

@@ -7,7 +7,8 @@
 {% from "components/_macros.html" import logo, stage_label %}
 
 {# ── Job header ───────────────────────────────────────────── #}
-<div class="drawer-head" style="position:static;border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:16px;">
+<div style="margin-bottom:16px;">
+<div class="detail-head">
   {{ logo(job.company, 'lg') }}
   <div style="flex:1;min-width:0;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
@@ -37,6 +38,21 @@
     </form>
     <a href="/pipeline" class="btn btn-sm btn-ghost">← Pipeline</a>
   </div>
+</div>
+{% if job.pipeline_stage not in ('i_declined', 'they_declined', 'job_listing_closed', 'duplicate', 'accepted') %}
+<div class="action-rail" style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-lg) var(--radius-lg);">
+  <div class="action-rail-label">Next</div>
+  <div class="action-rail-why">
+    {%- if job.pipeline_stage == 'applied' -%}Follow up if no response in 7 days
+    {%- elif job.pipeline_stage in ('phone_screen', 'first_interview', 'interviewing') -%}Prep your talking points
+    {%- elif job.pipeline_stage == 'offer' -%}Review and negotiate the offer
+    {%- elif job.pipeline_stage == 'researching' -%}Research the company before applying
+    {%- else -%}Score this role to rank it in your pipeline
+    {%- endif -%}
+  </div>
+  <a href="/prep/{{ job.id }}" class="actionbtn">Prep →</a>
+</div>
+{% endif %}
 </div>
 
 {# ── Tabs ─────────────────────────────────────────────────── #}
@@ -105,7 +121,7 @@
       <div class="spacer"></div>
       <span id="notes-save-indicator" style="font-size:11px;color:var(--accent);"></span>
     </div>
-    <div style="padding:8px 12px 12px;">
+    <div class="card-body">
       <form hx-post="/job/{{ job.id }}/notes"
             hx-trigger="change, keyup changed delay:1200ms"
             hx-swap="none">

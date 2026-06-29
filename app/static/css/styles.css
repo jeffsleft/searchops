@@ -37,6 +37,12 @@
   --shadow:    0 8px 24px -8px oklch(0% 0 0 / 0.5);
   --shadow-lg: 0 24px 60px -20px oklch(0% 0 0 / 0.6);
 
+  /* Compatibility aliases — some templates use these names */
+  --fg:      oklch(94% 0.011 82);   /* = --text */
+  --bg-card: oklch(23% 0.014 65);   /* = --bg-elev */
+  --card:    oklch(23% 0.014 65);   /* = --bg-elev */
+  --red-400: oklch(56% 0.13 25);    /* = --tier-pass (negative/error) */
+
   --row-h: 34px;
   --pad: 16px;
   --radius: 5px;
@@ -70,6 +76,15 @@
   --tier-skip:    oklch(50% 0.13 40);
   --tier-pass:    oklch(42% 0.13 25);
   --tier-reject:  oklch(44% 0.04 30);
+  /* Warm, lower-alpha shadows for light mode — no harsh gray halo */
+  --shadow-sm: 0 1px 2px oklch(40% 0.02 65 / 0.10);
+  --shadow:    0 8px 24px -8px oklch(35% 0.025 65 / 0.13);
+  --shadow-lg: 0 24px 60px -20px oklch(35% 0.025 65 / 0.16);
+  /* Compatibility aliases for light mode */
+  --fg:      oklch(20% 0.015 62);
+  --bg-card: oklch(100% 0.005 80);
+  --card:    oklch(100% 0.005 80);
+  --red-400: oklch(42% 0.13 25);
 }
 
 [data-density="compact"] { --row-h: 28px; --pad: 12px; }
@@ -181,7 +196,7 @@ a:hover { text-decoration: underline; }
 .content { flex: 1; overflow-y: auto; }
 .page { padding: 24px 32px; max-width: 1480px; margin: 0 auto; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; gap: 16px; }
-.page-head h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.02em; font-weight: 600; }
+.page-head h1 { margin: 0 0 4px; font-size: 23px; letter-spacing: -0.022em; font-weight: 600; }
 .page-head .sub { color: var(--text-muted); font-size: 13px; }
 .page-head > div:first-child { min-width: 0; }
 .page-head .row { flex-shrink: 0; }
@@ -189,10 +204,10 @@ a:hover { text-decoration: underline; }
 /* ====== Buttons ====== */
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 0 10px; height: 28px;
+  padding: 0 10px; height: 30px;
   border: 1px solid var(--border-strong);
   background: var(--bg-elev);
-  border-radius: 5px;
+  border-radius: 6px;
   font-size: 12px; font-weight: 500;
   white-space: nowrap;
   transition: background 0.1s, border-color 0.1s;
@@ -207,7 +222,7 @@ a:hover { text-decoration: underline; }
 .btn-ghost { background: transparent; border-color: transparent; }
 .btn-ghost:hover { background: var(--bg-hover); }
 .btn-sm { height: 24px; padding: 0 8px; font-size: 11px; }
-.btn-icon { padding: 0; width: 28px; justify-content: center; }
+.btn-icon { padding: 0; width: 30px; justify-content: center; }
 .btn-icon.btn-sm { width: 24px; }
 
 /* Theme toggle — show the icon for the currently-active theme */
@@ -447,7 +462,7 @@ a:hover { text-decoration: underline; }
   align-items: stretch;
 }
 .kanban-col {
-  flex: 0 0 280px;
+  flex: 0 0 268px;
   background: var(--bg-sunk);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -500,14 +515,7 @@ a:hover { text-decoration: underline; }
 .kcard .kfoot { display: flex; align-items: center; gap: 6px; }
 .kcard .stale { font-size: 10px; color: var(--tier-skip); font-family: var(--font-mono); }
 .kcard.unvetted::before {
-  content: "ETHICS";
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.15em;
-  color: var(--tier-skip);
-  font-weight: 600;
-  margin-bottom: 2px;
+  content: none; /* label now rendered inline as .kcard-ethics-label */
 }
 .kcard.unvetted { box-shadow: inset 3px 0 0 var(--tier-skip); }
 
@@ -568,6 +576,15 @@ a:hover { text-decoration: underline; }
   padding: 16px 22px 12px;
   border-bottom: 1px solid var(--border);
   display: flex; align-items: flex-start; gap: 14px;
+}
+/* Standalone job-detail page header — same layout as drawer-head but card-style */
+.detail-head {
+  padding: 16px 20px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex; align-items: flex-start; gap: 14px;
+  margin-bottom: 0;
+  background: var(--bg-elev);
 }
 .drawer-tabs {
   display: flex; gap: 0;
@@ -724,6 +741,7 @@ a:hover { text-decoration: underline; }
 }
 .logo-sq.sm { width: 22px; height: 22px; font-size: 9.5px; border-radius: 4px; }
 .logo-sq.lg { width: 38px; height: 38px; font-size: 13px; border-radius: 7px; }
+[data-theme="light"] .logo-sq { background: oklch(58% 0.13 var(--logo-hue, 130)); }
 
 /* Filter bar */
 .filterbar {
@@ -1861,3 +1879,161 @@ a:hover { text-decoration: underline; }
 .content:has(.prep-shell) { overflow: hidden; }
 .content:has(.prep-shell) > div { height: 100%; }
 .prep-shell { height: 100%; }
+
+/* ====================================================
+   Next-action design system — added polish pass
+   ==================================================== */
+
+/* Entity name / role hierarchy */
+.entity-name {
+  font-size: 14px; font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+.entity-sub {
+  font-size: 11.5px; color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* Secondary metadata chip — mono, dim, small */
+.metaline {
+  font-family: var(--font-mono);
+  font-size: 10.5px; color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* ---- Next-action button: primary / ghost variants ---- */
+.actionbtn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; min-height: 30px;
+  background: var(--accent); color: var(--accent-fg);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 11.5px; font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.actionbtn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.actionbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.actionbtn.ghost {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.actionbtn.ghost:hover {
+  background: var(--accent-soft);
+}
+
+/* ---- Dashboard next-action hero ---- */
+.next-band {
+  display: flex; gap: 10px;
+  margin-bottom: 20px;
+}
+.next-card {
+  flex: 1; min-width: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 6px;
+  box-shadow: var(--shadow-sm);
+}
+.next-card.hot {
+  border-color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 6%, var(--bg-elev));
+}
+.next-card.warn {
+  border-color: var(--rust);
+  background: color-mix(in oklch, var(--rust) 6%, var(--bg-elev));
+}
+.next-card-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+.next-card.hot .next-card-label { color: var(--accent); }
+.next-card.warn .next-card-label { color: var(--rust); }
+.next-card-body {
+  font-size: 13px; font-weight: 500;
+  color: var(--text);
+  line-height: 1.35;
+}
+.next-card-meta {
+  font-size: 11px; color: var(--text-muted);
+}
+
+/* ---- Stage-aware action rail on Job Detail ---- */
+.action-rail {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-sunk);
+  border-bottom: 1px solid var(--border);
+}
+.action-rail-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-dim);
+}
+.action-rail-why {
+  flex: 1; min-width: 0;
+  font-size: 12px; color: var(--text-muted);
+}
+
+/* ---- Composed empty states ---- */
+.empty-mark {
+  width: 48px; height: 48px;
+  margin: 0 auto 14px;
+  border: 2px dashed var(--border-strong);
+  border-radius: 10px;
+  display: grid; place-items: center;
+  color: var(--text-dim);
+  font-size: 18px;
+}
+.empty-title {
+  font-size: 13.5px; font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
+.empty-sub {
+  font-size: 12px; color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+/* Override the base .empty text-alignment for composed usage */
+.empty { padding: 48px 24px; text-align: center; color: var(--text-dim); font-size: 13px; }
+
+/* ---- Kanban card next-action footer ---- */
+.knext {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.knext .actionbtn {
+  width: 100%;
+  justify-content: center;
+  font-size: 11px;
+  min-height: 26px;
+  padding: 4px 8px;
+}
+
+/* ---- Layer row (settings methodology) ---- */
+.layer-row {
+  background: var(--bg-sunk);
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border-left: 4px solid var(--accent);
+  margin-bottom: 8px;
+}
+.layer-row + .layer-row { margin-top: 0; }
+
+/* ---- Kanban ETHICS unvetted label ---- */
+.kcard-ethics-label {
+  font-family: var(--font-mono);
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--rust);
+  margin-bottom: -2px;
+}

@@ -40,7 +40,7 @@
 <!-- Add Target Form -->
 <div id="add-target-form" style="display:none;margin-bottom:18px;">
   <div class="card" style="padding:16px;">
-    <form hx-post="/targets" hx-target="body" hx-swap="outerHTML">
+    <form hx-post="/targets" hx-target="#targets-split" hx-select="#targets-split" hx-swap="outerHTML" hx-push-url="true">
       <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;">
         <div>
           <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px;">Company Name</label>
@@ -68,7 +68,8 @@
     {% for val, label in tabs %}
     <button aria-pressed="{{ 'true' if tab == val else 'false' }}"
             hx-get="/targets?tab={{ val }}"
-            hx-target="body"
+            hx-target="#targets-split"
+            hx-select="#targets-split"
             hx-swap="outerHTML"
             hx-push-url="true">
       {{ label }} · {{ counts.get(val, 0) }}
@@ -84,11 +85,11 @@
       {% set base = '/targets?tab=' ~ tab %}
       <th{% if w %} style="width:{{ w }};"{% endif %}>
         {% if sort == col and order == 'asc' %}
-          <button type="button" hx-get="{{ base }}&sort={{ col }}&order=desc" hx-target="body" hx-swap="outerHTML" hx-push-url="true">{{ label }} ↑</button>
+          <button type="button" hx-get="{{ base }}&sort={{ col }}&order=desc" hx-target="#targets-split" hx-select="#targets-split" hx-swap="outerHTML" hx-push-url="true">{{ label }} ↑</button>
         {% elif sort == col and order == 'desc' %}
-          <button type="button" hx-get="{{ base }}" hx-target="body" hx-swap="outerHTML" hx-push-url="true">{{ label }} ↓</button>
+          <button type="button" hx-get="{{ base }}" hx-target="#targets-split" hx-select="#targets-split" hx-swap="outerHTML" hx-push-url="true">{{ label }} ↓</button>
         {% else %}
-          <button type="button" hx-get="{{ base }}&sort={{ col }}&order=asc" hx-target="body" hx-swap="outerHTML" hx-push-url="true">{{ label }}</button>
+          <button type="button" hx-get="{{ base }}&sort={{ col }}&order=asc" hx-target="#targets-split" hx-select="#targets-split" hx-swap="outerHTML" hx-push-url="true">{{ label }}</button>
         {% endif %}
       </th>
     {% endmacro %}

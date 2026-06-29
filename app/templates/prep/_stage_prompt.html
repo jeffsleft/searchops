@@ -4,7 +4,7 @@
     <strong>{{ active_job.company }}</strong> is at <em>{{ active_job.pipeline_stage|replace('_', ' ')|title }}</em> — add a <strong>{{ stage_prompt_type.label }}</strong> session?
   </span>
   <div class="spacer"></div>
-  <button class="btn btn-sm" hx-post="/prep/{{ active_job.id }}/sessions" hx-vals='{"type_id":"{{ stage_prompt_type_id }}"}' hx-target=".prep-shell" hx-swap="outerHTML">
-    <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor"><path d="M5.5 0v11M0 5.5h11"/></svg> Add {{ stage_prompt_type.short }} session
+  <button class="actionbtn" hx-post="/prep/{{ active_job.id }}/sessions" hx-vals='{"type_id":"{{ stage_prompt_type_id }}"}' hx-target=".prep-shell" hx-swap="outerHTML">
+    + Add {{ stage_prompt_type.short }} session
   </button>
 </div>

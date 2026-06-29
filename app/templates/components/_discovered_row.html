@@ -11,8 +11,8 @@
     <div style="display:flex;align-items:center;gap:10px;">
       {{ logo(j.company, 'sm') }}
       <div style="min-width:0;">
-        <div style="font-weight:500;">{{ j.job_title or 'Untitled role' }}</div>
-        <div class="dim" style="font-size:11px;">{{ j.company }}</div>
+        <div class="entity-name" style="font-size:13px;">{{ j.job_title or 'Untitled role' }}</div>
+        <div class="entity-sub">{{ j.company }}</div>
       </div>
     </div>
   </td>

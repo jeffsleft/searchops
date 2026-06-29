@@ -8,12 +8,14 @@
   <button aria-pressed="{{ 'true' if view != 'funnel' else 'false' }}"
           hx-get="/pipeline?view=kanban"
           hx-target="#pipeline-content"
-          hx-swap="innerHTML"
+          hx-select="#pipeline-content"
+          hx-swap="outerHTML"
           hx-push-url="true">Kanban</button>
   <button aria-pressed="{{ 'true' if view == 'funnel' else 'false' }}"
           hx-get="/pipeline?view=funnel"
           hx-target="#pipeline-content"
-          hx-swap="innerHTML"
+          hx-select="#pipeline-content"
+          hx-swap="outerHTML"
           hx-push-url="true">Funnel</button>
 </div>
 {% endblock %}

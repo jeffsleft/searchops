@@ -22,7 +22,7 @@ from app.scoring.research import research_interviewer, coach_interview
 from app.providers import get_provider
 from app.interview.drive_sync import append_questions_to_prep_doc
 from app.pipeline.tracker import (
-    STAGES, advance_stage, get_stale_pipeline,
+    STAGES, advance_stage,
     I_DECLINED_REASONS, THEY_DECLINED_REASONS, JOB_CLOSED_REASONS, DUPLICATE_REASONS,
 )
 from app.pipeline.followups import get_followups_due
@@ -52,7 +52,7 @@ from app.routes_prep import (
     question_they_ask_generate, red_flag_create, red_flag_delete, anchor_pin, anchor_unpin,
     session_draft, transcript_analyze, cheat_sheet_print, prep_palette,
 )
-from app.pipeline.prep import get_upcoming_interviews
+
 
 VALID_ARCHETYPES = {"GTM Ops", "CS Ops", "RevOps", "Finance Ops", "Strategy", "IC-Heavy", "Other"}
 
@@ -586,10 +586,13 @@ async def job_research_panel(request: Request):
 def _render_brief_html(content: str) -> str:
     import re as _re
     content = _html.escape(content)
-    content = _re.sub(r"^## (.+)$", lambda m: f'<h3 class="text-sm font-semibold text-gray-400 mt-4 mb-1">{m.group(1)}</h3>', content, flags=_re.MULTILINE)
-    content = _re.sub(r"^# (.+)$", lambda m: f'<h2 class="text-base font-bold text-white mb-2">{m.group(1)}</h2>', content, flags=_re.MULTILINE)
-    content = _re.sub(r"^- (.+)$", lambda m: f'<li class="text-sm text-gray-300 ml-4">{m.group(1)}</li>', content, flags=_re.MULTILINE)
-    return f'<div class="text-sm space-y-1">{content}</div>'
+    # Most-specific heading level first so ## doesn't eat the # in ###
+    content = _re.sub(r"^### (.+)$", lambda m: f'<h4 style="font-size:10.5px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 4px 0;">{m.group(1)}</h4>', content, flags=_re.MULTILINE)
+    content = _re.sub(r"^## (.+)$",  lambda m: f'<h3 style="font-size:13px;font-weight:600;color:var(--text);margin:18px 0 6px 0;">{m.group(1)}</h3>', content, flags=_re.MULTILINE)
+    content = _re.sub(r"^# (.+)$",   lambda m: f'<h2 style="font-size:15px;font-weight:700;color:var(--text);margin:0 0 12px 0;">{m.group(1)}</h2>', content, flags=_re.MULTILINE)
+    content = _re.sub(r"^- (.+)$",   lambda m: f'<li style="font-size:13px;color:var(--text-muted);margin-left:16px;list-style:disc;">{m.group(1)}</li>', content, flags=_re.MULTILINE)
+    content = _re.sub(r'\*\*(.+?)\*\*', lambda m: f'<strong>{m.group(1)}</strong>', content)
+    return f'<div style="font-size:13px;line-height:1.7;color:var(--text);">{content}</div>'
 
 
 async def job_brief_panel(request: Request):
@@ -1312,7 +1315,7 @@ async def recruiter_detail(request: Request):
 
 async def recruiters_add(request: Request):
     form = await request.form()
-    r_id = add_recruiter(
+    add_recruiter(
         name=form.get("name",""), firm=form.get("firm",""),
         linkedin_url=form.get("linkedin_url",""), email=form.get("email",""),
         phone=form.get("phone",""), specialty=form.get("specialty",""),
@@ -2219,7 +2222,7 @@ async def admin_retry_stubs(request: Request):
     try:
         _reset_exhausted_stubs()
         _retry_stubs([])
-        return HTMLResponse(f'<span style="font-size:13px;">✅ Retried stubs. <a href="/discovered" style="text-decoration:underline;">Check Discovered →</a></span>')
+        return HTMLResponse('<span style="font-size:13px;">✅ Retried stubs. <a href="/discovered" style="text-decoration:underline;">Check Discovered →</a></span>')
     except Exception as e:
         logging.error("admin_retry_stubs error: %s", e)
         return HTMLResponse(f'<span style="color:var(--tier-pass);font-size:13px;">❌ Retry failed: {_html.escape(str(e))}</span>')

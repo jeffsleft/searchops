@@ -1,0 +1,20 @@
+<div style="display:flex;gap:10px;margin-bottom:10px;">
+  <a href="/job/{{ job_id }}/cover-letter" target="_blank"
+     style="font-size:12px;background:var(--accent);color:#fff;padding:4px 10px;border-radius:4px;text-decoration:none;">Print / Preview</a>
+  <a href="/job/{{ job_id }}/cover-letter/download"
+     style="font-size:12px;background:var(--bg-sunk);color:var(--text);padding:4px 10px;border-radius:4px;text-decoration:none;border:1px solid var(--border);">⬇ Download .docx</a>
+  <button hx-post="/job/{{ job_id }}/cover-letter" hx-target="#cover-letter-body" hx-swap="innerHTML"
+     style="font-size:12px;background:none;color:var(--text-dim);border:1px solid var(--border);padding:4px 10px;border-radius:4px;cursor:pointer;">↻ Regenerate</button>
+</div>
+<div style="background:var(--bg-sunk);padding:14px 16px;border-radius:var(--radius);font-family:var(--font-serif);">
+  <div style="font-size:13px;font-weight:600;margin-bottom:8px;">{{ cl.salutation }}</div>
+  {% for para in cl.body %}
+  <p style="font-size:13px;line-height:1.65;margin:0 0 10px;">{{ para }}</p>
+  {% endfor %}
+  <div style="font-size:13px;margin-top:10px;">{{ cl.closing or "Sincerely," }}</div>
+</div>
+{% if voice and voice.enabled %}
+<div class="dim" style="font-size:11px;margin-top:8px;">
+  Voice: {{ voice.guide }} · {% if voice_removed %}{{ voice_removed }} AI-tell{{ "" if voice_removed == 1 else "s" }} removed{% else %}no AI-tells found{% endif %}
+</div>
+{% endif %}

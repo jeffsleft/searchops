@@ -134,6 +134,47 @@
     </div>
   </div>
 
+  {# ── Outcome Tracking ───────────────────────────────────── #}
+  <div class="card">
+    <div class="card-head"><h3>Outcome</h3></div>
+    <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+      <form hx-post="/job/{{ job.id }}/outcome"
+            hx-target="#outcome-list"
+            hx-swap="outerHTML"
+            style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:11px;color:var(--text-dim);">Outcome</label>
+          <select name="outcome" class="select" style="font-size:13px;">
+            <option value="">— select —</option>
+            <option value="applied">Applied</option>
+            <option value="phone_screen">Phone screen</option>
+            <option value="interview">Interview</option>
+            <option value="offer">Offer</option>
+            <option value="rejected_them">I declined them</option>
+            <option value="rejected_me">They declined me</option>
+            <option value="ghosted">Ghosted</option>
+          </select>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;">
+          <label style="font-size:11px;color:var(--text-dim);">Notes (optional)</label>
+          <input name="notes" type="text" class="input" placeholder="e.g. After panel round" style="font-size:13px;">
+        </div>
+        <button type="submit" class="btn btn-sm" style="flex-shrink:0;">Record</button>
+      </form>
+      <div id="outcome-list">
+        {% for o in job_outcomes %}
+        <div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">
+          <span style="flex:0 0 110px;color:var(--text-dim);white-space:nowrap;">{{ o.recorded_at[:16] }}</span>
+          <span style="flex:0 0 120px;font-weight:500;color:var(--fg);">{{ o.outcome }}</span>
+          <span style="flex:1;color:var(--text-dim);">{{ o.notes or "" }}</span>
+        </div>
+        {% else %}
+        <div class="muted" style="font-size:12px;">No outcomes recorded yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
     <div class="card">
       <div class="card-head"><h3>Pros</h3></div>

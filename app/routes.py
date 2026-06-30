@@ -28,6 +28,7 @@ from app.pipeline.tracker import (
 from app.pipeline.followups import get_followups_due
 from app.pipeline.calibration import compute_calibration
 from app.pipeline.patterns import compute_patterns
+from app.services.calibration_service import record_outcome, get_calibration_summary, get_job_outcomes
 from app.recruiters.crm import add_recruiter, log_contact, get_all_recruiters, get_stale_recruiters
 from app.services.research_service import do_research_company, derive_signals
 from app.services.scoring_service import (
@@ -301,6 +302,7 @@ async def job_detail(request: Request):
         they_declined_reasons=THEY_DECLINED_REASONS,
         job_closed_reasons=JOB_CLOSED_REASONS,
         duplicate_reasons=DUPLICATE_REASONS,
+        job_outcomes=get_job_outcomes(job_id),
     )
 
 
@@ -431,34 +433,13 @@ def _cover_letter_fragment(job_id: int, cl: dict) -> str:
             f'<div style="color:var(--tier-pass);font-size:13px;">'
             f'❌ {_html.escape(str(cl["error"])[:160])}</div>'
         )
-    paras = "".join(
-        f'<p style="font-size:13px;line-height:1.65;margin:0 0 10px;">{_html.escape(p)}</p>'
-        for p in cl.get("body", [])
-    )
     v = cl.get("voice") or {}
-    voice_note = ""
-    if v.get("enabled"):
-        removed = max(0, (v.get("before", 0) - v.get("after", 0)))
-        detail = f"{removed} AI-tell{'' if removed == 1 else 's'} removed" if removed else "no AI-tells found"
-        voice_note = (
-            f'<div class="dim" style="font-size:11px;margin-top:8px;">'
-            f'Voice: {_html.escape(str(v.get("guide", "")))} · {detail}</div>'
-        )
-    return (
-        f'<div style="display:flex;gap:10px;margin-bottom:10px;">'
-        f'  <a href="/job/{job_id}/cover-letter" target="_blank" '
-        f'     style="font-size:12px;background:var(--accent);color:#fff;padding:4px 10px;border-radius:4px;text-decoration:none;">Print / Preview</a>'
-        f'  <a href="/job/{job_id}/cover-letter/download" '
-        f'     style="font-size:12px;background:var(--bg-sunk);color:var(--text);padding:4px 10px;border-radius:4px;text-decoration:none;border:1px solid var(--border);">⬇ Download .docx</a>'
-        f'  <button hx-post="/job/{job_id}/cover-letter" hx-target="#cover-letter-body" hx-swap="innerHTML" '
-        f'     style="font-size:12px;background:none;color:var(--text-dim);border:1px solid var(--border);padding:4px 10px;border-radius:4px;cursor:pointer;">↻ Regenerate</button>'
-        f'</div>'
-        f'<div style="background:var(--bg-sunk);padding:14px 16px;border-radius:var(--radius);font-family:var(--font-serif);">'
-        f'<div style="font-size:13px;font-weight:600;margin-bottom:8px;">{_html.escape(cl.get("salutation",""))}</div>'
-        f'{paras}'
-        f'<div style="font-size:13px;margin-top:10px;">{_html.escape(cl.get("closing","Sincerely,"))}</div>'
-        f'</div>'
-        f'{voice_note}'
+    voice_removed = max(0, (v.get("before", 0) - v.get("after", 0))) if v.get("enabled") else 0
+    return jinja.get_template("components/cover_letter_fragment.html").render(
+        job_id=job_id,
+        cl=cl,
+        voice=v,
+        voice_removed=voice_removed,
     )
 
 
@@ -601,15 +582,7 @@ async def job_brief_panel(request: Request):
         row = conn.execute("SELECT content FROM strategy_briefs WHERE job_id = ?", (job_id,)).fetchone()
     if not row:
         return HTMLResponse(
-            f'<div style="display:flex;flex-direction:column;gap:12px;align-items:flex-start;">'
-            f'<div class="muted" style="font-size:13px;">No brief yet.</div>'
-            f'<button hx-post="/job/{job_id}/generate-brief"'
-            f'        hx-target="closest .card-body"'
-            f'        hx-swap="innerHTML"'
-            f'        style="font-size:13px;background:var(--accent);color:#fff;border:none;padding:7px 18px;border-radius:var(--radius);cursor:pointer;">'
-            f'  Generate brief'
-            f'</button>'
-            f'</div>'
+            jinja.get_template("components/job_brief_no_brief.html").render(job_id=job_id)
         )
     return HTMLResponse(_render_brief_html(row["content"]))
 
@@ -2484,20 +2457,45 @@ async def api_task_status(request: Request):
         return HTMLResponse('<div class="dim" style="font-size:12px;padding:8px 0;">No background tasks recorded yet.</div>')
 
     STATUS_ICON = {"started": "⏳", "completed": "✅", "failed": "❌", "partial": "⚠️"}
+    tmpl = jinja.get_template("components/task_log_row.html")
     lines = []
     for r in rows:
         icon = STATUS_ICON.get(r["status"], "•")
         ts = (r["logged_at"] or "")[:16]
         name = _html.escape(r["entity_name"] or "")
         msg = _html.escape(r["message"] or "")
-        lines.append(
-            f'<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">'
-            f'<span style="flex:0 0 16px">{icon}</span>'
-            f'<span class="dim" style="flex:0 0 130px;white-space:nowrap;">{ts}</span>'
-            f'<span style="flex:1;color:var(--fg);">{name or msg}</span>'
-            f'</div>'
-        )
+        lines.append(tmpl.render(icon=icon, ts=ts, label=name or msg))
     return HTMLResponse("".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# Calibration
+# ---------------------------------------------------------------------------
+
+async def settings_calibration(request: Request):
+    summary = get_calibration_summary()
+    pipeline_calibration = compute_calibration()
+    return render(
+        "calibration.html",
+        request=request,
+        summary=summary,
+        pipeline_calibration=pipeline_calibration,
+    )
+
+
+async def job_record_outcome(request: Request):
+    job_id = int(request.path_params["job_id"])
+    form = await request.form()
+    outcome = (form.get("outcome") or "").strip()
+    notes = (form.get("notes") or "").strip() or None
+    try:
+        record_outcome(job_id, outcome, notes)
+    except ValueError as e:
+        return HTMLResponse(f'<div style="color:var(--tier-pass);font-size:13px;">❌ {_html.escape(str(e))}</div>', status_code=400)
+    outcomes = get_job_outcomes(job_id)
+    tmpl = jinja.get_template("components/outcome_row.html")
+    rows = "".join(tmpl.render(o=o) for o in outcomes)
+    return HTMLResponse(f'<div id="outcome-list">{rows}</div>')
 
 
 # ---------------------------------------------------------------------------
@@ -2637,6 +2635,8 @@ def create_app(batch_research_fn=None) -> Starlette:
         Route("/api/discovery/scan",          api_discovery_scan,    methods=["POST"]),
         Route("/api/task-status",             api_task_status,        methods=["GET"]),
         Route("/api/sync-status",             api_sync_status,        methods=["GET"]),
+        Route("/settings/calibration",        settings_calibration,   methods=["GET"]),
+        Route("/job/{job_id:int}/outcome",    job_record_outcome,     methods=["POST"]),
     ]
 
     app = Starlette(

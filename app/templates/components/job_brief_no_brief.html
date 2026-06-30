@@ -1,0 +1,9 @@
+<div style="display:flex;flex-direction:column;gap:12px;align-items:flex-start;">
+  <div class="muted" style="font-size:13px;">No brief yet.</div>
+  <button hx-post="/job/{{ job_id }}/generate-brief"
+          hx-target="closest .card-body"
+          hx-swap="innerHTML"
+          style="font-size:13px;background:var(--accent);color:#fff;border:none;padding:7px 18px;border-radius:var(--radius);cursor:pointer;">
+    Generate brief
+  </button>
+</div>

@@ -350,6 +350,17 @@ CREATE INDEX IF NOT EXISTS idx_strategy_briefs_job ON strategy_briefs(job_id);
 CREATE INDEX IF NOT EXISTS idx_interviews_job     ON interviews(job_id);
 CREATE INDEX IF NOT EXISTS idx_companies_status   ON companies(status);
 CREATE INDEX IF NOT EXISTS idx_companies_name     ON companies(name);
+
+-- Calibration: tracks real-world outcomes for scored jobs so we can measure
+-- how well Layer 2/3 scores predict interview conversion and final outcomes.
+CREATE TABLE IF NOT EXISTS application_outcomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL REFERENCES jobs(id),
+    outcome TEXT NOT NULL,  -- 'applied','phone_screen','interview','offer','rejected_them','rejected_me','ghosted'
+    notes TEXT,
+    recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_application_outcomes_job ON application_outcomes(job_id);
 """
 
 

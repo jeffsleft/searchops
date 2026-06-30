@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Calibration — Recruiting Engine{% endblock %}
+{% block page_title %}Calibration{% endblock %}
+
+{% block content %}
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Score Calibration</h1>
+    <div class="sub">How well do predicted scores and interview probability match actual outcomes?</div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:24px;max-width:860px;">
+
+  <!-- Pipeline-stage calibration (from compute_calibration) -->
+  <div class="card">
+    <div class="card-head">By Interview Probability</div>
+    <div class="card-body">
+      {% if pipeline_calibration.total == 0 %}
+      <div class="muted" style="font-size:13px;">No pipeline data yet.</div>
+      {% else %}
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead>
+          <tr style="color:var(--text-dim);text-align:left;">
+            <th style="padding:4px 10px 4px 0;font-weight:500;">Prediction</th>
+            <th style="padding:4px 10px;font-weight:500;">Total</th>
+            <th style="padding:4px 10px;font-weight:500;">Got Interview</th>
+            <th style="padding:4px 10px;font-weight:500;">Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in pipeline_calibration.by_probability %}
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:6px 10px 6px 0;">{{ row.label }}</td>
+            <td style="padding:6px 10px;">{{ row.total }}</td>
+            <td style="padding:6px 10px;">{{ row.got_interview }}</td>
+            <td style="padding:6px 10px;">{{ "%.0f"|format(row.rate) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">By Score Band</div>
+    <div class="card-body">
+      {% if pipeline_calibration.total == 0 %}
+      <div class="muted" style="font-size:13px;">No pipeline data yet.</div>
+      {% else %}
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead>
+          <tr style="color:var(--text-dim);text-align:left;">
+            <th style="padding:4px 10px 4px 0;font-weight:500;">Score Band</th>
+            <th style="padding:4px 10px;font-weight:500;">Total</th>
+            <th style="padding:4px 10px;font-weight:500;">Got Interview</th>
+            <th style="padding:4px 10px;font-weight:500;">Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in pipeline_calibration.by_score %}
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:6px 10px 6px 0;">{{ row.label }}</td>
+            <td style="padding:6px 10px;">{{ row.total }}</td>
+            <td style="padding:6px 10px;">{{ row.got_interview }}</td>
+            <td style="padding:6px 10px;">{{ "%.0f"|format(row.rate) }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Explicit outcome breakdown (from application_outcomes table) -->
+  <div class="card">
+    <div class="card-head">Recorded Outcomes</div>
+    <div class="card-body">
+      {% if summary.total_outcomes == 0 %}
+      <div class="muted" style="font-size:13px;">No outcomes recorded yet. Use the outcome form on each job detail page.</div>
+      {% else %}
+      <div class="sub" style="margin-bottom:12px;">{{ summary.total_outcomes }} outcome{{ "s" if summary.total_outcomes != 1 }} recorded across {{ summary.total_scored }} scored jobs.</div>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead>
+          <tr style="color:var(--text-dim);text-align:left;">
+            <th style="padding:4px 10px 4px 0;font-weight:500;">Outcome</th>
+            <th style="padding:4px 10px;font-weight:500;">Count</th>
+            <th style="padding:4px 10px;font-weight:500;">Avg Score</th>
+            <th style="padding:4px 10px;font-weight:500;">Range</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in summary.breakdown %}
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:6px 10px 6px 0;">{{ row.outcome }}</td>
+            <td style="padding:6px 10px;">{{ row.cnt }}</td>
+            <td style="padding:6px 10px;">{{ row.avg_score }}</td>
+            <td style="padding:6px 10px;">{{ row.min_score }}–{{ row.max_score }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}

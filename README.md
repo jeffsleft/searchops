@@ -5,6 +5,20 @@ you, you score companies against your own criteria, corpus, and career goals.
 
 Built for one job search. Designed to be forked for yours.
 
+## Why I built this
+
+Standard job searching is backwards. You apply to hundreds of roles, most fit lands in a spreadsheet or an ATS, and you're left hoping that scoring someone else's algorithm gets it right. I built SearchOps because I wanted to flip it: score the companies and roles against my own career, my criteria, and what I'm actually looking for.
+
+The first version was bad. It took the JD, pulled a generic 4-line candidate summary, ran a Gemini call that returned a score with a ±1.0 nudge applied. I called it AI scoring. It was a spreadsheet with a chat window. The problem was obvious once I stopped building and started using it: the score had no grounding in anything I'd actually done. It couldn't connect "you managed a $50M renewal cohort" to "this role needs someone who's scaled CS ops." So I rebuilt.
+
+Track B grounds the score in evidence. It pulls from my Accomplishments Inventory (a structured record of every metric, project, and outcome from fifteen years), runs a 32-row evidence table that matches JD requirements to specific work history, and generates tailored resume bullets and cover letter hooks. The Accomplishments Inventory is the core move. Everything else flows from there.
+
+It works. Ninety jobs scored. Only 6 of 90 cleared the 8+ bar I set. Tier A targets like Anthropic, Cohere, Weights & Biases running daily ATS scans. Staging interviews. The rest is handled automatically: tracking the pipeline, prepping per-company question banks, generating tailored application materials.
+
+Fork it if it helps. The real move is the method: ground your scoring in evidence from your actual work history, not summary keywords.
+
+---
+
 ## What it does
 
 - **Scores jobs on a 0–10 scale** across four layers: auto-reject rules, LLM match

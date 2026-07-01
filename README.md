@@ -46,6 +46,10 @@ Scoring is calibrated to be ruthless: an 8+ is rare. Most roles land 3–6.
 
 ![SearchOps scoring methodology showing four-layer architecture](docs/screenshots/methodology.png)
 
+**Match Analysis** — 32-row evidence table mapping each JD requirement to a specific accomplishment with a strength rating. This becomes the cover letter.
+
+![SearchOps match analysis showing 32-row evidence table](docs/screenshots/evidence-table.png)
+
 ---
 
 ## Three ways to add jobs

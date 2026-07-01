@@ -269,6 +269,18 @@ a:hover { text-decoration: underline; }
   letter-spacing: -0.01em;
 }
 .score-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* Job Detail "score receipt" — large tier-colored final-score treatment.
+   Pair with a .tier-* class (below) for color/border/background, same
+   pattern as .score-badge. */
+.score-xl {
+  display: inline-block;
+  font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums;
+  font-size: 34px; line-height: 1; letter-spacing: -0.03em;
+  padding: 6px 14px; border-radius: 8px;
+  border: 1px solid;
+}
+
 .tier-dream { color: var(--tier-dream); border-color: color-mix(in oklch, var(--tier-dream) 35%, transparent); background: color-mix(in oklch, var(--tier-dream) 10%, transparent); }
 .tier-dream .dot { background: var(--tier-dream); }
 .tier-solid { color: var(--tier-solid); border-color: color-mix(in oklch, var(--tier-solid) 35%, transparent); background: color-mix(in oklch, var(--tier-solid) 9%, transparent); }
@@ -281,6 +293,15 @@ a:hover { text-decoration: underline; }
 .tier-pass  .dot { background: var(--tier-pass); }
 .tier-reject { color: var(--text-dim); border-color: var(--border); background: transparent; text-decoration: line-through; text-decoration-thickness: 1px; }
 .tier-reject .dot { background: var(--text-dim); }
+
+/* Score-tier legend (Settings → Methodology) */
+.tier-legend { display: flex; flex-direction: column; }
+.tier-legend .tl-row {
+  display: grid; grid-template-columns: 70px 110px 1fr;
+  align-items: center; gap: 14px; padding: 9px 0;
+  border-bottom: 1px dashed var(--border); font-size: 12.5px;
+}
+.tier-legend .tl-row:last-child { border-bottom: none; }
 
 /* Score breakdown bar */
 .score-bar {
@@ -2028,6 +2049,16 @@ a:hover { text-decoration: underline; }
   margin-bottom: 8px;
 }
 .layer-row + .layer-row { margin-top: 0; }
+.layer-badge {
+  display: inline-block;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+  color: var(--accent);
+  border: 1px solid color-mix(in oklch, var(--accent) 30%, transparent);
+  border-radius: 5px; padding: 3px 8px;
+  text-align: center;
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
+  margin-right: 8px;
+}
 
 /* ---- Kanban ETHICS unvetted label ---- */
 .kcard-ethics-label {

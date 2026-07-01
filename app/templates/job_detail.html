@@ -270,8 +270,15 @@
     <div class="card-body" style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;">
       <div>
         <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:6px;">Final score</div>
-        <div class="mono tnum" style="font-size:42px;font-weight:600;line-height:1;letter-spacing:-.03em;">
-          {% if job.auto_rejected %}—{% else %}{{ "%.1f"|format(job.final_score or 0) }}{% endif %}
+        {%- set s = job.final_score or 0 -%}
+        <div class="score-xl
+          {%- if job.auto_rejected %} tier-reject
+          {%- elif s >= 9 %} tier-dream
+          {%- elif s >= 7 %} tier-solid
+          {%- elif s >= 5 %} tier-worth
+          {%- elif s >= 3 %} tier-skip
+          {%- else %} tier-pass{%- endif %}">
+          {% if job.auto_rejected %}—{% else %}{{ "%.1f"|format(s) }}{% endif %}
         </div>
         <div class="mono dim" style="font-size:11px;margin-top:4px;">/ 10.0 · {{ job.tier }}</div>
       </div>

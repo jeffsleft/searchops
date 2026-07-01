@@ -36,6 +36,18 @@ Scoring is calibrated to be ruthless: an 8+ is rare. Most roles land 3–6.
 
 ---
 
+## Screenshots
+
+**Dashboard** — active jobs, pipeline stage counts, avg score, new discoveries, and follow-up queue.
+
+![SearchOps dashboard showing active jobs and pipeline metrics](docs/screenshots/dashboard.png)
+
+**Scoring Methodology** — the four-layer architecture documented in the app. Every weight, every signal, every override is visible here.
+
+![SearchOps scoring methodology showing four-layer architecture](docs/screenshots/methodology.png)
+
+---
+
 ## Three ways to add jobs
 
 ### 1. Add by URL (default — no setup required)

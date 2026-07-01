@@ -13,7 +13,7 @@ The first version was bad. It took the JD, pulled a generic 4-line candidate sum
 
 Track B grounds the score in evidence. It pulls from my Accomplishments Inventory (a structured record of every metric, project, and outcome from fifteen years), runs a 32-row evidence table that matches JD requirements to specific work history, and generates tailored resume bullets and cover letter hooks. The Accomplishments Inventory is the core move. Everything else flows from there.
 
-It works. Ninety jobs scored. Only 6 of 90 cleared the 8+ bar I set. Tier A targets like Anthropic, Cohere, Weights & Biases running daily ATS scans. Staging interviews. The rest is handled automatically: tracking the pipeline, prepping per-company question banks, generating tailored application materials.
+It works. Ninety jobs scored. Only 6 of 90 cleared the 8+ bar I set. Tier A targets like Anthropic, Cohere, Weights & Biases, Vercel, Cloudflare, Notion, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, and Okta running daily ATS scans. Staging interviews. The rest is handled automatically: tracking the pipeline, prepping per-company question banks, generating tailored application materials.
 
 Fork it if it helps. The real move is the method: ground your scoring in evidence from your actual work history, not summary keywords.
 
@@ -45,10 +45,6 @@ Scoring is calibrated to be ruthless: an 8+ is rare. Most roles land 3–6.
 **Scoring Methodology** — the four-layer architecture documented in the app. Every weight, every signal, every override is visible here.
 
 ![SearchOps scoring methodology showing four-layer architecture](docs/screenshots/methodology.png)
-
-**Match Analysis** — 32-row evidence table mapping each JD requirement to a specific accomplishment with a strength rating. This becomes the cover letter.
-
-![SearchOps match analysis showing 32-row evidence table](docs/screenshots/evidence-table.png)
 
 ---
 

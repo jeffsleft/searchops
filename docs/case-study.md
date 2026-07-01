@@ -48,7 +48,7 @@ What you fork is the scoring weights, the Accomplishments Inventory structure, t
 
 ## Results
 
-One hundred fifty-three jobs in the intake funnel. Ninety fully scored. Only 6 cleared the 8+ bar I set. Fifty-seven Tier A companies (Anthropic, Cohere, Weights & Biases, Retool, Temporal, Glean, Ramp) running daily ATS scans. Fifteen pipeline stages from Discovered through Offer/Decision.
+One hundred fifty-three jobs in the intake funnel. Ninety fully scored. Only 6 cleared the 8+ bar I set. Fifty-seven Tier A companies (Anthropic, Cohere, Weights & Biases, Retool, Temporal, Glean, Ramp, Vercel, Cloudflare, Notion, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, Okta) running daily ATS scans. Fifteen pipeline stages from Discovered through Offer/Decision.
 
 Thirty companies in active conversation. Interview prep is automated: per-company question banks, red flags, anchor stories tied to role requirements. Application materials are generated per-company, grounded in evidence.
 

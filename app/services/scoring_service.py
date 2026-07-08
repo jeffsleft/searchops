@@ -81,10 +81,10 @@ def persist_score_record_to_job(job_id: int, score_record: dict, jd_text: str = 
 
             # If transition_stage is True, transition identified jobs to discovered
             if transition_stage:
-                conn.execute(
-                    "UPDATE jobs SET pipeline_stage='discovered' WHERE id=? AND pipeline_stage='identified'",
-                    (job_id,),
-                )
+                from app.services.pipeline_service import record_stage_change
+                current = conn.execute("SELECT pipeline_stage FROM jobs WHERE id = ?", (job_id,)).fetchone()
+                if current and current["pipeline_stage"] == "identified":
+                    record_stage_change(conn, job_id, "discovered", note="auto: scored", changed_by="system")
 
 
 def score_job_from_text_and_persist(job_id: int, jd_text: str, url: str = "", transition_stage: bool = False) -> dict:

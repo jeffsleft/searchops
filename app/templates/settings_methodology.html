@@ -28,14 +28,14 @@
         <li>
           <span class="step-num">2</span>
           <div>
-            <div class="step-title">Match to candidate <span class="dim" style="font-weight:400;font-size:12px;">(−3.0 to +3.0, highest weight)</span></div>
+            <div class="step-title">Match to candidate <span class="dim" style="font-weight:400;font-size:12px;">(−4.0 to +4.0, highest weight)</span></div>
             <div class="step-body">One Gemini call grounded in the Accomplishments Inventory. Returns evidence rows, mismatches, resume bullets, and cover-letter hooks.</div>
           </div>
         </li>
         <li>
           <span class="step-num">3</span>
           <div>
-            <div class="step-title">LLM qualitative nudge <span class="dim" style="font-weight:400;font-size:12px;">(±1.0)</span></div>
+            <div class="step-title">LLM qualitative nudge <span class="dim" style="font-weight:400;font-size:12px;">(±1.5)</span></div>
             <div class="step-body">Role-shape vibe check: IC vs leadership balance, authority, reporting line, strategy-vs-execution skew.</div>
           </div>
         </li>
@@ -51,7 +51,7 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;">
         <div class="track">
           <div class="track-head">Inbound sources</div>
-          <div class="track-body">Jeff's manual saves, sheet sync, and quick-add URLs. Scored end-to-end on creation.</div>
+          <div class="track-body">The Score a Job form — paste a URL or the JD text. Scored end-to-end on creation.</div>
         </div>
         <div class="track">
           <div class="track-head">Hunt sources</div>
@@ -66,7 +66,7 @@
     <div class="card-head"><h3>Why the methodology was rewritten</h3></div>
     <div class="card-body" style="font-size:13.5px;line-height:1.7;">
       <p style="margin:0 0 10px;">The previous engine scored <em>how appealing a role looked in the abstract</em> — greenfield language, AI-native sector, modern stack — and barely scored <em>how well Jeff matches it</em>. The LLM layer received a 4-line candidate summary and was allowed to nudge by ±1.0. That is not AI scoring. That is a spreadsheet with a chat window.</p>
-      <p style="margin:0 0 10px;">The fix: a new <strong>Layer 2 — Match to Candidate</strong> that compares the JD against Jeff's full corpus (resume, LinkedIn, leadership deck, blog posts, and the Accomplishments Inventory) and produces an evidence-grounded match score worth up to ±3.0. The rest of the engine keeps doing what it did, but now it's anchored to a real candidate-vs-role comparison.</p>
+      <p style="margin:0 0 10px;">The fix: a new <strong>Layer 2 — Match to Candidate</strong> that compares the JD against Jeff's full corpus (resume, LinkedIn, leadership deck, blog posts, and the Accomplishments Inventory) and produces an evidence-grounded match score worth up to ±4.0. The rest of the engine keeps doing what it did, but now it's anchored to a real candidate-vs-role comparison.</p>
       <p style="margin:0;">Layers run in this order:</p>
     </div>
   </div>
@@ -76,7 +76,10 @@
     <div class="card-head"><h3>The four layers, in order</h3></div>
     <div class="card-body">
       <p style="font-size:13.5px;line-height:1.7;margin:0 0 16px;">
-        <strong>Final Score = base (5.0) + Layer 4 + Layer 2 + Layer 3</strong>, clamped to [0.0, 10.0] at the end, rounded to one decimal place. The clamp happens <em>once</em>, after every layer has been added — a strong match can rescue a so-so role, and a weak match can sink one that looks flashy.
+        <strong>Final Score = base (3.5) + Layer 4 + Layer 2 + Layer 3</strong>, clamped to [0.0, 10.0] at the end, rounded to one decimal place. The clamp happens <em>once</em>, after every layer has been added — a strong match can rescue a so-so role, and a weak match can sink one that looks flashy. Layer 4's positive contribution is capped at +2.5, so the deterministic ceiling is 6.0: no role clears the top tiers on surface signals alone — it has to earn them through Layer 2 evidence.
+      </p>
+      <p style="font-size:13.5px;line-height:1.7;margin:0 0 16px;">
+        <strong>Top-band gate:</strong> any final score above 7.0 must also pass five must-haves — compensation on target trajectory, a genuine leadership seat (not IC), an acceptable or preferred sector, a real build/strategic mandate, and strong specific Layer 2 evidence. If any fail, the score is clamped to 7.0. An 8+ is rare and earned by design.
       </p>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <div class="layer-row" style="border-left-color:var(--rust);">
@@ -86,13 +89,13 @@
           </div>
         </div>
         <div class="layer-row">
-          <div style="font-size:13px;font-weight:600;margin-bottom:4px;"><span class="layer-badge">L2</span>Match to Candidate <span class="dim" style="font-weight:400;">(highest weight, −3.0 to +3.0)</span></div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;"><span class="layer-badge">L2</span>Match to Candidate <span class="dim" style="font-weight:400;">(highest weight, −4.0 to +4.0)</span></div>
           <div class="dim" style="font-size:12.5px;line-height:1.5;">
             One Gemini call. Compares JD requirements against Jeff's <em>Accomplishments Inventory</em> and differentiators. Returns evidence rows (JD requirement → matched accomplishment), explicit mismatches, tailored resume bullets to swap in, and 1–3 cover-letter hooks. This is the layer that answers "is Jeff actually qualified for this?"
           </div>
         </div>
         <div class="layer-row">
-          <div style="font-size:13px;font-weight:600;margin-bottom:4px;"><span class="layer-badge">L3</span>LLM Qualitative Adjustment <span class="dim" style="font-weight:400;">(−1.0 to +1.0)</span></div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;"><span class="layer-badge">L3</span>LLM Qualitative Adjustment <span class="dim" style="font-weight:400;">(−1.5 to +1.5)</span></div>
           <div class="dim" style="font-size:12.5px;line-height:1.5;">
             A second LLM call focused on <em>role shape</em>: IC vs leadership balance, authority, reporting line, strategy-vs-execution skew, and culture/business-model red flags. Answers "is the role actually as good as it looks?"
           </div>
@@ -148,7 +151,7 @@
 
   {# ── Layer 2: Match to Candidate ───────────────────────────── #}
   <div class="card">
-    <div class="card-head"><h3>Layer 2 — Match to Candidate <span class="dim" style="font-weight:400;">(−3.0 to +3.0)</span></h3></div>
+    <div class="card-head"><h3>Layer 2 — Match to Candidate <span class="dim" style="font-weight:400;">(−4.0 to +4.0)</span></h3></div>
     <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
 
       <p style="font-size:13.5px;margin:0;line-height:1.7;">
@@ -162,7 +165,7 @@
 
       <p style="font-size:13.5px;margin:0;line-height:1.7;">It returns:</p>
       <ul style="font-size:13px;margin:0;padding-left:20px;line-height:1.8;">
-        <li><code class="mono">match_score</code> — a float in [−3.0, +3.0]. See scale below.</li>
+        <li><code class="mono">match_score</code> — a float in [−4.0, +4.0]. See scale below.</li>
         <li><code class="mono">match_summary</code> — 2–3 sentences explaining the score in plain language.</li>
         <li><code class="mono">evidence[]</code> — each entry pairs a specific JD requirement with the corpus bullet that backs it, and rates the strength (Strong / Moderate / Weak).</li>
         <li><code class="mono">mismatches[]</code> — each entry names a JD requirement and what's missing or thin in the corpus, with severity.</li>
@@ -175,11 +178,12 @@
         <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Match score scale</div>
         <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
           <tbody>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>+2.5 to +3.0</strong></td><td style="padding:8px;">Direct, recent, scaled evidence. Multiple Strong matches, no High-severity gaps.</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>+1.0 to +2.4</strong></td><td style="padding:8px;">Solid partial match. Core asks have evidence at smaller scale or adjacent domain.</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>−0.9 to +0.9</strong></td><td style="padding:8px;">Mixed. Some evidence, meaningful gaps on what the JD emphasizes most.</td></tr>
-            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>−2.4 to −1.0</strong></td><td style="padding:8px;">Mostly mismatch. Core requirements lack corpus support even with a stretch.</td></tr>
-            <tr><td style="padding:8px;"><strong>−3.0 to −2.5</strong></td><td style="padding:8px;">Fundamental mismatch. Role asks for things never done at any scale in any related domain.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>+3.0 to +4.0</strong></td><td style="padding:8px;">Direct, recent, scaled evidence for the JD's core asks. Multiple Strong matches, no High-severity gaps, a named accomplishment with a metric for each key requirement.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>+1.5 to +2.9</strong></td><td style="padding:8px;">Solid partial match. Core asks have evidence at smaller scale, in an adjacent domain, or with 1–2 medium gaps.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>−1.0 to +1.4</strong></td><td style="padding:8px;">Mixed. Some evidence, meaningful gaps on what the JD emphasizes most.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>−2.0 to −0.9</strong></td><td style="padding:8px;">Mostly mismatch. Core requirements lack corpus support even with a stretch.</td></tr>
+            <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><strong>−3.0 to −2.1</strong></td><td style="padding:8px;">Fundamental mismatch. Role asks for things never done at any scale in any related domain.</td></tr>
+            <tr><td style="padding:8px;"><strong>−4.0 to −3.1</strong></td><td style="padding:8px;">Anti-match. Role directly conflicts with stated preferences or requires skills explicitly excluded from the profile.</td></tr>
           </tbody>
         </table>
       </div>
@@ -195,15 +199,15 @@
 
   {# ── Layer 3: LLM Qualitative ──────────────────────────────── #}
   <div class="card">
-    <div class="card-head"><h3>Layer 3 — LLM Qualitative Adjustment <span class="dim" style="font-weight:400;">(−1.0 to +1.0)</span></h3></div>
+    <div class="card-head"><h3>Layer 3 — LLM Qualitative Adjustment <span class="dim" style="font-weight:400;">(−1.5 to +1.5)</span></h3></div>
     <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
 
       <p style="font-size:13.5px;margin:0;line-height:1.7;">
-        Layer 2 asks "does Jeff have what this role needs?" Layer 3 asks "is the role actually shaped the way the title suggests?" One Gemini call returns a ±1.0 nudge plus structured role-shape signals: IC vs leadership balance, expected team size, reporting line, strategy-vs-execution skew, plus the existing pros/cons and tech-stack extraction.
+        Layer 2 asks "does Jeff have what this role needs?" Layer 3 asks "is the role actually shaped the way the title suggests?" One Gemini call returns a ±1.5 nudge plus structured role-shape signals: IC vs leadership balance, expected team size, reporting line, strategy-vs-execution skew, plus the existing pros/cons and tech-stack extraction.
       </p>
 
       <div>
-        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Adjusts UP (+0.5 to +1.0)</div>
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Adjusts UP (+0.5 to +1.5)</div>
         <ul style="font-size:13px;margin:0;padding-left:20px;line-height:1.8;">
           <li>Real authority — P&amp;L, headcount, strategy ownership</li>
           <li>High-growth company with modern GTM thinking</li>
@@ -213,7 +217,7 @@
       </div>
 
       <div>
-        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Adjusts DOWN (−0.5 to −1.0)</div>
+        <div class="dim" style="font-size:11px;text-transform:uppercase;font-weight:600;margin-bottom:10px;letter-spacing:.05em;">Adjusts DOWN (−0.5 to −1.5)</div>
         <ul style="font-size:13px;margin:0;padding-left:20px;line-height:1.8;">
           <li>Reads as a "firefighter" role — all tactical, no strategy</li>
           <li>Heavily IC despite a leadership title</li>
@@ -319,22 +323,23 @@ Layer 4 (Adjustment Weights, deterministic):
   + 1.0 (Mac/Slack stack)
   + 1.0 (consumption pricing)
   + 0.5 (fully remote)
-  = +6.5
+  = raw +6.5 → <span style="color:var(--rust);">capped at +2.5</span>
 
 Layer 2 (Match to Candidate, corpus-grounded):
-  match_score = <span style="color:var(--accent);">+2.6</span>
+  match_score = <span style="color:var(--accent);">+3.0</span>
   evidence: 7 Strong matches (CS Ops build-out, NRR scaling, exec partnership,
             forecast accuracy, AI-native workflows, finance+ops bridge, consumption pricing fluency)
   mismatches: 1 Medium (no explicit "developer-led growth" experience)
 
 Layer 3 (LLM Qualitative, role shape):
-  llm_adjustment = <span style="color:var(--accent);">+0.7</span>
+  llm_adjustment = <span style="color:var(--accent);">+0.6</span>
   role_shape: Balanced leadership, reports to CRO, ~12 to lead, Strategy-Heavy
 
-Final = 5.0 (base) + 6.5 + 2.6 + 0.7 = 14.8 → <span style="color:var(--red-400);">clamped to 10.0</span>
+Final = 3.5 (base) + 2.5 + 3.0 + 0.6 = <span style="color:var(--accent);">9.6</span>
+Top-band gate (&gt;7.0): comp ✓ · leadership seat ✓ · sector ✓ · build mandate ✓ · strong L2 ✓ → passes
       </div>
       <p style="font-size:12.5px;margin:0;line-height:1.6;color:var(--text-dim);">
-        <strong>Result:</strong> 10.0 (Dream Job). The Match Analysis panel on the job detail page exposes the 7 evidence rows, the 1 mismatch, the 3–5 tailored resume bullets to swap in, and a cover-letter hook tying GitLab to this company's stage.
+        <strong>Result:</strong> 9.6 (Dream Job). The Match Analysis panel on the job detail page exposes the 7 evidence rows, the 1 mismatch, the 3–5 tailored resume bullets to swap in, and a cover-letter hook tying GitLab to this company's stage. Note the Layer 4 cap: surface signals maxed out at +2.5 — the score lives above 7 only because Layer 2 evidence and the top-band gate both cleared.
       </p>
     </div>
   </div>
@@ -348,15 +353,15 @@ Final = 5.0 (base) + 6.5 + 2.6 + 0.7 = 14.8 → <span style="color:var(--red-400
       </p>
       <div style="background:var(--bg-sunk);padding:12px;border-radius:var(--radius);font-family:'JetBrains Mono','Courier New',monospace;font-size:12px;line-height:1.6;overflow-x:auto;">
 Layer 1: pass
-Layer 4 (deterministic): +6.5  (same signals as above)
+Layer 4 (deterministic): raw +6.5 → <span style="color:var(--rust);">capped at +2.5</span>  (same signals as above)
 Layer 2 (match):  <span style="color:var(--red-400);">−2.1</span>  (6 Moderate gaps: SFDC build/admin depth,
                        Snowflake DBT fluency, IC engineering)
 Layer 3 (LLM):    <span style="color:var(--red-400);">−0.6</span>  (heavily IC despite "founding" framing)
 
-Final = 5.0 + 6.5 − 2.1 − 0.6 = 8.8 → <span style="color:var(--accent);">8.8 (Solid Bet)</span>
+Final = 3.5 + 2.5 − 2.1 − 0.6 = <span style="color:var(--red-400);">3.3 (Probably Skip)</span>
       </div>
       <p style="font-size:12.5px;margin:0;line-height:1.6;color:var(--text-dim);">
-        <strong>Result:</strong> 8.8 instead of the old engine's 9.5–10.0. Old engine would have wasted a week on this. New engine surfaces the gaps explicitly so the decision is "still apply, but acknowledge the IC stretch" rather than "Dream Job, drop everything."
+        <strong>Result:</strong> 3.3 instead of the old engine's 9.5–10.0. The old engine would have wasted a week on this. With the Layer 4 cap and Layer 2 carrying the weight, a role that lights up every surface signal but can't back the actual work drops out of consideration — and the mismatch rows say exactly why.
       </p>
     </div>
   </div>

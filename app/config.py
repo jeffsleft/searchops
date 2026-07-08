@@ -74,3 +74,18 @@ STALE_RECRUITER_DAYS = 30
 RESEARCH_CACHE_TTL_DAYS = 7
 WATCHDOG_SCHEDULE = "0 * * * *"       # every hour
 WEEKLY_DIGEST_SCHEDULE = "0 8 * * 1"  # Monday 8am
+
+# --- Observability, usage capture & metrics (progress-instrumentation) ---
+# System logging: structured stdout (Modal captures) + per-request correlation id.
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+LOG_STRUCTURED = os.environ.get("LOG_STRUCTURED", "1").strip().lower() not in ("0", "false", "no", "off", "")
+# Product-usage capture: one usage_events row per request. Off → generation unaffected.
+USAGE_TRACKING_ENABLED = os.environ.get("USAGE_TRACKING_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off", "")
+# Retention prune (days) for usage_events + error_events, run in the daily cron.
+USAGE_RETENTION_DAYS = int(os.environ.get("USAGE_RETENTION_DAYS", "180"))
+# Metric confidence gates (see app/services/metrics_service.py). Below MIN → "insufficient".
+CALIBRATION_MIN_SAMPLE = int(os.environ.get("CALIBRATION_MIN_SAMPLE", "5"))
+BOARD_CONFIDENCE_SOLID_N = int(os.environ.get("BOARD_CONFIDENCE_SOLID_N", "30"))
+# Progress instrumentation: monthly snapshot cron + auto-emit to wins.md
+PROGRESS_CRON_SCHEDULE = os.environ.get("PROGRESS_CRON_SCHEDULE", "0 9 1 * *")
+WINS_AUTOEMIT_ENABLED = os.environ.get("WINS_AUTOEMIT_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off", "")

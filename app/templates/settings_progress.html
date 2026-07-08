@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Progress — SearchOps{% endblock %}
+{% block page_title %}Progress{% endblock %}
+
+{# ---- Rate/scalar renderer. n<gate is a first-class designed state, never a fake 0. ---- #}
+{% macro metric(m, unit='') %}
+  {%- if m.value is none -%}
+    <span class="metric-na">Insufficient data</span> <span class="metric-n">n={{ m.n }}</span>
+  {%- else -%}
+    <span class="metric-big">{{ m.value }}{{ unit }}</span>
+    <span class="metric-n">n={{ m.n }}</span>
+    <span class="conf conf-{{ m.confidence }}">{{ m.confidence }}</span>
+  {%- endif -%}
+{% endmacro %}
+
+{# ---- Inline SVG sparkline for one funnel stage, normalised to `mx` (shared y-axis). ---- #}
+{% macro spark(key, mx) %}
+  {%- set months = progress.funnel_trend -%}
+  {%- set n = months|length -%}
+  {%- set ns = namespace(pts='', lastx=0, lasty=32) -%}
+  {%- for r in months -%}
+    {%- set x = (loop.index0 / (n - 1) * 100) if n > 1 else 0 -%}
+    {%- set y = 32 - ((r[key] / mx) * 30) -%}
+    {%- set ns.pts = ns.pts ~ ('%.2f'|format(x)) ~ ',' ~ ('%.2f'|format(y)) ~ ' ' -%}
+    {%- set ns.lastx = x -%}{%- set ns.lasty = y -%}
+  {%- endfor -%}
+  <svg class="sm-spark" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true">
+    <polygon class="area" points="0,34 {{ ns.pts }}{{ '%.2f'|format(ns.lastx) }},34" />
+    <polyline class="line" points="{{ ns.pts }}" />
+    <circle class="tip" cx="{{ '%.2f'|format(ns.lastx) }}" cy="{{ '%.2f'|format(ns.lasty) }}" r="1.7" />
+  </svg>
+{% endmacro %}
+
+{% block content_wrap %}
+<div class="content">
+<div class="page metrics-narrow">
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Search Funnel</h1>
+    <div class="sub">The job search, reported as a funnel. Rates are shown only where the sample supports them — no number stands without its n.</div>
+  </div>
+</div>
+
+{# ---- HEADLINE — counts only (facts, not sampled rates). ---- #}
+{% set months = progress.funnel_trend %}
+<div class="stat-grid">
+  <div class="stat"><div class="stat-label">Applications</div><div class="stat-value">{{ months|sum(attribute='applied') }}</div></div>
+  <div class="stat"><div class="stat-label">Screens</div><div class="stat-value">{{ months|sum(attribute='screen') }}</div></div>
+  <div class="stat"><div class="stat-label">Interviews</div><div class="stat-value">{{ months|sum(attribute='interview') }}</div></div>
+  <div class="stat"><div class="stat-label">Offers</div><div class="stat-value">{{ months|sum(attribute='offer') }}</div></div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:16px;">
+
+  <!-- FUNNEL TREND -->
+  <div class="card">
+    <div class="card-head"><h3>Funnel Trend</h3><span class="spacer"></span><span class="dim mono" style="font-size:10.5px;">{{ months|length }} mo · shared axis</span></div>
+    <div class="card-body">
+      {% if not months %}
+      <div class="empty"><span class="empty-title">No applications recorded yet</span><span class="empty-sub">The trend builds as outcomes are logged on job detail pages.</span></div>
+      {% else %}
+      {% set mx = (months|map(attribute='applied')|max) or 1 %}
+      {% set last = months[-1] %}
+      {% set prev = months[-2] if months|length > 1 else none %}
+      <div class="smallmult">
+        {% for st in [('applied','Applied'),('screen','Screen'),('interview','Interview'),('offer','Offer')] %}
+        {% set d = (last[st[0]] - prev[st[0]]) if prev else 0 %}
+        <div class="sm-cell">
+          <div class="sm-top">
+            <span class="sm-label">{{ st[1] }}</span>
+            <span class="sm-delta {{ 'up' if d > 0 else 'down' if d < 0 else 'flat' }}">{{ '+' if d > 0 }}{{ d }} mo/mo</span>
+          </div>
+          <div class="sm-value">{{ months|sum(attribute=st[0]) }} <small>total</small></div>
+          {{ spark(st[0], mx) }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- CONVERSION -->
+  <div class="card">
+    <div class="card-head"><h3>Stage Conversion</h3><span class="spacer"></span><span class="dim" style="font-size:11px;">current rates</span></div>
+    <div class="card-body">
+      <div class="mbar-list">
+        {% for c in progress.conversion %}
+        <div class="mbar-row {{ 'na' if c.rate is none }}">
+          <div class="mbar-label">{{ c.stage }}</div>
+          {% if c.rate is none %}
+          <div class="mbar-track na"></div>
+          <div class="mbar-val"><span class="metric-na">Insufficient data</span> <span class="metric-n">n={{ c.n }}</span></div>
+          {% else %}
+          <div class="mbar-track"><div class="mbar-fill {{ c.confidence }}" style="width:{{ c.rate }}%;"></div></div>
+          <div class="mbar-val"><span class="mbar-pct">{{ c.rate }}%</span> <span class="metric-n">n={{ c.n }}</span> <span class="conf conf-{{ c.confidence }}">{{ c.confidence }}</span></div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- VELOCITY + TARGETING -->
+  <div class="mrow mrow-2">
+    <div class="card">
+      <div class="card-head"><h3>Velocity</h3></div>
+      <div class="card-body">
+        <div class="stat-label">Median days to first interview</div>
+        <div class="metric-line" style="margin-top:10px;">{{ metric(progress.velocity.days_to_first_interview) }}</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Targeting Quality</h3></div>
+      <div class="card-body">
+        <div class="stat-label">Interviews per 10 applications</div>
+        <div class="metric-line" style="margin-top:10px;">{{ metric(progress.targeting.interviews_per_10_apps) }}</div>
+        <div class="subhead" style="margin-top:22px;">By score band<span class="hint">does a higher score convert better?</span></div>
+        <div class="mbar-list">
+          {% for c in progress.targeting.cohort %}
+          <div class="mbar-row {{ 'na' if c.rate is none }}">
+            <div class="mbar-label">{{ c.band }}</div>
+            {% if c.rate is none %}
+            <div class="mbar-track na"></div>
+            <div class="mbar-val"><span class="metric-na">Insufficient data</span> <span class="metric-n">n={{ c.n }}</span></div>
+            {% else %}
+            <div class="mbar-track"><div class="mbar-fill{{ ' solid' if loop.first else ' dim' }}" style="width:{{ c.rate }}%;"></div></div>
+            <div class="mbar-val"><span class="mbar-pct">{{ c.rate }}%</span> <span class="metric-n">n={{ c.n }}</span></div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CALIBRATION -->
+  <div class="card">
+    <div class="card-head"><h3>Model Calibration</h3><span class="spacer"></span><span class="dim" style="font-size:11px;">predicted probability → actual interview rate</span></div>
+    <div class="card-body">
+      {% if progress.calibration.insufficient_data %}
+      <div class="empty"><span class="empty-title">Insufficient data to report calibration</span><span class="empty-sub">Predicted vs. actual needs more logged outcomes before a rate is trustworthy.</span></div>
+      {% else %}
+      <div class="mbar-list">
+        {% for b in progress.calibration.buckets %}
+        <div class="mbar-row {{ 'na' if b.rate is none }}">
+          <div class="mbar-label">Predicted {{ b.label }}</div>
+          {% if b.rate is none %}
+          <div class="mbar-track na"></div>
+          <div class="mbar-val"><span class="metric-na">Insufficient data</span> <span class="metric-n">n={{ b.n }}</span></div>
+          {% else %}
+          <div class="mbar-track"><div class="mbar-fill solid" style="width:{{ b.rate }}%;"></div></div>
+          <div class="mbar-val"><span class="mbar-pct">{{ "%.0f"|format(b.rate) }}%</span> <span class="metric-n">n={{ b.n }}</span></div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+{% endblock %}

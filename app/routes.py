@@ -14,9 +14,10 @@ from starlette.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 
-from app.auth import AuthMiddleware, SESSION_COOKIE, create_session_token, login_page
-from app.config import load_profile, HIGH_SCORE_THRESHOLD, APP_PASSWORD
-from app.models import get_db
+from app.auth import AuthMiddleware, SESSION_COOKIE, create_session_token, login_page, verify_session_token
+from app.config import load_profile, HIGH_SCORE_THRESHOLD, APP_PASSWORD, USAGE_TRACKING_ENABLED
+from app.models import get_db, log_usage_event, log_error_event
+from app.observability import get_logger, new_request_id, set_request_id, reset_request_id
 from app.scoring.engine import classify_score
 from app.scoring.research import research_interviewer, coach_interview
 from app.providers import get_provider
@@ -33,7 +34,7 @@ from app.recruiters.crm import add_recruiter, log_contact, get_all_recruiters, g
 from app.services.research_service import do_research_company, derive_signals
 from app.services.scoring_service import (
     persist_score_record_to_job, score_job_from_text_and_persist,
-    handle_job_add_with_optional_scoring,
+    score_job_from_url_and_persist, handle_job_add_with_optional_scoring,
 )
 from app.services.job_actions import (
     score_new_job_from_input, fetch_and_score_stub, update_job_stage,
@@ -89,6 +90,106 @@ class CSRFValidationMiddleware(BaseHTTPMiddleware):
                 status_code=403
             )
         return await call_next(request)
+
+
+_obs_log = get_logger("app.observability")
+
+# Single-user today; the value written to the SaaS-shaped actor_id column when a
+# request is authenticated. Multi-tenant later swaps this for a real subject.
+DEFAULT_ACTOR = "jeff"
+
+
+def _actor_id(request: Request) -> str | None:
+    """Best-effort actor for the usage/error actor_id column (single-user today)."""
+    try:
+        tok = request.cookies.get(SESSION_COOKIE)
+        if tok and verify_session_token(tok):
+            return DEFAULT_ACTOR
+    except Exception:
+        pass
+    return None
+
+
+def _route_template(request: Request) -> str:
+    """Matched route template (e.g. /job/{job_id}/rescore) so ids aggregate.
+
+    starlette 1.3 sets scope['endpoint'] (the handler) but NOT scope['route'],
+    so we resolve the template from a cached endpoint→path_format map built off
+    the live app.routes. Unmatched (404) requests have no endpoint → '<unmatched>'.
+    """
+    endpoint = request.scope.get("endpoint")
+    if endpoint is None:
+        return "<unmatched>"
+    app = request.scope.get("app")
+    cache = getattr(app.state, "usage_route_map", None) if app is not None else None
+    if cache is None and app is not None:
+        cache = {
+            r.endpoint: r.path_format
+            for r in app.routes
+            if hasattr(r, "endpoint") and hasattr(r, "path_format")
+        }
+        app.state.usage_route_map = cache
+    if cache and endpoint in cache:
+        return cache[endpoint]
+    return getattr(endpoint, "__name__", "<unknown>")
+
+
+class UsageTrackingMiddleware(BaseHTTPMiddleware):
+    """Outermost middleware: assigns a correlation id and records one usage_events
+    row per request. Timing wraps the full stack (auth/CSRF included). Never breaks
+    a request — capture failures are swallowed."""
+
+    async def dispatch(self, request: Request, call_next):
+        rid = new_request_id()
+        token = set_request_id(rid)
+        request.state.request_id = rid
+        start = time.monotonic()
+        status = 500  # if call_next raises, the request 500s — record that
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            return response
+        finally:
+            try:
+                path = request.url.path
+                if USAGE_TRACKING_ENABLED and not path.startswith("/static") and path != "/favicon.ico":
+                    log_usage_event(
+                        method=request.method,
+                        route_template=_route_template(request),
+                        status=status,
+                        duration_ms=int((time.monotonic() - start) * 1000),
+                        is_hx=request.headers.get("HX-Request", "").lower() == "true",
+                        actor_id=_actor_id(request),
+                    )
+            except Exception:
+                pass
+            reset_request_id(token)
+
+
+async def unhandled_exception_handler(request: Request, exc: Exception) -> HTMLResponse:
+    """App-level 500 handler: persist one error_events row + one structured log line,
+    then return the graceful error page. Runs for genuinely unhandled exceptions only
+    (route handlers that catch their own errors never reach here)."""
+    rid = getattr(request.state, "request_id", None)
+    if rid:
+        set_request_id(rid)  # so the ERROR log line below correlates to the error_events row
+    try:
+        log_error_event(
+            request_id=rid,
+            method=request.method,
+            route_template=_route_template(request),
+            exc_type=type(exc).__name__,
+            message=str(exc),
+            actor_id=_actor_id(request),
+        )
+    except Exception:
+        pass
+    _obs_log.error("unhandled exception on %s %s: %s", request.method, request.url.path, exc)
+    return HTMLResponse(
+        '<div style="padding:24px;font-family:system-ui;">Something went wrong. '
+        'The error has been logged.</div>',
+        status_code=500,
+    )
 
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -1917,25 +2018,17 @@ async def job_promote_from_discovery(request: Request):
         safe_err = _html.escape(result["error"])
         return HTMLResponse(f'<div class="text-red-400 text-sm">{safe_err}</div>')
 
-    # Trigger scoring
-    try:
-        if job.get('url'):
-            from app.jobs.fetch import _fetch_jd_text
-            from app.scoring.research import score_job
-            jd_text = _fetch_jd_text(job['url']) or job.get('jd_text', '')
-            if jd_text:
-                score_record = score_job(jd_text)
-                with get_db() as conn:
-                    conn.execute(
-                        "UPDATE jobs SET final_score=?, deterministic_score=?, llm_adjustment=? WHERE id=?",
-                        (score_record.get('final_score'), score_record.get('deterministic_score'),
-                         score_record.get('llm_adjustment'), job_id)
-                    )
-                if score_record.get('final_score', 0) >= HIGH_SCORE_THRESHOLD:
-                    from app.notifications.slack import send_high_score_alert
-                    send_high_score_alert(job_id, score_record)
-    except Exception as e:
-        logging.error("Scoring failed during promotion: %s", e)
+    # Trigger scoring via the canonical service path (persists the full score
+    # record — evidence, mismatches, bullets, hooks — and handles the alert).
+    # Stage was already advanced above, so no transition_stage here.
+    score_result = {"status": "skipped"}
+    if job.get('url'):
+        score_result = score_job_from_url_and_persist(job_id, job['url'])
+    if score_result.get("status") != "success" and (job.get('jd_text') or '').strip():
+        score_result = score_job_from_text_and_persist(job_id, job['jd_text'])
+    if score_result.get("status") not in ("success", "skipped"):
+        logging.error("Scoring failed during promotion of job %s: %s",
+                      job_id, score_result.get("error"))
 
     return RedirectResponse(url=f"/job/{job_id}", status_code=302)
 
@@ -2483,6 +2576,27 @@ async def settings_calibration(request: Request):
     )
 
 
+async def settings_progress(request: Request):
+    """Board-facing funnel/quality view (see app/services/progress_service.py)."""
+    from app.services.progress_service import board_metrics
+    return render("settings_progress.html", request=request, progress=board_metrics())
+
+
+async def settings_health(request: Request):
+    """Internal ops view: usage, system health, and data integrity."""
+    from app.services.metrics_service import (
+        usage_summary, system_health, engine_quality, integrity_checks,
+    )
+    return render(
+        "settings_health.html",
+        request=request,
+        usage=usage_summary(),
+        system=system_health(),
+        engine=engine_quality(),
+        integrity=integrity_checks(),
+    )
+
+
 async def job_record_outcome(request: Request):
     job_id = int(request.path_params["job_id"])
     form = await request.form()
@@ -2636,12 +2750,22 @@ def create_app(batch_research_fn=None) -> Starlette:
         Route("/api/task-status",             api_task_status,        methods=["GET"]),
         Route("/api/sync-status",             api_sync_status,        methods=["GET"]),
         Route("/settings/calibration",        settings_calibration,   methods=["GET"]),
+        Route("/settings/progress",           settings_progress,      methods=["GET"]),
+        Route("/settings/health",             settings_health,        methods=["GET"]),
         Route("/job/{job_id:int}/outcome",    job_record_outcome,     methods=["POST"]),
     ]
 
     app = Starlette(
         routes=routes,
-        middleware=[Middleware(SecurityHeadersMiddleware), Middleware(CSRFValidationMiddleware), Middleware(AuthMiddleware)],
+        # UsageTrackingMiddleware is outermost so its timing wraps the full stack
+        # (auth/CSRF included) and every request — even a 302/403 — is recorded.
+        middleware=[
+            Middleware(UsageTrackingMiddleware),
+            Middleware(SecurityHeadersMiddleware),
+            Middleware(CSRFValidationMiddleware),
+            Middleware(AuthMiddleware),
+        ],
+        exception_handlers={Exception: unhandled_exception_handler},
     )
     app.state.batch_research_fn = batch_research_fn
     app.mount("/static", StaticFiles(directory="app/static"), name="static")

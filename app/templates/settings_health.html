@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Health — SearchOps{% endblock %}
+{% block page_title %}Health{% endblock %}
+
+{# n<gate is a first-class designed state, never a fake 0. #}
+{% macro metric(m, unit='') %}
+  {%- if m.value is none -%}
+    <span class="metric-na">Insufficient data</span> <span class="metric-n">n={{ m.n }}</span>
+  {%- else -%}
+    <span class="metric-big">{{ m.value }}{{ unit }}</span>
+    <span class="metric-n">n={{ m.n }}</span>
+    <span class="conf conf-{{ m.confidence }}">{{ m.confidence }}</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% block content %}
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>SearchOps Health</h1>
+    <div class="sub">Usage, system health, and data integrity — the internal view for deciding what to build, fix, or cut. Every number carries its sample size.</div>
+  </div>
+</div>
+
+{# ---- HEADLINE — system facts + at-a-glance flags. ---- #}
+{% set active_feats = usage.features|selectattr('state','equalto','active')|list|length %}
+{% set flag_count = integrity.checks|selectattr('count','greaterthan',0)|list|length %}
+<div class="stat-grid" style="grid-template-columns:repeat(5,1fr);">
+  <div class="stat"><div class="stat-label">Requests · {{ system.window_days }}d</div><div class="stat-value">{{ system.req_count }}</div></div>
+  <div class="stat"><div class="stat-label">Error rate</div><div class="stat-value"{% if system.error_rate > 0 %} style="color:var(--rust);"{% endif %}>{{ system.error_rate }}<span style="font-size:14px;">%</span></div><div class="stat-foot"><span class="metric-n">{{ system.error_count }} / {{ system.req_count }} req</span></div></div>
+  <div class="stat"><div class="stat-label">Latency p50 / p95</div><div class="stat-value">{{ system.p50_ms if system.p50_ms is not none else '—' }}<span style="font-size:14px;color:var(--text-dim);"> / {{ system.p95_ms if system.p95_ms is not none else '—' }} ms</span></div></div>
+  <div class="stat"><div class="stat-label">Active features</div><div class="stat-value">{{ active_feats }}<span style="font-size:14px;color:var(--text-dim);"> / {{ usage.features|length }}</span></div><div class="stat-foot"><span class="metric-n">last {{ usage.window_days }}d</span></div></div>
+  <div class="stat"><div class="stat-label">Integrity flags</div><div class="stat-value"{% if flag_count > 0 %} style="color:var(--rust);"{% endif %}>{{ flag_count }}</div><div class="stat-foot"><span class="metric-n">of {{ integrity.checks|length }} checks</span></div></div>
+</div>
+
+<!-- USAGE (full width) -->
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-head"><h3>Usage</h3><span class="spacer"></span><span class="dim mono" style="font-size:10.5px;">last {{ usage.window_days }} days · {{ usage.total_events }} events</span></div>
+  <div class="card-body">
+    {% if usage.total_events == 0 %}
+    <div class="empty"><span class="empty-title">No usage captured yet</span><span class="empty-sub">Every request records one row once traffic flows.</span></div>
+    {% else %}
+    <div class="mrow mrow-2-1">
+      <div>
+        <div class="subhead">Feature heatmap<span class="hint">active · cold · never, this window</span></div>
+        <div class="heatmap">
+          {% for f in usage.features %}
+          <div class="heat-tile {{ f.state }}">
+            <div class="heat-head">
+              <span class="heat-name">{{ f.name }}</span>
+              <span class="usage-state usage-{{ f.state }}">{{ f.state }}</span>
+            </div>
+            <div class="heat-foot">
+              <span class="heat-hits">{{ f.hits }} <small>hits</small></span>
+              {% if f.error_rate > 0 %}<span class="heat-err">{{ f.error_rate }}% err</span>{% elif f.last_used %}<span class="heat-last">{{ f.last_used[:10] }}</span>{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% if usage.cold_features %}
+        <div class="callout"><span class="callout-icon">!</span><span><strong>Cold features</strong> (0 hits this window): {{ usage.cold_features|join(', ') }}. Candidates to cut or resurface.</span></div>
+        {% endif %}
+      </div>
+      <div>
+        <div class="subhead">Hot paths<span class="hint">top {{ usage.hot_paths|length }}</span></div>
+        {% set hp_max = (usage.hot_paths|map(attribute='hits')|max) or 1 %}
+        <div class="hotpath">
+          {% for h in usage.hot_paths %}
+          <div class="hp-row">
+            <span class="hp-rank">{{ loop.index }}</span>
+            <span class="hp-route"><span class="hp-bar" style="width:{{ (h.hits / hp_max * 100)|round(0, 'floor') }}%;"></span><span>{{ h.route }}</span></span>
+            <span class="hp-hits">{{ h.hits }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="mrow mrow-2">
+  <!-- SYSTEM -->
+  <div class="card">
+    <div class="card-head"><h3>System</h3><span class="spacer"></span><span class="dim mono" style="font-size:10.5px;">last {{ system.window_days }} days</span></div>
+    <div class="card-body">
+      <div class="subhead">Background jobs<span class="hint">last success</span></div>
+      {% if system.crons %}
+      <div class="oplist">
+        {% for c in system.crons %}
+        <div class="op-row">
+          <span class="op-dot {{ 'never' if not c.last_ok }}"></span>
+          <span class="op-name">{{ c.task_type }}</span>
+          <span class="op-time {{ 'never' if not c.last_ok }}">{{ (c.last_ok[:16]) if c.last_ok else 'never' }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty" style="padding:20px;"><span class="empty-sub">No completed background jobs recorded.</span></div>
+      {% endif %}
+      {% if system.recent_errors %}
+      <div class="subhead" style="color:var(--rust);">Recent errors<span class="hint" style="color:color-mix(in oklch,var(--rust) 70%,var(--text-dim));">most recent {{ system.recent_errors|length }}</span></div>
+      <div class="errlist">
+        {% for e in system.recent_errors %}
+        <div class="err-row">
+          <span class="err-ts">{{ e.ts[:16] }}</span>
+          <span class="err-route">{{ e.route_template }}</span>
+          <span class="err-exc">{{ e.exc_type }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="subhead">Recent errors</div>
+      <div class="op-row" style="border:none;"><span class="op-dot"></span><span class="op-name dim">None in window.</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ENGINE QUALITY -->
+  <div class="card">
+    <div class="card-head"><h3>Engine Quality</h3><span class="spacer"></span><span class="dim" style="font-size:11px;">does score predict outcome?</span></div>
+    <div class="card-body">
+      <div class="subhead">Interview-or-better rate by score band</div>
+      <div class="mbar-list">
+        {% for c in engine.score_cohort %}
+        <div class="mbar-row {{ 'na' if c.interview_rate is none }}">
+          <div class="mbar-label">{{ c.band }}</div>
+          {% if c.interview_rate is none %}
+          <div class="mbar-track na"></div>
+          <div class="mbar-val"><span class="metric-na">Insufficient data</span> <span class="metric-n">n={{ c.n }}</span></div>
+          {% else %}
+          <div class="mbar-track"><div class="mbar-fill {{ c.confidence }}" style="width:{{ c.interview_rate }}%;"></div></div>
+          <div class="mbar-val"><span class="mbar-pct">{{ c.interview_rate }}%</span> <span class="metric-n">n={{ c.n }}</span> <span class="conf conf-{{ c.confidence }}">{{ c.confidence }}</span></div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <div class="mrow mrow-2" style="margin-top:22px;">
+        <div>
+          <div class="stat-label">Score stability<span class="dim" style="text-transform:none;letter-spacing:0;"> · mean re-score Δ</span></div>
+          <div class="metric-line" style="margin-top:8px;">{{ metric(engine.score_stability) }}</div>
+        </div>
+        <div>
+          <div class="stat-label">Corpus coverage<span class="dim" style="text-transform:none;letter-spacing:0;"> · Layer 2</span></div>
+          <div class="metric-line" style="margin-top:8px;">{{ metric(engine.corpus_coverage, '%') }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INTEGRITY (full width) -->
+<div class="card" style="margin-top:16px;">
+  <div class="card-head"><h3>Data Integrity</h3><span class="spacer"></span><span class="dim" style="font-size:11px;">consistency checks · count in warning when &gt; 0</span></div>
+  <div class="card-body">
+    <div class="chk-list">
+      {% for chk in integrity.checks %}
+      <div class="chk-row">
+        <span class="chk-dot {{ 'flag' if chk.count > 0 else 'ok' }}"></span>
+        <span class="chk-name">{{ chk.check }}</span>
+        <span class="chk-count {{ 'flag' if chk.count > 0 else 'ok' }}">{{ chk.count }}</span>
+        <span class="chk-link"><a href="{{ chk.href }}">view →</a></span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

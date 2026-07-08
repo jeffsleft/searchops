@@ -2,7 +2,7 @@
 Layer 2 — Match to Candidate.
 
 Compares a JD against the candidate's full accomplishments corpus via one LLM call
-and returns: match_score (-3.0 to +3.0), match_summary, evidence[], mismatches[],
+and returns: match_score (-4.0 to +4.0), match_summary, evidence[], mismatches[],
 differentiator_themes[], tailored_bullets[], cover_letter_hooks[].
 
 If the corpus is unavailable (docx not yet delivered), returns a zero-contribution

@@ -35,7 +35,7 @@ Then score.
 Return a JSON object with these exact keys:
 
 {{
-  "match_score": <float between -3.0 and +3.0>,
+  "match_score": <float between -4.0 and +4.0>,
   "match_summary": "<2-3 sentences: the overall fit story. Plain language.>",
   "evidence": [
     {{

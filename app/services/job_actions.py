@@ -107,18 +107,19 @@ def update_job_stage(job_id: int, new_stage: str) -> dict:
       {"status": "not_found"}
       {"status": "ok", "job": dict, "promoted": bool, "stage_label": str}
     """
+    from app.services.pipeline_service import record_stage_change
+
     if new_stage not in STAGES:
         return {"status": "invalid_stage"}
 
     with get_db() as conn:
+        # Update job status and auto_rejected fields
         conn.execute(
-            "UPDATE jobs SET pipeline_stage=?, status=?, auto_rejected=0, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            (new_stage, STAGES[new_stage]["label"], job_id),
+            "UPDATE jobs SET status=?, auto_rejected=0, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (STAGES[new_stage]["label"], job_id),
         )
-        conn.execute(
-            "INSERT INTO pipeline_history (job_id, to_stage, changed_by) VALUES (?,?,?)",
-            (job_id, new_stage, "jeff"),
-        )
+        # Route pipeline_stage change through the single sanctioned writer
+        record_stage_change(conn, job_id, new_stage, note=None, changed_by="jeff")
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
 
     if not row:

@@ -108,6 +108,16 @@
           <span class="nav-icon">🎯</span>
           <span>Calibration</span>
         </a>
+
+        <div class="nav-section">Metrics</div>
+        <a href="/settings/progress" class="nav-item" aria-current="{% if request.url.path == '/settings/progress' %}true{% endif %}">
+          <span class="nav-icon">📉</span>
+          <span>Progress</span>
+        </a>
+        <a href="/settings/health" class="nav-item" aria-current="{% if request.url.path == '/settings/health' %}true{% endif %}">
+          <span class="nav-icon">🩺</span>
+          <span>Health</span>
+        </a>
       </nav>
 
       <div class="sidebar-foot">

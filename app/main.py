@@ -16,6 +16,9 @@ image = (
     .add_local_dir("app/templates", remote_path="/root/app/templates")
     # WP-F: voice-guide YAMLs aren't .py, so add_local_python_source skips them.
     .add_local_dir("app/voice/constraints", remote_path="/root/app/voice/constraints")
+    # capture_repo_baselines() shells out to `pytest --co -q` for a live test_count;
+    # tests/ isn't picked up by add_local_python_source (that only mounts app/).
+    .add_local_dir("tests", remote_path="/root/tests")
 )
 
 # Personal config — candidate profile + hunt targets. Untracked from git (WP-A), so
@@ -68,6 +71,8 @@ def scheduler():
     """
     from datetime import datetime, timezone, timedelta
 
+    from app.observability import configure_logging
+    configure_logging()
     init_db()
 
     # Also research a batch of 5 outreach targets if they exist
@@ -79,6 +84,12 @@ def scheduler():
         batch_research_companies.spawn([r["id"] for r in rows])
 
     now_utc = datetime.now(timezone.utc)
+
+    # Prune observability tables once daily (midnight UTC tick) to bound Volume growth.
+    if now_utc.hour == 0:
+        from app.models import prune_observability_tables
+        from app.config import USAGE_RETENTION_DAYS
+        prune_observability_tables(USAGE_RETENTION_DAYS)
 
     # Run discovery scan daily at 6am UTC; run_discovery_scan() sends the
     # score-aware Slack digest ("N new roles ≥ 8.0 today") when it finds new roles.
@@ -105,6 +116,18 @@ def scheduler():
         except Exception as e:
             print(f"[scheduler] DB backup failed: {e}")
 
+    # Monthly progress snapshot — 1st-of-month, 00:00 UTC tick. Also folded into this
+    # cron rather than its own scheduled function (same 5-cron-cap constraint as the
+    # backup above). snapshot_progress() is idempotent on snapshot_date (INSERT OR
+    # REPLACE), so it's safe even if this branch somehow fires more than once in a day.
+    if now_utc.day == 1 and now_utc.hour == 0:
+        from app.crons.progress import snapshot_progress
+        try:
+            result = snapshot_progress()
+            print(f"[scheduler] Progress snapshot captured for {result['snapshot_date']}")
+        except Exception as e:
+            print(f"[scheduler] Progress snapshot failed: {e}")
+
 
 # Not scheduled (Modal's 5-scheduled-function cap is full) — the weekly run is driven
 # by scheduler() above. Kept as a manually-invokable function for on-demand backups
@@ -120,6 +143,172 @@ def backup_db():
     init_db()
     from app.maintenance.db_backup import backup_database
     backup_database()
+
+
+_STUB_JOBS_QUERY = """
+    SELECT id, company, job_title, COALESCE(LENGTH(jd_text), 0) AS jd_len,
+           auto_rejected, pipeline_stage, final_score, source_url
+    FROM jobs
+    WHERE COALESCE(company, '') IN ('', 'Unknown')
+       OR COALESCE(job_title, '') IN ('', 'Untitled role')
+       OR (pipeline_stage = 'identified' AND final_score IS NULL)
+    ORDER BY id
+"""
+
+
+# Read-only. Classifies Discovered-panel stub rows (blank/Unknown company or title,
+# or never-scored 'identified' rows) into Bucket 1 (jd_text already saved — just
+# needs the existing rescore logic re-run) vs Bucket 2 (no usable jd_text — needs
+# the JD sourced before anything can be scored). Invoke: `modal run app/main.py::diagnose_stubs`
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets, anthropic_secret],
+    volumes={"/data": volume},
+    timeout=120,
+)
+def diagnose_stubs():
+    init_db()
+    from app.models import get_db
+
+    with get_db() as conn:
+        rows = conn.execute(_STUB_JOBS_QUERY).fetchall()
+
+    bucket1 = 0
+    bucket2 = 0
+    for row in rows:
+        r = dict(row)
+        bucket = "BUCKET_1_rescore_ready" if r["jd_len"] >= 100 else "BUCKET_2_needs_jd"
+        bucket1 += bucket == "BUCKET_1_rescore_ready"
+        bucket2 += bucket == "BUCKET_2_needs_jd"
+        print(
+            f"[diagnose] id={r['id']} company='{r['company']}' title='{r['job_title']}' "
+            f"jd_len={r['jd_len']} auto_rejected={r['auto_rejected']} stage={r['pipeline_stage']} "
+            f"score={r['final_score']} url={r['source_url']} -> {bucket}"
+        )
+
+    print(f"[diagnose] Total stubs: {len(rows)} | Bucket 1 (rescore-ready): {bucket1} | Bucket 2 (needs JD): {bucket2}")
+
+
+# Re-scores Bucket 1 stub jobs only (jd_text already saved, >= 100 chars) using the
+# same score_job_from_text_and_persist() call the existing /job/{id}/rescore route
+# uses. Never touches Bucket 2 rows (no JD text) — the Python filter below skips
+# them before any scoring call, and the service itself also hard-fails on short
+# jd_text. Invoke: `modal run app/main.py::remediate_bucket1`
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets, anthropic_secret],
+    volumes={"/data": volume},
+    timeout=600,
+)
+def remediate_bucket1():
+    init_db()
+    from app.models import get_db
+    from app.services.scoring_service import score_job_from_text_and_persist
+
+    with get_db() as conn:
+        rows = conn.execute(_STUB_JOBS_QUERY).fetchall()
+
+    attempted = 0
+    ok = 0
+    errors = 0
+    for row in rows:
+        r = dict(row)
+        if r["jd_len"] < 100:
+            continue
+
+        attempted += 1
+        with get_db() as conn:
+            jd_row = conn.execute("SELECT jd_text FROM jobs WHERE id = ?", (r["id"],)).fetchone()
+        jd_text = jd_row["jd_text"]
+
+        result = score_job_from_text_and_persist(r["id"], jd_text, transition_stage=False)
+        if result["status"] == "error":
+            errors += 1
+            print(f"[remediate] id={r['id']} -> ERROR {result.get('error')}")
+        else:
+            ok += 1
+            with get_db() as conn:
+                new_row = conn.execute("SELECT company FROM jobs WHERE id = ?", (r["id"],)).fetchone()
+            print(
+                f"[remediate] id={r['id']} -> OK score={result.get('score')} "
+                f"company='{new_row['company']}' (was '{r['company']}')"
+            )
+
+    print(f"[remediate] Done: {attempted} attempted, {ok} ok, {errors} errors.")
+
+
+# One-time backlog rescore under the post-WP-J engine (2026-07-08). Targets jobs
+# scored before the 2026-06-22 overhaul (no score_history row since then), skipping
+# auto-rejects and jobs without usable JD text. Appends score_history so old-engine
+# and new-engine scores stay auditable. Invoke:
+#   modal run app/main.py::rescore_stale --dry-run   (list targets, no LLM calls)
+#   modal run app/main.py::rescore_stale             (real run, ~5s pacing per job)
+_STALE_SCORE_QUERY = """
+    SELECT j.id, j.company, j.job_title, j.final_score,
+           LENGTH(COALESCE(j.jd_text, '')) AS jd_len
+    FROM jobs j
+    WHERE j.final_score IS NOT NULL
+      AND j.auto_rejected = 0
+      AND LENGTH(COALESCE(j.jd_text, '')) >= 100
+      AND NOT EXISTS (
+          SELECT 1 FROM score_history h
+          WHERE h.job_id = j.id AND date(h.scored_at) >= '2026-06-22'
+      )
+    ORDER BY j.id
+"""
+
+
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets, anthropic_secret],
+    volumes={"/data": volume},
+    timeout=3600,
+)
+def rescore_stale(dry_run: bool = False):
+    import time
+
+    init_db()
+    from app.models import get_db
+    from app.services.scoring_service import score_job_from_text_and_persist
+
+    with get_db() as conn:
+        rows = [dict(r) for r in conn.execute(_STALE_SCORE_QUERY).fetchall()]
+
+    print(f"[rescore_stale] {len(rows)} stale-scored jobs targeted (dry_run={dry_run})")
+    if dry_run:
+        for r in rows:
+            print(f"[rescore_stale] id={r['id']} '{r['company']}' — '{r['job_title']}' old={r['final_score']}")
+        return
+
+    ok = errors = 0
+    for r in rows:
+        with get_db() as conn:
+            jd_row = conn.execute("SELECT jd_text FROM jobs WHERE id = ?", (r["id"],)).fetchone()
+
+        result = score_job_from_text_and_persist(r["id"], jd_row["jd_text"], transition_stage=False)
+        if result.get("status") == "success":
+            ok += 1
+            with get_db() as conn:
+                new = conn.execute(
+                    "SELECT final_score, deterministic_score, llm_adjustment, match_score,"
+                    " adjustment_weights_score FROM jobs WHERE id = ?", (r["id"],)).fetchone()
+                conn.execute(
+                    """INSERT INTO score_history
+                       (job_id, final_score, deterministic_score, llm_adjustment,
+                        match_score, adjustment_weights_score)
+                       VALUES (?,?,?,?,?,?)""",
+                    (r["id"], new["final_score"], new["deterministic_score"],
+                     new["llm_adjustment"], new["match_score"], new["adjustment_weights_score"]),
+                )
+            print(f"[rescore_stale] id={r['id']} '{r['company']}' {r['final_score']} -> {result.get('score')}")
+        else:
+            errors += 1
+            print(f"[rescore_stale] id={r['id']} '{r['company']}' -> ERROR {result.get('error')}")
+
+        time.sleep(5)  # AI_RULES §1 pacing between LLM calls
+
+    print(f"[rescore_stale] Done: {ok} rescored, {errors} errors of {len(rows)} targeted.")
+    volume.commit()
 
 
 @app.function(
@@ -402,12 +591,39 @@ def probe_model_quota():
     image=image,
     secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
+)
+def progress_snapshot_cron():
+    """Monthly progress snapshot: captures funnel metrics and auto-emits wins.md entry.
+
+    Not scheduled directly (Modal's 5-scheduled-function cap is full — see the
+    backup_db() note above) — the monthly run is driven by scheduler() below, gated
+    on day-of-month. Kept as a manually-invokable function for on-demand runs and
+    verification: `modal run app/main.py::progress_snapshot_cron`.
+    """
+    from app.observability import configure_logging
+    configure_logging()
+    init_db()
+    from app.crons.progress import snapshot_progress
+    result = snapshot_progress()
+    print(f"[progress_snapshot_cron] Snapshot captured for {result['snapshot_date']}")
+    return result
+
+
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets, anthropic_secret],
+    volumes={"/data": volume},
     timeout=600,
 )
 @modal.asgi_app()
 def web():
     """HTMX web interface."""
+    from app.observability import configure_logging
+    configure_logging()
     init_db()
+    from app.models import capture_repo_baselines, seed_milestones
+    capture_repo_baselines()
+    seed_milestones()
     from app.routes import create_app
     return create_app(
         batch_research_fn=batch_research_companies,

@@ -12,6 +12,7 @@ STAGES = {
     "evaluated":     {"label": "Evaluated",         "terminal": False},
     "researching":   {"label": "Researching",       "terminal": False},
     "outreach":      {"label": "Outreach",          "terminal": False},
+    "applied":       {"label": "Applied",           "terminal": False},
     "recruiter":     {"label": "Recruiter Screen",  "terminal": False},
     "hm_interview":  {"label": "HM Interview",      "terminal": False},
     "panel":         {"label": "Panel / Loop",      "terminal": False},
@@ -67,6 +68,8 @@ def advance_stage(job_id: int, to_stage: str, notes: str = "", decline_reason: s
     Move a job to a new pipeline stage.
     Returns {"ok": True} or {"ok": False, "error": "message"}.
     """
+    from app.services.pipeline_service import record_stage_change
+
     if to_stage not in STAGES:
         return {"ok": False, "error": f"Unknown stage: {to_stage}"}
 
@@ -80,20 +83,16 @@ def advance_stage(job_id: int, to_stage: str, notes: str = "", decline_reason: s
 
         from_stage = row["pipeline_stage"]
 
-        conn.execute(
-            "UPDATE jobs SET pipeline_stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (to_stage, job_id),
-        )
+        # Route through the single sanctioned writer
+        full_notes = f"{notes}\nDecline reason: {decline_reason}".strip() if decline_reason else notes
+        record_stage_change(conn, job_id, to_stage, note=full_notes, changed_by="user")
+
+        # Set applied_at timestamp if moving to an application stage
         if to_stage in ("applied", "outreach"):
             conn.execute(
                 "UPDATE jobs SET applied_at = ? WHERE id = ? AND applied_at IS NULL",
                 (datetime.now(timezone.utc).isoformat(), job_id),
             )
-        full_notes = f"{notes}\nDecline reason: {decline_reason}".strip() if decline_reason else notes
-        conn.execute(
-            "INSERT INTO pipeline_history (job_id, from_stage, to_stage, notes) VALUES (?,?,?,?)",
-            (job_id, from_stage, to_stage, full_notes),
-        )
 
     return {"ok": True, "from": from_stage, "to": to_stage}
 

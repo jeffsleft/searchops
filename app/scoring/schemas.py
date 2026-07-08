@@ -18,7 +18,10 @@ class TechStack(BaseModel):
 
 class ScoringResult(BaseModel):
     jd_insufficient: bool = False
-    llm_adjustment: float = Field(0.0, ge=-1.0, le=1.0)
+    # Bound must match the Layer 3 prompt (±1.5) and candidate_profile l3_range.
+    # A tighter bound here doesn't clamp — it fails validation, and research.py
+    # then falls back to the raw unvalidated dict for the whole record.
+    llm_adjustment: float = Field(0.0, ge=-1.5, le=1.5)
     company: str = "Unknown"
     job_title: str = "Unknown"
     pros: str = ""

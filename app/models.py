@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 from contextlib import contextmanager
+from pathlib import Path
 from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
 from app.config import DATABASE_PATH
 from app.security.url_guard import validate_url
@@ -361,6 +362,70 @@ CREATE TABLE IF NOT EXISTS application_outcomes (
     recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_application_outcomes_job ON application_outcomes(job_id);
+
+-- Observability: one row per unhandled request exception (app/observability).
+-- actor_id is the SaaS-shaped seam: a single value today, per-tenant later.
+CREATE TABLE IF NOT EXISTS error_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    request_id TEXT,
+    method TEXT,
+    route_template TEXT,
+    exc_type TEXT,
+    message TEXT,
+    actor_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_error_events_ts ON error_events(ts);
+
+-- Product-usage capture: one row per HTTP request. No bodies, no query strings,
+-- no PII — method + matched route template + status + timing only.
+CREATE TABLE IF NOT EXISTS usage_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    actor_id TEXT,
+    method TEXT NOT NULL,
+    route_template TEXT NOT NULL,
+    status INTEGER,
+    duration_ms INTEGER,
+    is_hx INTEGER DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_usage_events_ts ON usage_events(ts);
+CREATE INDEX IF NOT EXISTS idx_usage_events_route ON usage_events(route_template);
+
+-- Progress instrumentation (v2): baselines for repo metrics
+CREATE TABLE IF NOT EXISTS progress_baselines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    metric_key TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    value TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    source TEXT NOT NULL
+);
+
+-- Progress instrumentation: milestones for narrative tracking
+CREATE TABLE IF NOT EXISTS milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    completed_on TEXT,
+    evidence TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
+-- Progress instrumentation: monthly snapshots of funnel metrics
+CREATE TABLE IF NOT EXISTS progress_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_date TEXT NOT NULL UNIQUE,
+    jobs_scored INTEGER,
+    companies_covered INTEGER,
+    apps_sent INTEGER,
+    phone_screens INTEGER,
+    interviews INTEGER,
+    offers INTEGER,
+    calibration_hit_rate_json TEXT,
+    median_days_to_first_interview REAL,
+    raw_json TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
 """
 
 
@@ -480,3 +545,177 @@ def log_task_event(task_type: str, status: str, message: str = "", entity_name: 
             )
     except Exception as e:
         logging.warning(f"[task_log] Failed to log event: {e}")
+
+
+def log_usage_event(
+    method: str,
+    route_template: str,
+    status: int,
+    duration_ms: int,
+    is_hx: bool = False,
+    actor_id: str | None = None,
+) -> None:
+    """Persist one request to usage_events. Swallows errors — must never break a request."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO usage_events (actor_id, method, route_template, status, duration_ms, is_hx) "
+                "VALUES (?,?,?,?,?,?)",
+                (actor_id, method, route_template, status, duration_ms, 1 if is_hx else 0),
+            )
+    except Exception as e:
+        logging.warning(f"[usage_events] Failed to log event: {e}")
+
+
+def log_error_event(
+    request_id: str | None,
+    method: str | None,
+    route_template: str | None,
+    exc_type: str,
+    message: str,
+    actor_id: str | None = None,
+) -> None:
+    """Persist one unhandled exception to error_events. Swallows its own errors."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO error_events (request_id, method, route_template, exc_type, message, actor_id) "
+                "VALUES (?,?,?,?,?,?)",
+                (request_id, method, route_template, exc_type, (message or "")[:1000], actor_id),
+            )
+    except Exception as e:
+        logging.warning(f"[error_events] Failed to log event: {e}")
+
+
+def prune_observability_tables(retention_days: int = 180) -> None:
+    """Delete usage_events / error_events older than retention_days. Called from the daily cron."""
+    try:
+        cutoff = f"-{int(retention_days)} days"
+        with get_db() as conn:
+            conn.execute(
+                "DELETE FROM usage_events WHERE ts < strftime('%Y-%m-%dT%H:%M:%S', 'now', ?)",
+                (cutoff,),
+            )
+            conn.execute(
+                "DELETE FROM error_events WHERE ts < strftime('%Y-%m-%dT%H:%M:%S', 'now', ?)",
+                (cutoff,),
+            )
+    except Exception as e:
+        logging.warning(f"[observability] prune failed: {e}")
+
+
+def capture_repo_baselines() -> None:
+    """Compute and persist repo baselines: db_tables count and test_count.
+
+    These are metrics that change as the codebase evolves. Rather than hand-entering
+    them (which rots), we compute them at runtime and upsert to progress_baselines.
+    Called once on app startup (app/main.py::web()) and available for /settings/health
+    + board metrics. Also seeds the two static, externally-proven baselines
+    (index_speedup, sheets_removal) and the milestone rows — both idempotent.
+    """
+    import subprocess
+    from datetime import datetime
+
+    repo_root = Path(__file__).resolve().parent.parent
+
+    try:
+        with get_db() as conn:
+            # Count CREATE TABLE statements in sqlite_master
+            db_tables = conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchone()[0]
+
+            # Count test_ functions via pytest collection
+            try:
+                result = subprocess.run(
+                    ["pytest", "--co", "-q"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    cwd=str(repo_root),
+                )
+                # Last line of output is "N tests collected" or similar
+                output = result.stdout.strip().split('\n')
+                test_count = 0
+                for line in reversed(output):
+                    if "collected" in line:
+                        parts = line.split()
+                        if parts and parts[0].isdigit():
+                            test_count = int(parts[0])
+                        break
+            except Exception:
+                test_count = 0
+
+            if not test_count:
+                # Fallback: grep for def test_ (also covers environments where pytest
+                # collection fails, e.g. tests/ absent from a deployed image)
+                result = subprocess.run(
+                    ["grep", "-rc", "def test_", "tests/"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    cwd=str(repo_root),
+                )
+                test_count = sum(
+                    int(line.rsplit(":", 1)[1]) for line in result.stdout.strip().split("\n")
+                    if line and line.rsplit(":", 1)[1].isdigit()
+                ) if result.stdout else 0
+
+            now = datetime.utcnow().isoformat() + "Z"
+
+            # Upsert db_tables
+            conn.execute(
+                """INSERT INTO progress_baselines (metric_key, label, value, captured_at, source)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(metric_key) DO UPDATE SET value=excluded.value, captured_at=excluded.captured_at""",
+                ("db_tables", "Database tables", str(db_tables), now, "sqlite_master COUNT(*)")
+            )
+
+            # Upsert test_count
+            conn.execute(
+                """INSERT INTO progress_baselines (metric_key, label, value, captured_at, source)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(metric_key) DO UPDATE SET value=excluded.value, captured_at=excluded.captured_at""",
+                ("test_count", "Test functions", str(test_count), now, "pytest --co -q")
+            )
+
+            # Static, externally-proven baselines (spec §1) — INSERT OR IGNORE, never rewritten.
+            conn.execute(
+                """INSERT OR IGNORE INTO progress_baselines (metric_key, label, value, captured_at, source)
+                   VALUES (?, ?, ?, ?, ?)""",
+                ("index_speedup", "Query speedup from indexing",
+                 "19–232x (bench_indexes.py, 20k/5k)", now, "scripts/bench_indexes.py"),
+            )
+            conn.execute(
+                """INSERT OR IGNORE INTO progress_baselines (metric_key, label, value, captured_at, source)
+                   VALUES (?, ?, ?, ?, ?)""",
+                ("sheets_removal", "Google Sheets integration removed",
+                 "net -1056 LOC / 3 deps", now, "commit d5aeea7"),
+            )
+    except Exception as e:
+        logging.warning(f"[progress_baselines] capture_repo_baselines failed: {e}")
+
+
+def seed_milestones() -> None:
+    """Seed narrative milestones (spec §1) from docs/wins.md. INSERT OR IGNORE,
+    idempotent on `name` — safe to call on every app boot."""
+    milestones = [
+        ("Track B rebuild done-bar reached", "2026-06-22",
+         "docs/wins.md — Session 38/39, WP-N performance + WP-G forkability"),
+        ("Public repo launched (github.com/jeffsleft/searchops)", "2026-06-24",
+         "docs/wins.md — Session 42, trackA-showcase published"),
+        ("Case study + README screenshots shipped", "2026-07-01",
+         "docs/wins.md — trackA-showcase closed"),
+        ("Progress-instrumentation layer shipped", "2026-07-04",
+         "docs/wins.md — Progress-instrumentation layer"),
+    ]
+    try:
+        with get_db() as conn:
+            for name, completed_on, evidence in milestones:
+                conn.execute(
+                    """INSERT OR IGNORE INTO milestones (name, completed_on, evidence)
+                       VALUES (?, ?, ?)""",
+                    (name, completed_on, evidence),
+                )
+    except Exception as e:
+        logging.warning(f"[milestones] seed_milestones failed: {e}")

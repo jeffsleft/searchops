@@ -53,6 +53,9 @@ NO_PARAM_GET_ROUTES = [
     "/targets",
     "/api/task-status",
     "/api/sync-status",
+    "/settings/calibration",
+    "/settings/progress",
+    "/settings/health",
 ]
 
 

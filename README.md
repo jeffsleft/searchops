@@ -11,11 +11,13 @@ Standard job searching is backwards. You apply to hundreds of roles, most fit la
 
 The first version was bad. It took the JD, pulled a generic 4-line candidate summary, ran a Gemini call that returned a score with a ±1.0 nudge applied. I called it AI scoring. It was a spreadsheet with a chat window. The problem was obvious once I stopped building and started using it: the score had no grounding in anything I'd actually done. It couldn't connect "you managed a $50M renewal cohort" to "this role needs someone who's scaled CS ops." So I rebuilt.
 
-Track B grounds the score in evidence. It pulls from my Accomplishments Inventory (a structured record of every metric, project, and outcome from fifteen years), runs a 32-row evidence table that matches JD requirements to specific work history, and generates tailored resume bullets and cover letter hooks. The Accomplishments Inventory is the core move. Everything else flows from there.
+Track B grounds the score in evidence. It pulls from my Accomplishments Inventory (a structured record of every metric, project, and outcome from fifteen years), builds an evidence table — one row per JD requirement — matching each requirement to specific work history, and generates tailored resume bullets and cover letter hooks. The Accomplishments Inventory is the core move. Everything else flows from there.
 
-It works. Ninety jobs scored. Only 6 of 90 cleared the 8+ bar I set. Tier A targets like Anthropic, Cohere, Weights & Biases, Vercel, Cloudflare, Notion, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, and Okta running daily ATS scans. Staging interviews. The rest is handled automatically: tracking the pipeline, prepping per-company question banks, generating tailored application materials.
+It works. Over 90 jobs scored across a 168-job intake funnel. The engine is built so an 8+ is rare and earned: surface signals cap out at 6.0, and anything above 7.0 has to pass five must-haves or it gets clamped back down. Tier A targets like Anthropic, Cohere, Weights & Biases, Vercel, Cloudflare, Notion, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, and Okta running daily ATS scans. The rest is handled automatically: tracking the pipeline, prepping per-company question banks, generating tailored application materials.
 
 Fork it if it helps. The real move is the method: ground your scoring in evidence from your actual work history, not summary keywords.
+
+The full story — including how a non-developer shipped this by directing AI agents through work packages, ADRs, and verification gates — is in the [case study](docs/case-study.md) (see "How this was built") and the [actual build spec](docs/build/searchops-rebuild.md) used to run the rebuild.
 
 ---
 

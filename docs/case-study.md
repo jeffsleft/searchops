@@ -48,7 +48,7 @@ What you fork is the scoring weights, the Accomplishments Inventory structure, t
 
 ## Results
 
-One hundred sixty-eight jobs in the intake funnel. Ninety-one fully scored. Fifty-eight Tier A companies (Anthropic, Cohere, Weights & Biases, Retool, Temporal, Glean, Ramp, Vercel, Cloudflare, Notion, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, Okta among them) running daily ATS scans. Fifteen pipeline stages from Discovered through Offer/Decision.
+One hundred sixty-eight jobs in the intake funnel. Ninety-one fully scored. Fifty-eight Tier A companies (Anthropic, Cohere, Weights & Biases, Retool, Temporal, Glean, Ramp, Cloudflare, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, Okta among them) running daily ATS scans. Fifteen pipeline stages from Discovered through Offer/Decision.
 
 The June scoring overhaul reset the bar — base dropped to 3.5, Layer 4 capped, top-band gate added — so a score above 7 now means something. Scores from the earlier engine stay on the old scale until they're re-run; the engine keeps per-job score history so the two eras don't get conflated. Under the current engine, clearing 8+ looks like the Decagon example above: strong evidence on nearly every requirement, plus all five gate must-haves.
 

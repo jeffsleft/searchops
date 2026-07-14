@@ -62,6 +62,7 @@ anthropic_secret = modal.Secret.from_name("anthropic-key")
     secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
     schedule=modal.Cron("0 0,6,12,18 * * *"),
+    timeout=120,
 )
 def scheduler():
     """
@@ -69,7 +70,7 @@ def scheduler():
     - 6am UTC: run automated job discovery scan.
     - Monday 8am PT: also send weekly Slack digest.
     """
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timezone
 
     from app.observability import configure_logging
     configure_logging()
@@ -91,19 +92,21 @@ def scheduler():
         from app.config import USAGE_RETENTION_DAYS
         prune_observability_tables(USAGE_RETENTION_DAYS)
 
-    # Run discovery scan daily at 6am UTC; run_discovery_scan() sends the
-    # score-aware Slack digest ("N new roles ≥ 8.0 today") when it finds new roles.
+    # Run discovery scan daily at 6am UTC. Offloaded to run_discovery_scan_remote
+    # via .spawn() (its own container, timeout=900) rather than run inline: the scan
+    # loops every hunt-enabled company through network fetches + LLM search dorks and
+    # routinely exceeds this cron's timeout. The scan sends the score-aware Slack
+    # digest ("N new roles ≥ 8.0 today") when it finds new roles.
     if now_utc.hour == 6:
-        from app.discovery.hunter import run_discovery_scan
-        run_discovery_scan()
+        run_discovery_scan_remote.spawn()
 
-    # Send weekly digest on Monday 8am PT (== Tuesday 4am UTC)
-    for utc_offset in [-7, -8]:
-        local = now_utc + timedelta(hours=utc_offset)
-        if local.weekday() == 0 and local.hour == 8:
-            from app.notifications.slack import send_weekly_digest
-            send_weekly_digest()
-            break
+    # Send the weekly Slack digest once a week at the Monday 18:00 UTC tick
+    # (== 11am PDT / 10am PST). Gated to an actual cron tick: the previous
+    # "Monday 8am PT" gate never fired, since the cron only ticks at
+    # 0/6/12/18 UTC and 8am PT lands on none of them.
+    if now_utc.weekday() == 0 and now_utc.hour == 18:
+        from app.notifications.slack import send_weekly_digest
+        send_weekly_digest()
 
     # Weekly DB backup — Sunday 00:00 UTC tick. Folded into this cron (rather than
     # its own scheduled function) because Modal caps the workspace at 5 scheduled
@@ -309,6 +312,49 @@ def rescore_stale(dry_run: bool = False):
 
     print(f"[rescore_stale] Done: {ok} rescored, {errors} errors of {len(rows)} targeted.")
     volume.commit()
+
+
+# One-off admin fix (W1-REDACT, 2026-07-14 plan): Tebra (id 140) has an application
+# sent but never got its applied_at stamped, so KR1 and the calibration count
+# undercount it. Refuses to overwrite a row that already has applied_at set — this
+# is a single deliberate backfill, not a general-purpose field editor.
+# Invoke via the deployed function only (never `modal run` — Session 47 lesson),
+# off the 0/6/12/18 UTC cron ticks: dry_run first, then dry_run=False to commit.
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets],
+    volumes={"/data": volume},
+    timeout=60,
+)
+def stamp_applied_at(job_id: int, applied_date: str, dry_run: bool = True):
+    init_db()
+    from app.models import get_db
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, company, job_title, applied_at FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+        if not row:
+            print(f"[stamp_applied_at] no job with id={job_id} — nothing done")
+            return
+        if row["applied_at"]:
+            print(
+                f"[stamp_applied_at] id={job_id} '{row['company']}' already has "
+                f"applied_at={row['applied_at']} — refusing to overwrite"
+            )
+            return
+
+        print(
+            f"[stamp_applied_at] id={job_id} '{row['company']}' — '{row['job_title']}' "
+            f"-> applied_at={applied_date} (dry_run={dry_run})"
+        )
+        if dry_run:
+            return
+
+        conn.execute("UPDATE jobs SET applied_at = ? WHERE id = ?", (applied_date, job_id))
+
+    volume.commit()
+    print(f"[stamp_applied_at] id={job_id} committed.")
 
 
 @app.function(

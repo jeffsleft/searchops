@@ -28,6 +28,7 @@ def board_metrics() -> dict:
 
     # DATA CONTRACT (consumed by settings_progress.html):
     {
+      "applications_sent": int,   # KR1: jobs with applied_at set (survives progression past 'applied')
       "funnel_trend": [{"month": "YYYY-MM", "applied": int, "screen": int,
                         "interview": int, "offer": int}],
       "conversion": [{"stage": str, "rate": float|None, "n": int, "confidence": str}],
@@ -38,6 +39,14 @@ def board_metrics() -> dict:
     }
     """
     with get_db() as conn:
+        # KR1 headline: applications actually sent. Counts jobs.applied_at (stamped once,
+        # never cleared) so a job that progresses past 'applied' keeps counting — unlike
+        # the old headline, which summed the 'applied' *outcome* across snapshots and
+        # undercounted (showed 4 when 12 applications had gone out).
+        applications_sent = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE applied_at IS NOT NULL"
+        ).fetchone()[0]
+
         # Live counts for conversion calculations
         applied = _stage_count(conn, "applied")
         screen = _stage_count(conn, "phone_screen")
@@ -103,6 +112,7 @@ def board_metrics() -> dict:
     ]
 
     return {
+        "applications_sent": applications_sent,
         "funnel_trend": funnel_trend,
         "conversion": conversion,
         "velocity": {"days_to_first_interview": dti},

@@ -122,6 +122,64 @@ def test_record_stage_change_terminal_triggers_outcome(temp_db):
     assert outcomes[0]["outcome"] == "applied"
 
 
+def test_moving_to_applied_stamps_applied_at(temp_db):
+    """W1-B/C: record_stage_change is the single place applied_at is stamped, so every
+    UI path (incl. the detail-panel path that never stamped it before) counts toward
+    KR1. A job with no applied_at, moved to 'applied', gets it stamped."""
+    with get_db() as conn:
+        job_id = _insert_job(conn, pipeline_stage="identified")
+        record_stage_change(conn, job_id, "applied", changed_by="test")
+
+    with get_db() as conn:
+        row = conn.execute("SELECT applied_at FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    assert row["applied_at"] is not None, "applied_at should be stamped on the 'applied' transition"
+
+
+def test_pre_application_decline_not_logged(temp_db):
+    """W1-B: a decline BEFORE any application (applied_at IS NULL) is funnel triage,
+    not calibration data — it must not create an application_outcomes row."""
+    with get_db() as conn:
+        job_id = _insert_job(conn, pipeline_stage="identified")  # never applied
+        record_stage_change(conn, job_id, "i_declined", note="wrong sector", changed_by="test")
+
+    with get_db() as conn:
+        outcomes = conn.execute(
+            "SELECT outcome FROM application_outcomes WHERE job_id = ?", (job_id,)
+        ).fetchall()
+    assert len(outcomes) == 0, f"Pre-application decline must not log an outcome, got {len(outcomes)}"
+
+
+def test_post_application_decline_is_logged(temp_db):
+    """W1-B: a decline AFTER an application went out (applied_at set) logs the outcome."""
+    with get_db() as conn:
+        job_id = _insert_job(conn, pipeline_stage="applied", applied_at="2026-06-01T00:00:00")
+        record_stage_change(conn, job_id, "they_declined", note="went with another", changed_by="test")
+
+    with get_db() as conn:
+        outcomes = conn.execute(
+            "SELECT outcome FROM application_outcomes WHERE job_id = ?", (job_id,)
+        ).fetchall()
+    assert len(outcomes) == 1, f"Post-application decline should log one outcome, got {len(outcomes)}"
+    assert outcomes[0]["outcome"] == "rejected_me"
+
+
+def test_outcome_logging_is_idempotent(temp_db):
+    """W1-B: repeated transitions to the same outcome never create a duplicate row."""
+    with get_db() as conn:
+        job_id = _insert_job(conn, pipeline_stage="applied", applied_at="2026-06-01T00:00:00")
+        record_stage_change(conn, job_id, "they_declined", changed_by="test")
+        # bounce back and re-decline — must not double-log
+        record_stage_change(conn, job_id, "recruiter", changed_by="test")
+        record_stage_change(conn, job_id, "they_declined", changed_by="test")
+
+    with get_db() as conn:
+        rejected = conn.execute(
+            "SELECT COUNT(*) FROM application_outcomes WHERE job_id = ? AND outcome = 'rejected_me'",
+            (job_id,),
+        ).fetchone()[0]
+    assert rejected == 1, f"Expected exactly 1 rejected_me row (idempotent), got {rejected}"
+
+
 def test_get_calibration_summary_insufficient_data_flag(temp_db, monkeypatch):
     """insufficient_data must be true when n_with_outcome < CALIBRATION_MIN_SAMPLE."""
     monkeypatch.setattr(config, "CALIBRATION_MIN_SAMPLE", 5)

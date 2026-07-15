@@ -5,6 +5,7 @@
 
 :root {
   /* DARK (default) — Desert: warm sand backgrounds, sage-green accent */
+  color-scheme: dark;   /* native controls (buttons, selects, scrollbars) render dark */
   --bg:           oklch(19% 0.012 65);
   --bg-elev:      oklch(23% 0.014 65);
   --bg-sunk:      oklch(16% 0.010 65);
@@ -54,6 +55,7 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --bg:           oklch(97% 0.010 82);
   --bg-elev:      oklch(100% 0.005 80);
   --bg-sunk:      oklch(93% 0.013 80);
@@ -1676,9 +1678,8 @@ a:hover { text-decoration: underline; }
   height: 30px;
   padding: 4px 8px;
   font-size: 12px;
-  color-scheme: dark;
+  /* color-scheme comes from :root / [data-theme="light"] */
 }
-[data-theme="light"] .prep-schedule-input { color-scheme: light; }
 
 /* Stage-aware prompt banner */
 .prep-stage-prompt {

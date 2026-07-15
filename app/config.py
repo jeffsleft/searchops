@@ -73,6 +73,13 @@ HIGH_SCORE_THRESHOLD = 8.0
 STALE_RECRUITER_DAYS = 30
 RESEARCH_CACHE_TTL_DAYS = 7
 WATCHDOG_SCHEDULE = "0 * * * *"       # every hour
+
+# W1-A watchdog rewire: newly discovered roles are auto-scored through the canonical
+# scoring path (fetch JD → L1/L4 free → L2/L3 LLM → Slack ≥8 alert). L1 auto-reject runs
+# free on everything; the expensive LLM layers (L2/L3) run only on L1 survivors, capped
+# per scan run as a runaway guard (auto-rejects do NOT consume the cap). Raise if intake
+# grows and the daily scan is dropping survivors past the cap.
+DISCOVERY_FULL_SCORE_CAP = int(os.environ.get("DISCOVERY_FULL_SCORE_CAP", "10"))
 WEEKLY_DIGEST_SCHEDULE = "0 8 * * 1"  # Monday 8am
 
 # --- Observability, usage capture & metrics (progress-instrumentation) ---

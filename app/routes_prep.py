@@ -49,7 +49,7 @@ def _render_prep_main(job_id: int, active_session_id: int, request=None) -> HTML
         eligible_jobs = [dict(r) for r in conn.execute("""
             SELECT id, company, job_title, final_score, pipeline_stage
             FROM jobs
-            WHERE pipeline_stage IN ('discovered','evaluated','researching','outreach','on_hold','recruiter','hm_interview','panel','final_offer')
+            WHERE pipeline_stage IN ('discovered','evaluated','researching','outreach','applied','on_hold','recruiter','hm_interview','panel','final_offer')
               AND auto_rejected = 0
             ORDER BY final_score DESC
         """).fetchall()]
@@ -87,7 +87,7 @@ async def prep_index(request: Request):
         eligible = [dict(r) for r in conn.execute("""
             SELECT id, company, job_title, final_score, pipeline_stage, auto_rejected
             FROM jobs
-            WHERE pipeline_stage IN ('discovered','evaluated','researching','outreach','on_hold','recruiter','hm_interview','panel','final_offer')
+            WHERE pipeline_stage IN ('discovered','evaluated','researching','outreach','applied','on_hold','recruiter','hm_interview','panel','final_offer')
               AND auto_rejected = 0
             ORDER BY final_score DESC
         """).fetchall()]
@@ -739,7 +739,7 @@ async def prep_palette(request: Request):
         eligible = [dict(r) for r in conn.execute("""
             SELECT id, company, job_title, final_score, pipeline_stage, auto_rejected
             FROM jobs
-            WHERE pipeline_stage IN ('discovered','evaluated','researching','outreach','on_hold','recruiter','hm_interview','panel','final_offer')
+            WHERE pipeline_stage IN ('discovered','evaluated','researching','outreach','applied','on_hold','recruiter','hm_interview','panel','final_offer')
               AND auto_rejected = 0
             ORDER BY final_score DESC
         """).fetchall()]

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-PREP_ELIGIBLE_STAGES = {'discovered', 'evaluated', 'researching', 'outreach', 'on_hold', 'recruiter', 'hm_interview', 'panel', 'final_offer'}
+PREP_ELIGIBLE_STAGES = {'discovered', 'evaluated', 'researching', 'outreach', 'applied', 'on_hold', 'recruiter', 'hm_interview', 'panel', 'final_offer'}
 
 
 def format_schedule(s: dict) -> str:
@@ -48,7 +48,7 @@ def get_upcoming_interviews(conn, limit=4):
         JOIN jobs j ON j.id = s.job_id
         WHERE s.schedule_date IS NOT NULL
           AND s.schedule_date != ''
-          AND j.pipeline_stage IN ('evaluated','researching','outreach','recruiter','hm_interview','panel','final_offer')
+          AND j.pipeline_stage IN ('evaluated','researching','outreach','applied','recruiter','hm_interview','panel','final_offer')
           AND j.auto_rejected = 0
         ORDER BY s.schedule_date, s.schedule_time
         LIMIT ?

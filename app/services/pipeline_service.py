@@ -55,6 +55,33 @@ def build_pipeline_view_data(archetype: str, _enrich_job_fn) -> dict:
     }
 
 
+# Moving a job to one of these stages means an application went out — stamp applied_at
+# (once, never cleared). Centralized here so every caller of the single sanctioned
+# writer benefits (the detail-panel path update_job_stage never stamped it otherwise,
+# which is why applied_at — and KR1 — undercounted).
+APPLICATION_STAGES = ('applied', 'outreach')
+
+# Map pipeline stages to calibration outcome types. Outcomes are only logged for jobs
+# that have actually been applied to (applied_at IS NOT NULL) — a pre-application
+# decline (e.g. i_declined straight out of 'identified') is funnel triage, not a
+# calibration data point, so it must not create an outcome row. See W1-B.
+STAGE_TO_OUTCOME = {
+    'applied': 'applied',
+    'outreach': 'applied',
+    'recruiter': 'phone_screen',
+    'hm_interview': 'interview',
+    'panel': 'interview',
+    'final_offer': 'interview',
+    'offer': 'offer',
+    'accepted': 'offer',
+    'i_declined': 'rejected_them',
+    'they_declined': 'rejected_me',
+}
+# Note: 'job_listing_closed' is intentionally unmapped — a closed listing is an
+# administrative state, not a candidate-facing result the scoring engine can be
+# calibrated against. Logging it would inject an ambiguous signal into calibration.
+
+
 def record_stage_change(
     conn: sqlite3.Connection,
     job_id: int,
@@ -65,10 +92,17 @@ def record_stage_change(
     """
     THE ONLY SANCTIONED WAY TO CHANGE pipeline_stage.
 
-    Atomically updates jobs.pipeline_stage and writes exactly one pipeline_history row
-    with the from_stage captured before the update. If the to_stage is terminal
-    (applied/phone_screen/interview/offer/rejected_them/rejected_me/ghosted),
-    also records the outcome via calibration_service.
+    Atomically, within the caller's transaction:
+      1. Updates jobs.pipeline_stage and writes exactly one pipeline_history row with
+         the from_stage captured before the update.
+      2. Stamps jobs.applied_at (once) when moving to an application stage
+         (applied / outreach) — this is the single place applied_at is set on a
+         stage change, so KR1 counts every application regardless of which UI path
+         made the move.
+      3. Auto-logs a calibration outcome (application_outcomes) IFF the job has been
+         applied to (applied_at set, including the stamp from step 2) AND the target
+         stage maps to an outcome. Idempotent: never a second row for the same
+         (job_id, outcome).
 
     Args:
         conn: sqlite3 connection
@@ -77,26 +111,15 @@ def record_stage_change(
         note: optional history note
         changed_by: who made the change (default "user")
     """
-    # Map pipeline stages to outcome types (for terminal transitions)
-    STAGE_TO_OUTCOME = {
-        'applied': 'applied',
-        'outreach': 'applied',
-        'recruiter': 'phone_screen',
-        'hm_interview': 'interview',
-        'panel': 'interview',
-        'final_offer': 'interview',
-        'offer': 'offer',
-        'accepted': 'offer',
-        'i_declined': 'rejected_them',
-        'they_declined': 'rejected_me',
-    }
-
-    # Read current stage before update
-    row = conn.execute("SELECT pipeline_stage FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    # Read current stage + applied_at before the update.
+    row = conn.execute(
+        "SELECT pipeline_stage, applied_at FROM jobs WHERE id = ?", (job_id,)
+    ).fetchone()
     if not row:
         raise ValueError(f"Job {job_id} not found")
 
     from_stage = row["pipeline_stage"]
+    applied_at = row["applied_at"]
 
     # Update the job's pipeline_stage
     conn.execute(
@@ -110,16 +133,33 @@ def record_stage_change(
         (job_id, from_stage, to_stage, note or "", changed_by),
     )
 
-    # If this is a terminal transition, record the outcome
-    if to_stage in STAGE_TO_OUTCOME:
+    # Stamp applied_at on the application transition (once). Do this BEFORE the outcome
+    # gate so the very transition that marks the job "applied" also logs its 'applied'
+    # outcome.
+    if to_stage in APPLICATION_STAGES and applied_at is None:
+        from datetime import datetime, timezone
+        applied_at = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "UPDATE jobs SET applied_at = ? WHERE id = ? AND applied_at IS NULL",
+            (applied_at, job_id),
+        )
+
+    # Auto-log a calibration outcome only for applied jobs.
+    if to_stage in STAGE_TO_OUTCOME and applied_at is not None:
         outcome = STAGE_TO_OUTCOME[to_stage]
         try:
-            from app.services.calibration_service import record_outcome
-            # Must reuse `conn` here, not open a second get_db() connection: a nested
-            # connection would deadlock against this still-open write transaction on
-            # the same sqlite file (confirmed empirically — 5s timeout then
-            # "database is locked", silently swallowed by this except).
-            record_outcome(job_id, outcome, note, conn=conn)
+            # Idempotent: skip if this job already has a row for this outcome.
+            existing = conn.execute(
+                "SELECT 1 FROM application_outcomes WHERE job_id = ? AND outcome = ? LIMIT 1",
+                (job_id, outcome),
+            ).fetchone()
+            if not existing:
+                from app.services.calibration_service import record_outcome
+                # Must reuse `conn` here, not open a second get_db() connection: a nested
+                # connection would deadlock against this still-open write transaction on
+                # the same sqlite file (confirmed empirically — 5s timeout then
+                # "database is locked", silently swallowed by this except).
+                record_outcome(job_id, outcome, note, conn=conn)
         except Exception:
             # If outcome recording fails, don't fail the stage change
             pass

@@ -21,6 +21,54 @@ CONFIG_PATH = Path(__file__).parent / "hunt_targets.yaml"
 # Tier A is exempt (scanned every run). See run_discovery_scan().
 NON_TIER_A_RESCAN_DAYS = 3
 
+# Minimum JD length to attempt a full score (mirrors score_job's own guard).
+_MIN_JD_FOR_SCORE = 300
+
+
+def _auto_score_discovery(job_id: int, url: str, profile: dict, budget: dict) -> str:
+    """Score a freshly discovered role through the canonical scoring path.
+
+    The watchdog loop: discover → fetch JD → 4-layer score → Slack ≥8 alert, zero manual
+    steps. Cost control (W1-A): the free L1 auto-reject runs on everything; the expensive
+    LLM layers (L2 match, L3 vibe) run only on L1 survivors and only while `budget`
+    remains — auto-rejects are still persisted but never consume the cap.
+
+    ALL persistence goes through score_job_from_text_and_persist (the canonical path), so
+    the full record — evidence, mismatches, tailored bullets, hooks — and the ≥8 Slack
+    alert land exactly as they do for a hand-scored job. Never write scores with a direct
+    UPDATE here (Session 47's promote bug dropped evidence/mismatches/bullets/hooks).
+
+    `budget` is a mutable dict {'remaining': int} shared across one scan run.
+    Returns a short status string for logging/stats.
+    """
+    from app.jobs.fetch import _fetch_jd_text, is_linkedin_job_url
+    from app.scoring.engine import check_auto_reject
+    from app.services.scoring_service import score_job_from_text_and_persist
+
+    if not url or is_linkedin_job_url(url):
+        return "skip_unfetchable"  # LinkedIn blocks automated fetching
+
+    try:
+        jd_text = _fetch_jd_text(url)
+    except Exception as e:
+        logger.warning("auto-score JD fetch failed for job %s: %s", job_id, e)
+        return "fetch_error"
+    if not jd_text or len(jd_text.strip()) < _MIN_JD_FOR_SCORE:
+        return "no_jd"  # leave discovered/unscored; a manual paste can score it later
+
+    # L1 auto-reject is free — run it to decide whether this row should spend LLM budget.
+    rejected, _reason = check_auto_reject(jd_text, profile)
+    if not rejected and budget.get("remaining", 0) <= 0:
+        # L1 survivor but the per-run LLM cap is spent — defer. A later scan (recent
+        # rows re-appear as still-unscored) or a manual score picks it up. Don't burn
+        # tokens past the cap.
+        return "deferred_over_cap"
+
+    result = score_job_from_text_and_persist(job_id, jd_text, url)
+    if not rejected:
+        budget["remaining"] = budget.get("remaining", 0) - 1
+    return result.get("status", "unknown")
+
 
 def _load_yaml_config() -> dict:
     if not CONFIG_PATH.exists():
@@ -71,9 +119,15 @@ def run_discovery_scan() -> dict:
     Scan all hunt-enabled companies for new job postings.
     Returns summary dict: {scanned: N, new_found: N, errors: N}
     """
-    stats = {'scanned': 0, 'new_found': 0, 'errors': 0, 'discovered_via_search': 0}
+    stats = {'scanned': 0, 'new_found': 0, 'errors': 0, 'discovered_via_search': 0, 'auto_scored': 0}
     new_jobs = []
     config = load_hunt_config()
+
+    # W1-A watchdog: newly discovered roles are auto-scored inline through the canonical
+    # path. Load the profile once; share one LLM budget across the whole run.
+    from app.config import load_profile, DISCOVERY_FULL_SCORE_CAP
+    profile = load_profile()
+    score_budget = {"remaining": DISCOVERY_FULL_SCORE_CAP}
     
     # -------------------------------------------------------------------------
     # Level 2: Direct ATS Scanning
@@ -160,11 +214,19 @@ def run_discovery_scan() -> dict:
                     now,
                     now
                 ))
+                new_job_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
             new_jobs.append({'company': company_name, 'title': title,
                              'score': fit.get('preliminary_score', 5.0)})
             stats['new_found'] += 1
             logger.info(f"Discovered: {company_name} — {title}")
+
+            # W1-A: auto-score through the canonical path (fires the ≥8 Slack alert).
+            try:
+                if _auto_score_discovery(new_job_id, url, profile, score_budget) == "success":
+                    stats['auto_scored'] += 1
+            except Exception as e:
+                logger.warning("auto-score failed for job %s (%s): %s", new_job_id, company_name, e)
 
         # Update last_scanned
         with get_db() as db:
@@ -269,10 +331,18 @@ def run_discovery_scan() -> dict:
                             co_name, title, url, json.dumps(fit.get('fit_bullets', [])),
                             fit.get('preliminary_score', 5.0), now, now
                         ))
-                    
+                        new_job_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
                     new_jobs.append({'company': co_name, 'title': title,
                                      'score': fit.get('preliminary_score', 5.0)})
                     stats['discovered_via_search'] += 1
+
+                    # W1-A: auto-score through the canonical path (fires the ≥8 Slack alert).
+                    try:
+                        if _auto_score_discovery(new_job_id, url, profile, score_budget) == "success":
+                            stats['auto_scored'] += 1
+                    except Exception as e:
+                        logger.warning("auto-score failed for job %s (%s): %s", new_job_id, co_name, e)
                     
             except Exception as e:
                 logger.error(f"Search dork failed for {name}: {e}")

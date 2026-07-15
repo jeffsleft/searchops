@@ -45,7 +45,7 @@
 {# ---- HEADLINE — counts only (facts, not sampled rates). ---- #}
 {% set months = progress.funnel_trend %}
 <div class="stat-grid">
-  <div class="stat"><div class="stat-label">Applications</div><div class="stat-value">{{ months|sum(attribute='applied') }}</div></div>
+  <div class="stat"><div class="stat-label">Applications</div><div class="stat-value">{{ progress.applications_sent }}</div></div>
   <div class="stat"><div class="stat-label">Screens</div><div class="stat-value">{{ months|sum(attribute='screen') }}</div></div>
   <div class="stat"><div class="stat-label">Interviews</div><div class="stat-value">{{ months|sum(attribute='interview') }}</div></div>
   <div class="stat"><div class="stat-label">Offers</div><div class="stat-value">{{ months|sum(attribute='offer') }}</div></div>

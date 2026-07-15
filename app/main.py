@@ -357,6 +357,68 @@ def stamp_applied_at(job_id: int, applied_date: str, dry_run: bool = True):
     print(f"[stamp_applied_at] id={job_id} committed.")
 
 
+# One-off backfill (W1-B, 2026-07-14 plan): 5 declined applications sent their
+# outcome-logging before record_stage_change auto-logged (or via a path that bypassed
+# it), so they never produced an application_outcomes row and KR2 undercounts. This
+# replays the auto-logging rules exactly — outcome only where applied_at IS NOT NULL,
+# mapped from the job's CURRENT stage, idempotent (skip if a row already exists).
+# Invoke via the DEPLOYED function only (never `modal run` — Session 47 lesson), AFTER
+# the PR is merged + deployed, off the 0/6/12/18 UTC cron ticks: dry_run first, then
+# dry_run=False. Default targets are the 5 unlogged declines (Notion 32, Semrush 39,
+# NerdWallet 60, Airwallex 102, Asana 103); pass job_ids to override.
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets],
+    volumes={"/data": volume},
+    timeout=60,
+)
+def backfill_decline_outcomes(job_ids: list = None, dry_run: bool = True):
+    init_db()
+    from app.models import get_db
+    from app.services.pipeline_service import STAGE_TO_OUTCOME
+    from app.services.calibration_service import record_outcome
+
+    targets = job_ids if job_ids else [32, 39, 60, 102, 103]
+    actions = []  # returned to the caller so the plan is reviewable off a dry run
+    logged = 0
+    with get_db() as conn:
+        for job_id in targets:
+            row = conn.execute(
+                "SELECT id, company, pipeline_stage, applied_at FROM jobs WHERE id = ?",
+                (job_id,),
+            ).fetchone()
+            if not row:
+                actions.append(f"id={job_id} SKIP not found")
+                continue
+            if not row["applied_at"]:
+                actions.append(f"id={job_id} '{row['company']}' SKIP no applied_at (not an application)")
+                continue
+            outcome = STAGE_TO_OUTCOME.get(row["pipeline_stage"])
+            if not outcome:
+                actions.append(f"id={job_id} '{row['company']}' SKIP stage={row['pipeline_stage']} maps to no outcome")
+                continue
+            existing = conn.execute(
+                "SELECT 1 FROM application_outcomes WHERE job_id = ? AND outcome = ? LIMIT 1",
+                (job_id, outcome),
+            ).fetchone()
+            if existing:
+                actions.append(f"id={job_id} '{row['company']}' SKIP already has '{outcome}' (idempotent)")
+                continue
+            verb = "WOULD LOG" if dry_run else "LOGGED"
+            actions.append(f"id={job_id} '{row['company']}' stage={row['pipeline_stage']} -> {verb} '{outcome}'")
+            if not dry_run:
+                record_outcome(job_id, outcome, notes="backfill: W1-B unlogged decline", conn=conn)
+                logged += 1
+
+    if not dry_run:
+        volume.commit()
+    summary = {"dry_run": dry_run, "logged": logged, "actions": actions}
+    for a in actions:
+        print(f"[backfill_outcomes] {a}")
+    print(f"[backfill_outcomes] Done: {logged} logged (dry_run={dry_run}).")
+    return summary
+
+
 @app.function(
     image=image,
     secrets=[recruiting_secrets, anthropic_secret],

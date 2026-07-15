@@ -2,7 +2,6 @@
 Pipeline stage management. Enforces allowed transitions, logs history,
 requires decline reasons on terminal stages.
 """
-from datetime import datetime, timezone
 from app.models import get_db
 
 # Stage codes and terminal status
@@ -83,16 +82,10 @@ def advance_stage(job_id: int, to_stage: str, notes: str = "", decline_reason: s
 
         from_stage = row["pipeline_stage"]
 
-        # Route through the single sanctioned writer
+        # Route through the single sanctioned writer. record_stage_change owns the
+        # applied_at stamp and calibration-outcome logging for application transitions.
         full_notes = f"{notes}\nDecline reason: {decline_reason}".strip() if decline_reason else notes
         record_stage_change(conn, job_id, to_stage, note=full_notes, changed_by="user")
-
-        # Set applied_at timestamp if moving to an application stage
-        if to_stage in ("applied", "outreach"):
-            conn.execute(
-                "UPDATE jobs SET applied_at = ? WHERE id = ? AND applied_at IS NULL",
-                (datetime.now(timezone.utc).isoformat(), job_id),
-            )
 
     return {"ok": True, "from": from_stage, "to": to_stage}
 

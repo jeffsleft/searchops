@@ -13,8 +13,10 @@ Actual docx structure (v1.1):
   - Special H1 "Resume Bullet Swap Library" → pre-written resume bullets (List Paragraph)
   - Special H1 "Theme Tags" → tag dictionary (not included in prompt output)
 
-If the file is absent, `load_corpus()` returns {"available": False, ...} and
-Layer 2 falls back to a zero contribution.
+If the real inventory is absent, `load_corpus()` falls back to the committed example
+corpus (`data/Accomplishments_Inventory.example.docx`) so a fresh clone still exercises
+Layer 2 for real, and flags `is_example: True` so the UI can label it. If neither file
+exists, it returns {"available": False, ...} and Layer 2 contributes zero.
 """
 from __future__ import annotations
 
@@ -29,9 +31,19 @@ from app.config import ROOT
 
 INVENTORY_PATH = ROOT / "data" / "Accomplishments_Inventory.docx"
 
+# Committed fictional corpus for the example persona (see candidate_profile.example.yaml).
+# Used only when the real inventory is absent — i.e. on a fresh clone. Without this, Layer 2
+# contributes 0.0 for a forker and the Application Kit's evidence/bullets/hooks render empty.
+# Regenerate with: python3 scripts/build_example_corpus.py
+EXAMPLE_INVENTORY_PATH = ROOT / "data" / "Accomplishments_Inventory.example.docx"
+
 # SHA-256 of the known-good Accomplishments_Inventory.docx.
 # Update this constant whenever the file is intentionally replaced.
 # Generate with: python3 -c "import hashlib,pathlib; print(hashlib.sha256(pathlib.Path('data/Accomplishments_Inventory.docx').read_bytes()).hexdigest())"
+#
+# Only ever checked against INVENTORY_PATH. A forker's own inventory legitimately hashes
+# differently, and the example corpus is verified by its own test — warning on either would
+# train everyone to ignore the one warning that means something.
 INVENTORY_EXPECTED_SHA256: str | None = "6c5fdd094fb13b6542c23b0a211ee1da44f0d4ae5992c1e2354992ef7949351c"
 
 
@@ -47,6 +59,20 @@ def _verify_corpus_integrity(path: Path) -> str:
     else:
         logging.info(f"[corpus] Inventory SHA-256: {actual}")
     return actual
+
+
+def resolve_inventory_path() -> tuple[Path, bool]:
+    """
+    Pick the corpus to load. Returns (path, is_example).
+
+    Real inventory wins; the example is the fresh-clone fallback. `is_example` propagates to
+    the UI so demo evidence is never mistaken for the real thing.
+    """
+    if INVENTORY_PATH.exists():
+        return INVENTORY_PATH, False
+    if EXAMPLE_INVENTORY_PATH.exists():
+        return EXAMPLE_INVENTORY_PATH, True
+    return INVENTORY_PATH, False
 
 WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -172,17 +198,25 @@ def load_corpus(path: Path | None = None) -> dict:
       }
     }
     """
-    p = path or INVENTORY_PATH
+    if path is not None:
+        p, is_example = path, path == EXAMPLE_INVENTORY_PATH
+    else:
+        p, is_example = resolve_inventory_path()
+
     if not p.exists():
         return {
             "available": False,
+            "is_example": False,
             "path": str(p),
             "narrative": "",
             "sections": [],
             "swap_library": {},
         }
 
-    _verify_corpus_integrity(p)
+    if p == INVENTORY_PATH:
+        _verify_corpus_integrity(p)
+    elif is_example:
+        logging.info("[corpus] No real inventory found — loading example corpus at %s", p)
 
     from docx import Document
     doc = Document(str(p))
@@ -276,6 +310,7 @@ def load_corpus(path: Path | None = None) -> dict:
 
     return {
         "available": True,
+        "is_example": is_example,
         "path": str(p),
         "narrative": "\n\n".join(narrative_lines),
         "sections": sections,
@@ -357,6 +392,7 @@ def corpus_status() -> dict:
     c = load_corpus()
     return {
         "available": c["available"],
+        "is_example": c.get("is_example", False),
         "path": c["path"],
         "n_sections": len(c.get("sections", [])),
         "has_narrative": bool(c.get("narrative")),

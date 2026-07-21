@@ -53,7 +53,7 @@ def score_new_job_from_input(url: str, jd_text: str) -> dict:
     score_record = score_job(jd_text)
     if url:
         score_record["_url"] = url
-        job_id = save_job_to_db(url, score_record)
+        job_id = save_job_to_db(url, score_record, jd_text=jd_text)
         score_record["_job_id"] = job_id
         if score_record.get("final_score", 0) >= HIGH_SCORE_THRESHOLD:
             from app.notifications.slack import send_high_score_alert

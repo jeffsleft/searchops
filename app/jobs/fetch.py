@@ -219,7 +219,7 @@ def _retry_stubs(processed: list) -> None:
                         research = research_company(company_name)
                         score_record["_research"] = research
 
-                save_job_to_db(url, score_record)
+                save_job_to_db(url, score_record, jd_text=jd_text)
                 with get_db() as conn:
                     conn.execute("UPDATE jobs SET jd_fetch_attempts = 0 WHERE id = ?", (job_id,))
                 processed.append(score_record)

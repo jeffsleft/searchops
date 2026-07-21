@@ -48,11 +48,11 @@ What you fork is the scoring weights, the Accomplishments Inventory structure, t
 
 ## Results
 
-One hundred sixty-eight jobs in the intake funnel. Ninety-one fully scored. Fifty-eight Tier A companies (Anthropic, Cohere, Weights & Biases, Retool, Temporal, Glean, Ramp, Cloudflare, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, Okta among them) running daily ATS scans. Fifteen pipeline stages from Discovered through Offer/Decision.
+One hundred eighty-two jobs in the intake funnel. Ninety-six fully scored. Sixty Tier A companies (Anthropic, Cohere, Weights & Biases, Retool, Temporal, Glean, Ramp, Cloudflare, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, Okta among them) running daily ATS scans. Sixteen pipeline stages from Discovered through Offer/Decision.
 
 The June scoring overhaul reset the bar — base dropped to 3.5, Layer 4 capped, top-band gate added — so a score above 7 now means something. Scores from the earlier engine stay on the old scale until they're re-run; the engine keeps per-job score history so the two eras don't get conflated. Under the current engine, clearing 8+ looks like the Decagon example above: strong evidence on nearly every requirement, plus all five gate must-haves.
 
-Applications go out one at a time, each grounded in its evidence table. Interview prep is automated: per-company question banks, red flags, anchor stories tied to role requirements. Application materials are generated per-company, grounded in evidence.
+Applications go out one at a time, each grounded in its evidence table. A job that clears the top-band gate and passes an ethics check gets its own Application Kit — one page assembling the recommended angle, the full evidence table, tailored resume bullets, cover-letter hooks, and a voice-passed cover letter, plus a one-click `.docx` download. Interview prep is automated: per-company question banks, red flags, anchor stories tied to role requirements. Application materials are generated per-company, grounded in evidence.
 
 The search is narrow by design. The intake funnel is wide. The output is a short list worth pursuing. This is the method. Applied to CS Ops, it's renewal scoring, capacity planning, GTM measurement. Evidence over instinct. The framework doesn't change.
 

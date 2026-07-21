@@ -119,9 +119,12 @@ def run_discovery_scan() -> dict:
     Scan all hunt-enabled companies for new job postings.
     Returns summary dict: {scanned: N, new_found: N, errors: N}
     """
+    from app.models import log_task_event
+
     stats = {'scanned': 0, 'new_found': 0, 'errors': 0, 'discovered_via_search': 0, 'auto_scored': 0}
     new_jobs = []
     config = load_hunt_config()
+    log_task_event("discovery_scan", "started", "Watchdog scan starting")
 
     # W1-A watchdog: newly discovered roles are auto-scored inline through the canonical
     # path. Load the profile once; share one LLM budget across the whole run.
@@ -356,4 +359,10 @@ def run_discovery_scan() -> dict:
             logger.warning(f"Slack notification failed: {e}")
 
     logger.info(f"Discovery scan complete: {stats}")
+    status = "completed" if stats['errors'] == 0 else "partial"
+    log_task_event(
+        "discovery_scan", status,
+        f"Scanned {stats['scanned']}, found {stats['new_found'] + stats['discovered_via_search']}, "
+        f"auto-scored {stats['auto_scored']}, errors {stats['errors']}",
+    )
     return stats

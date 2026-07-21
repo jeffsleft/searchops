@@ -36,6 +36,7 @@
         {% if job.ethics_vetted %}✓ Ethics vetted{% else %}Mark ethics vetted{% endif %}
       </button>
     </form>
+    <a href="/job/{{ job.id }}/kit" class="btn btn-sm">Application kit →</a>
     <a href="/pipeline" class="btn btn-sm btn-ghost">← Pipeline</a>
   </div>
 </div>
@@ -126,7 +127,7 @@
             hx-trigger="change, keyup changed delay:1200ms"
             hx-swap="none">
         <textarea name="notes"
-                  placeholder="Applied 2026-05-23. Need to prep case study on GTM migration. They require on-site 3x/week — probably a reach, but lead with the GitLab scale story…"
+                  placeholder="Notes to self — angle to lead with, prep to do, concerns, anything from a call…"
                   style="width:100%;box-sizing:border-box;min-height:100px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);font-size:13px;line-height:1.65;padding:10px 12px;resize:vertical;font-family:inherit;"
                   onblur="this.form.dispatchEvent(new Event('change'))"
         >{{ job.notes or '' }}</textarea>

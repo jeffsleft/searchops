@@ -13,7 +13,7 @@ The first version was bad. It took the JD, pulled a generic 4-line candidate sum
 
 Track B grounds the score in evidence. It pulls from my Accomplishments Inventory (a structured record of every metric, project, and outcome from fifteen years), builds an evidence table — one row per JD requirement — matching each requirement to specific work history, and generates tailored resume bullets and cover letter hooks. The Accomplishments Inventory is the core move. Everything else flows from there.
 
-It works. Over 90 jobs scored across a 168-job intake funnel. The engine is built so an 8+ is rare and earned: surface signals cap out at 6.0, and anything above 7.0 has to pass five must-haves or it gets clamped back down. Tier A targets like Anthropic, Cohere, Weights & Biases, Cloudflare, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, and Okta running daily ATS scans. The rest is handled automatically: tracking the pipeline, prepping per-company question banks, generating tailored application materials.
+It works. Over 95 jobs scored across a 182-job intake funnel. The engine is built so an 8+ is rare and earned: surface signals cap out at 6.0, and anything above 7.0 has to pass five must-haves or it gets clamped back down. Tier A targets like Anthropic, Cohere, Weights & Biases, Cloudflare, Zapier, Postman, Airtable, Pinecone, LangChain, Twilio, and Okta running daily ATS scans. The rest is handled automatically: tracking the pipeline, prepping per-company question banks, generating tailored application materials.
 
 Fork it if it helps. The real move is the method: ground your scoring in evidence from your actual work history, not summary keywords.
 

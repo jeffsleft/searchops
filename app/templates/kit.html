@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Kit — {{ job.company }} | Recruiting Engine{% endblock %}
+{% block page_title %}Application Kit{% endblock %}
+
+{% block content %}
+{% from "components/_macros.html" import logo %}
+
+{# ── Kit header + gate ────────────────────────────────────── #}
+<div class="detail-head" style="margin-bottom:12px;">
+  {{ logo(job.company, 'lg') }}
+  <div style="flex:1;min-width:0;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+      <h2 style="margin:0;font-size:18px;font-weight:600;letter-spacing:-0.015em;">{{ job.job_title }}</h2>
+      {%- set s = job.final_score or 0 -%}
+      <span class="score-badge
+        {%- if job.auto_rejected %} tier-reject
+        {%- elif s >= 9 %} tier-dream
+        {%- elif s >= 7 %} tier-solid
+        {%- elif s >= 5 %} tier-worth
+        {%- elif s >= 3 %} tier-skip
+        {%- else %} tier-pass{%- endif %}">
+        <span class="dot"></span>{% if job.auto_rejected %}REJECT{% else %}{{ "%.1f"|format(s) }}{% endif %}
+      </span>
+    </div>
+    <div class="muted" style="font-size:12.5px;">
+      {{ job.company }} · {{ job.sector or '—' }}
+      {%- set safe_url = job.url if job.url and job.url.startswith(('http://', 'https://')) else '' -%}
+      {% if safe_url %} · <a href="{{ safe_url }}" target="_blank" rel="noopener" style="color:var(--accent);">View JD ↗</a>{% endif %}
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+    <a href="/job/{{ job.id }}" class="btn btn-sm btn-ghost">← Job detail</a>
+  </div>
+</div>
+
+{# Gate strip. Every failing check is named — a blocked kit explains itself. #}
+<div class="card" style="margin-bottom:16px;">
+  <div style="padding:12px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    {% for c in gate.checks %}
+      <span class="tag {% if c.ok %}green{% else %}red{% endif %}" title="{{ c.detail }}">
+        {% if c.ok %}✓{% else %}✕{% endif %} {{ c.label }}{% if c.key == 'score' and c.detail %} · {{ c.detail }}{% endif %}
+      </span>
+    {% endfor %}
+
+    {% if corpus.available %}
+      <span class="tag {% if corpus.is_example %}amber{% else %}green{% endif %}">
+        {% if corpus.is_example %}⚑ Example corpus{% else %}✓ Corpus loaded{% endif %}
+      </span>
+    {% else %}
+      <span class="tag red">✕ No corpus</span>
+    {% endif %}
+
+    {% if voice.enabled %}
+      <span class="tag green">✓ Voice pass{% if voice.after is defined %} · {{ voice.after }} flagged{% endif %}</span>
+    {% elif gate.cleared %}
+      <span class="tag amber">Voice pass off</span>
+    {% endif %}
+  </div>
+
+  {% if not gate.cleared %}
+  <div style="padding:0 16px 14px;">
+    <div style="font-size:12.5px;line-height:1.6;color:var(--text-muted);">
+      This kit is gated until every check passes. Nothing has been generated yet.
+    </div>
+    {% set ethics_check = gate.checks | selectattr('key', 'equalto', 'ethics') | first %}
+    {% if ethics_check and not ethics_check.ok %}
+    <form hx-post="/job/{{ job.id }}/ethics" hx-swap="none"
+          hx-on::after-request="window.location.reload()" style="margin:10px 0 0;">
+      <button type="submit" class="btn btn-sm">Mark ethics vetted</button>
+      <span class="dim" style="font-size:11.5px;margin-left:8px;">Manual by design — the app never sets this for you.</span>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if corpus.is_example %}
+  <div style="padding:0 16px 14px;">
+    <div style="font-size:12px;line-height:1.6;color:var(--text-muted);border-left:2px solid var(--tier-worth);padding-left:10px;">
+      Layer 2 ran against the fictional demo corpus (<span class="mono">Accomplishments_Inventory.example.docx</span>)
+      because no real inventory is present. The evidence and bullets below are real engine
+      output about a made-up person — see <span class="mono">data/README.md</span> to add your own.
+    </div>
+  </div>
+  {% elif not corpus.available %}
+  <div style="padding:0 16px 14px;">
+    <div style="font-size:12px;line-height:1.6;color:var(--tier-pass);border-left:2px solid var(--tier-pass);padding-left:10px;">
+      No accomplishments corpus loaded — Layer 2 contributed 0.0, so evidence, bullets, and
+      hooks are empty. See <a href="/settings/methodology" style="color:var(--accent);">methodology</a>.
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if gate.cleared %}
+
+{# ── Recommended angle ────────────────────────────────────── #}
+{% if angle %}
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-head"><h3>Recommended angle</h3></div>
+  <div class="card-body" style="font-size:14.5px;line-height:1.6;font-style:italic;font-family:var(--font-serif);">"{{ angle }}"</div>
+</div>
+{% endif %}
+
+{# ── Evidence ─────────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;">
+    <h3>Evidence</h3>
+    <span class="dim mono" style="font-size:11px;">{{ evidence|length }}</span>
+  </div>
+  {% if evidence %}
+  <div style="padding:0 16px 12px;overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);text-align:left;">
+          <th style="padding:8px 4px;font-weight:500;" class="dim">JD requirement</th>
+          <th style="padding:8px 4px;font-weight:500;" class="dim">Matched accomplishment</th>
+          <th style="padding:8px 4px;font-weight:500;" class="dim">Strength</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in evidence %}
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 4px;line-height:1.5;">{{ e.jd_requirement }}</td>
+          <td style="padding:8px 4px;line-height:1.5;">{{ e.matched_accomplishment }}</td>
+          <td style="padding:8px 4px;">
+            <span class="tag {% if e.strength == 'Strong' %}green{% elif e.strength == 'Moderate' %}amber{% else %}red{% endif %}">{{ e.strength }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card-body dim" style="text-align:center;padding:24px 0;font-size:12px;">No evidence rows.</div>
+  {% endif %}
+</div>
+
+{# ── Mismatches ───────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;">
+    <h3>Address proactively</h3>
+    <span class="dim mono" style="font-size:11px;">{{ mismatches|length }}</span>
+  </div>
+  {% if mismatches %}
+  <div style="padding:0 16px 12px;">
+    {% for m in mismatches %}
+    <div style="padding:10px 0;{% if not loop.first %}border-top:1px solid var(--border);{% endif %}">
+      <div style="display:flex;align-items:flex-start;gap:8px;">
+        <span class="tag {% if m.severity == 'High' %}red{% elif m.severity == 'Medium' %}amber{% else %}green{% endif %}" style="flex-shrink:0;">{{ m.severity }}</span>
+        <div style="flex:1;font-size:12.5px;line-height:1.6;">
+          <div style="font-weight:500;">{{ m.jd_requirement }}</div>
+          <div class="dim" style="margin-top:2px;">{{ m.gap }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card-body dim" style="text-align:center;padding:24px 0;font-size:12px;">No mismatches detected.</div>
+  {% endif %}
+</div>
+
+{# ── Bullets + hooks ──────────────────────────────────────── #}
+{% if bullets %}
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;">
+    <h3>Tailored resume bullets</h3>
+    <a href="/job/{{ job.id }}/resume" target="_blank" class="btn btn-sm btn-ghost">Preview resume ↗</a>
+  </div>
+  <div style="padding:8px 16px 16px;">
+    {% for b in bullets %}
+    <div class="flag-row" style="align-items:flex-start;">
+      <span class="icon pos" style="margin-top:2px;">★</span>
+      <div style="font-size:12.5px;line-height:1.6;">{{ b }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if hooks %}
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-head"><h3>Cover-letter hooks</h3></div>
+  <div style="padding:8px 16px 16px;display:flex;flex-direction:column;gap:8px;">
+    {% for h in hooks %}
+    <div style="background:var(--bg-sunk);padding:10px 14px;border-radius:var(--radius);border-left:2px solid var(--accent);font-size:13px;line-height:1.6;font-family:var(--font-serif);font-style:italic;">"{{ h }}"</div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Cover letter ─────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;">
+    <h3>Cover letter</h3>
+    <a href="/job/{{ job.id }}/cover-letter" target="_blank" class="btn btn-sm btn-ghost">Preview ↗</a>
+  </div>
+  {% if cover_letter and cover_letter.body %}
+  <div class="card-body" style="font-family:var(--font-serif);font-size:13.5px;line-height:1.7;">
+    <div style="margin-bottom:10px;">{{ cover_letter.salutation }}</div>
+    {% for p in cover_letter.body %}
+    <p style="margin:0 0 10px;">{{ p }}</p>
+    {% endfor %}
+    <div>{{ cover_letter.closing }}</div>
+  </div>
+  {% elif cover_letter and cover_letter.error %}
+  <div class="card-body" style="font-size:12.5px;color:var(--tier-pass);">Generation failed: {{ cover_letter.error }}</div>
+  {% else %}
+  <div class="card-body dim" style="text-align:center;padding:24px 0;font-size:12px;">No cover letter yet.</div>
+  {% endif %}
+</div>
+
+{# ── Export ───────────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:16px;">
+  <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+    <div style="font-size:12.5px;line-height:1.5;">
+      <div style="font-weight:500;">Download</div>
+      <div class="dim" style="margin-top:2px;">The brief is for you. The resume and letter are what you send.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="/job/{{ job.id }}/kit/download" class="btn btn-sm">⬇ Kit brief .docx</a>
+      <a href="/job/{{ job.id }}/resume/download" class="btn btn-sm btn-ghost">⬇ Resume</a>
+      <a href="/job/{{ job.id }}/cover-letter/download" class="btn btn-sm btn-ghost">⬇ Cover letter</a>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

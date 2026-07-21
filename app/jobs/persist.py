@@ -61,12 +61,13 @@ def save_stub_job_to_db(url: str, company: str = "") -> int:
     return job_id
 
 
-def save_job_to_db(url: str, score_record: dict) -> int:
+def save_job_to_db(url: str, score_record: dict, jd_text: str = "") -> int:
     """Upsert job record into SQLite. Returns job_id."""
     from app.models import get_db, normalize_url
     today = str(date.today())
     norm_url = normalize_url(url)
     tech = score_record.get("tech_stack_detected", {})
+    jd_text_capped = jd_text[:30000] if jd_text else ""
 
     evidence = score_record.get("evidence", [])
     if not isinstance(evidence, list):
@@ -109,6 +110,7 @@ def save_job_to_db(url: str, score_record: dict) -> int:
                    posting_age_days=?, posting_date_raw=?, source_url=?, role_archetype=?,
                    interview_probability=?, interview_probability_rationale=?,
                    match_sections_to_drop_json=?,
+                   jd_text=CASE WHEN COALESCE(jd_text,'') = '' AND ? != '' THEN ? ELSE jd_text END,
                    updated_at=CURRENT_TIMESTAMP
                    WHERE id=?""",
                 (
@@ -130,6 +132,7 @@ def save_job_to_db(url: str, score_record: dict) -> int:
                     norm_url, role_archetype,
                     score_record.get("interview_probability"), score_record.get("interview_probability_rationale"),
                     sections_to_drop,
+                    jd_text_capped, jd_text_capped,
                     job_id,
                 ),
             )
@@ -145,8 +148,8 @@ def save_job_to_db(url: str, score_record: dict) -> int:
                     differentiator_themes_json,
                     adjustment_weights_score, posting_age_days, posting_date_raw, source_url, role_archetype,
                     interview_probability, interview_probability_rationale,
-                    match_sections_to_drop_json, pipeline_stage, status, discovery_source)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    match_sections_to_drop_json, jd_text, pipeline_stage, status, discovery_source)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     score_record.get("company", "Unknown"), score_record.get("job_title", ""),
                     url, today, score_record.get("final_score"),
@@ -165,6 +168,7 @@ def save_job_to_db(url: str, score_record: dict) -> int:
                     norm_url, role_archetype,
                     score_record.get("interview_probability"), score_record.get("interview_probability_rationale"),
                     sections_to_drop,
+                    jd_text_capped,
                     "discovered", "discovered", "manual",
                 ),
             )

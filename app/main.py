@@ -43,7 +43,18 @@ if _INVENTORY.exists():
         str(_INVENTORY), "/root/data/Accomplishments_Inventory.docx"
     )
 else:
-    print(f"[main] WARNING: {_INVENTORY} not found — Layer 2 (match) will return 0.0 until it is added.")
+    print(f"[main] WARNING: {_INVENTORY} not found — Layer 2 (match) will fall back to the example corpus.")
+
+# W2: the fictional example corpus is committed, but the image adds `data/` files one by
+# one — nothing mounts the directory wholesale. Without this, a forker who deploys to Modal
+# gets no corpus at all and an empty Application Kit, even though the file is in their repo.
+_EXAMPLE_INVENTORY = _ROOT / "data" / "Accomplishments_Inventory.example.docx"
+if _EXAMPLE_INVENTORY.exists():
+    image = image.add_local_file(
+        str(_EXAMPLE_INVENTORY), "/root/data/Accomplishments_Inventory.example.docx"
+    )
+else:
+    print(f"[main] WARNING: {_EXAMPLE_INVENTORY} not found — run scripts/build_example_corpus.py.")
 
 # Resume template for tailored PDF assembler. Optional — route degrades gracefully if absent.
 _RESUME = Path(__file__).resolve().parent.parent / "data" / "resume.docx"
@@ -355,6 +366,110 @@ def stamp_applied_at(job_id: int, applied_date: str, dry_run: bool = True):
 
     volume.commit()
     print(f"[stamp_applied_at] id={job_id} committed.")
+
+
+# One-off correction (2026-07-16, W1-T session): a job_detail.html placeholder string
+# in the notes textarea ("Applied 2026-05-23...") was misread as real saved data during
+# W1-T triage, leading to a bad stamp_applied_at + they_declined transition on job 23
+# (Decagon) and an auto-logged application_outcomes row that never should have existed.
+# Undoes exactly that: clears applied_at only if it matches the erroneous value, deletes
+# the outcome row only if its notes carry this session's marker text (so this can't
+# accidentally touch a legitimate row). Pipeline stage was already reverted via the UI
+# (record_stage_change) before this runs.
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets],
+    volumes={"/data": volume},
+    timeout=60,
+)
+def correct_erroneous_applied_at(job_id: int, expected_applied_at: str, dry_run: bool = True):
+    init_db()
+    from app.models import get_db
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, company, applied_at, pipeline_stage FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+        if not row:
+            print(f"[correct_erroneous_applied_at] no job with id={job_id} — nothing done")
+            return
+        if row["applied_at"] != expected_applied_at:
+            print(
+                f"[correct_erroneous_applied_at] id={job_id} '{row['company']}' "
+                f"applied_at={row['applied_at']!r} does not match expected "
+                f"{expected_applied_at!r} — refusing to touch"
+            )
+            return
+
+        outcome_rows = conn.execute(
+            "SELECT id, outcome, notes FROM application_outcomes "
+            "WHERE job_id = ? AND notes LIKE '%W1-T triage%'",
+            (job_id,),
+        ).fetchall()
+
+        print(
+            f"[correct_erroneous_applied_at] id={job_id} '{row['company']}' "
+            f"pipeline_stage={row['pipeline_stage']} -> clear applied_at "
+            f"(was {expected_applied_at}); delete {len(outcome_rows)} outcome row(s) "
+            f"{[o['id'] for o in outcome_rows]} (dry_run={dry_run})"
+        )
+        if dry_run:
+            return
+
+        conn.execute("UPDATE jobs SET applied_at = NULL WHERE id = ?", (job_id,))
+        conn.execute(
+            "DELETE FROM application_outcomes WHERE job_id = ? AND notes LIKE '%W1-T triage%'",
+            (job_id,),
+        )
+
+    volume.commit()
+    print(f"[correct_erroneous_applied_at] id={job_id} committed.")
+
+
+# W1-T session (2026-07-16): the browser-driven /job/{id}/stage route lost a write
+# (Diligent, job 88 -> job_listing_closed — POST returned 200, live app reflected the
+# change, but a fresh `modal volume get` pull kept showing the pre-change state, no new
+# pipeline_history row). Same failure class as the documented SQLite-on-Volume
+# last-writer-wins race (Session 47/51) — the route's write path has no explicit
+# volume.commit(). This wraps the exact same sanctioned call the route uses
+# (advance_stage -> record_stage_change) with an explicit commit, for reliability during
+# this session's triage. Not a permanent fix — the underlying route gap is still open.
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets],
+    volumes={"/data": volume},
+    timeout=60,
+)
+def change_pipeline_stage(job_id: int, to_stage: str, decline_reason: str = "", notes: str = "", dry_run: bool = True):
+    init_db()
+    from app.pipeline.tracker import advance_stage, STAGES
+    from app.models import get_db
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, company, pipeline_stage FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+    if not row:
+        print(f"[change_pipeline_stage] no job with id={job_id} — nothing done")
+        return
+    if to_stage not in STAGES:
+        print(f"[change_pipeline_stage] unknown stage {to_stage!r} — nothing done")
+        return
+
+    print(
+        f"[change_pipeline_stage] id={job_id} '{row['company']}' "
+        f"{row['pipeline_stage']} -> {to_stage} (reason={decline_reason!r}, dry_run={dry_run})"
+    )
+    if dry_run:
+        return
+
+    result = advance_stage(job_id, to_stage, notes=notes, decline_reason=decline_reason)
+    if not result["ok"]:
+        print(f"[change_pipeline_stage] id={job_id} FAILED: {result['error']}")
+        return
+
+    volume.commit()
+    print(f"[change_pipeline_stage] id={job_id} committed: {result}")
 
 
 # One-off backfill (W1-B, 2026-07-14 plan): 5 declined applications sent their
@@ -735,4 +850,5 @@ def web():
     from app.routes import create_app
     return create_app(
         batch_research_fn=batch_research_companies,
+        commit_fn=volume.commit,
     )

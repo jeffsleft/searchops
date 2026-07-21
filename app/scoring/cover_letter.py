@@ -116,4 +116,12 @@ def generate_cover_letter(job: dict) -> dict:
 
     if not result.get("recipient"):
         result["recipient"] = f"Hiring Team, {company}".strip(", ")
+
+    # WP-F de-AI voice pass. Lives here, not in the route, so every caller gets it —
+    # the W2 kit assembles via the service layer and would otherwise ship an unpolished
+    # letter while claiming "voice-passed". No-op (with a report) when disabled.
+    from app.voice import polish_cover_letter
+
+    if result.get("body"):
+        result = polish_cover_letter(result)
     return result

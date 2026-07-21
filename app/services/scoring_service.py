@@ -246,7 +246,7 @@ def handle_job_add_with_optional_scoring(
             }
 
         score_record = score_job(jd_text)
-        persisted_job_id = save_job_to_db(url, score_record)
+        persisted_job_id = save_job_to_db(url, score_record, jd_text=jd_text)
 
         # High-score alert — use the job_id returned from save_job_to_db, not the stub
         if score_record.get("final_score", 0) >= HIGH_SCORE_THRESHOLD:

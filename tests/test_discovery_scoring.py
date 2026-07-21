@@ -157,6 +157,28 @@ def test_auto_reject_does_not_consume_budget(temp_db, monkeypatch):
     assert budget["remaining"] == 3, "auto-rejects must not consume the LLM budget"
 
 
+def test_run_discovery_scan_logs_started_and_completed(temp_db, monkeypatch):
+    """The 06:00 UTC watchdog tick left no task_log trace even when it ran cleanly
+    (2026-07-15 prod check) — run_discovery_scan() must always log a 'started' and
+    a 'completed'/'partial' entry with found/scored counts, so silence is
+    diagnosable without pulling Modal container logs."""
+    from app.discovery import hunter
+    from app.models import get_db
+
+    monkeypatch.setattr(hunter, "load_hunt_config", lambda: {})
+
+    hunter.run_discovery_scan()
+
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT task_type, status, message FROM task_log WHERE task_type = 'discovery_scan' ORDER BY id"
+        ).fetchall()
+    assert len(rows) == 2
+    assert rows[0]["status"] == "started"
+    assert rows[1]["status"] == "completed"
+    assert "Scanned 0" in rows[1]["message"]
+
+
 def test_linkedin_url_skipped(temp_db, monkeypatch):
     """LinkedIn blocks automated fetching — skip without spending anything."""
     from app.discovery.hunter import _auto_score_discovery

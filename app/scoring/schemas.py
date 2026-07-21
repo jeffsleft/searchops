@@ -69,7 +69,7 @@ class Mismatch(BaseModel):
     severity: str
 
 class MatchResult(BaseModel):
-    match_score: float = Field(0.0, ge=-3.0, le=3.0)
+    match_score: float = Field(0.0, ge=-4.0, le=4.0)
     match_summary: str = ""
     evidence: List[Evidence] = Field(default_factory=list)
     mismatches: List[Mismatch] = Field(default_factory=list)

@@ -92,6 +92,47 @@ class CSRFValidationMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class VolumeCommitMiddleware(BaseHTTPMiddleware):
+    """Innermost middleware: durably commits the Modal Volume after any mutating
+    request that completed without error.
+
+    Root cause fixed here (Session 52/53): every table (jobs, pipeline_history,
+    application_outcomes, ...) lives in one SQLite file on the Volume, but the
+    `web()` ASGI process never called `volume.commit()` anywhere in its request
+    path. A write was immediately visible to that same warm container (so the
+    live app rendered it correctly) but never flushed to durable storage — only
+    visible to other containers, or a fresh `modal volume get`, once Modal
+    happened to commit on its own (container scale-down), which could also lose
+    the write to a stale commit from another container in the meantime
+    (last-writer-wins). This closes that gap for every current and future
+    mutating route, not just `/job/{id}/stage`.
+
+    `commit_fn` is injected (mirrors the existing `batch_research_fn` DI
+    pattern) so this stays a no-op off Modal, where SQLite already writes
+    straight to local disk and is durable without an extra step.
+    """
+
+    def __init__(self, app, commit_fn=None):
+        super().__init__(app)
+        self._commit_fn = commit_fn
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if (
+            self._commit_fn is not None
+            and request.method not in ("GET", "HEAD", "OPTIONS")
+            and response.status_code < 400
+        ):
+            import asyncio
+            try:
+                await asyncio.to_thread(self._commit_fn)
+            except Exception:
+                get_logger("app.observability").error(
+                    "volume commit failed after %s %s", request.method, request.url.path
+                )
+        return response
+
+
 _obs_log = get_logger("app.observability")
 
 # Single-user today; the value written to the SaaS-shaped actor_id column when a
@@ -551,11 +592,9 @@ def _generate_and_store_cover_letter(job_id: int) -> dict:
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if not row:
         return {"error": "Job not found", "body": []}
+    # generate_cover_letter applies the WP-F voice pass internally — don't re-polish here.
     cl = generate_cover_letter(dict(row))
     if cl.get("body"):
-        # WP-F: optional de-AI voice pass before persisting (no-op if disabled).
-        from app.voice import polish_cover_letter
-        cl = polish_cover_letter(cl)
         with get_db() as conn:
             conn.execute(
                 "UPDATE jobs SET match_cover_letter_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -641,6 +680,41 @@ async def job_cover_letter_download(request: Request):
     )
     safe_company = (job.get("company") or "Cover Letter").replace("/", "-").replace("\\", "-")
     filename = f"Jeff Beaumont - {safe_company} - Cover Letter.docx"
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+async def job_kit(request: Request):
+    """W2 — Application Kit. Assembly lives in kit_service; this route just renders it."""
+    from app.services.kit_service import build_kit_data
+
+    job_id = int(request.path_params["job_id"])
+    kit = build_kit_data(job_id, _enrich_job, _load_cover_letter)
+    if not kit:
+        return HTMLResponse("Job not found", status_code=404)
+    return render("kit.html", request=request, **kit)
+
+
+async def job_kit_download(request: Request):
+    """Download the Application Kit brief as a .docx."""
+    from app.kit_docx import build_kit_docx
+    from app.services.kit_service import build_kit_data
+
+    job_id = int(request.path_params["job_id"])
+    kit = build_kit_data(job_id, _enrich_job, _load_cover_letter)
+    if not kit:
+        return HTMLResponse("Job not found", status_code=404)
+    if not kit["gate"]["cleared"]:
+        # Don't hand out a brief for a job that hasn't cleared the gate — the gate is the
+        # point. Send them back to the view, which names the failing check.
+        return RedirectResponse(f"/job/{job_id}/kit", status_code=303)
+
+    docx_bytes = build_kit_docx(kit)
+    company = (kit["job"].get("company") or "Kit").replace("/", "-").replace("\\", "-")
+    filename = f"Application Kit - {company}.docx"
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -2620,7 +2694,7 @@ async def favicon(request: Request):
     return Response(status_code=204)
 
 
-def create_app(batch_research_fn=None) -> Starlette:
+def create_app(batch_research_fn=None, commit_fn=None) -> Starlette:
     routes = [
         Route("/favicon.ico", favicon, methods=["GET"]),
         Route("/login",  login_get,  methods=["GET"]),
@@ -2634,6 +2708,8 @@ def create_app(batch_research_fn=None) -> Starlette:
         Route("/job/{job_id:int}/cover-letter",          job_cover_letter_generate, methods=["POST"]),
         Route("/job/{job_id:int}/cover-letter",          job_cover_letter_preview,  methods=["GET"]),
         Route("/job/{job_id:int}/cover-letter/download", job_cover_letter_download, methods=["GET"]),
+        Route("/job/{job_id:int}/kit",          job_kit,          methods=["GET"]),
+        Route("/job/{job_id:int}/kit/download", job_kit_download, methods=["GET"]),
         Route("/job/{job_id:int}/drawer",     job_drawer,            methods=["GET"]),
         Route("/job/{job_id:int}/research-panel", job_research_panel, methods=["GET"]),
         Route("/job/{job_id:int}/brief-panel",    job_brief_panel,    methods=["GET"]),
@@ -2764,6 +2840,9 @@ def create_app(batch_research_fn=None) -> Starlette:
             Middleware(SecurityHeadersMiddleware),
             Middleware(CSRFValidationMiddleware),
             Middleware(AuthMiddleware),
+            # Innermost: wraps the route handler directly so it sees the real
+            # response status before any outer middleware touches it.
+            Middleware(VolumeCommitMiddleware, commit_fn=commit_fn),
         ],
         exception_handlers={Exception: unhandled_exception_handler},
     )

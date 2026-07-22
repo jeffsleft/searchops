@@ -8,13 +8,17 @@ returned result dict to HTML. Keeping the logic here means a fix lands once and
 every caller gets it (outcome_charter KR1).
 """
 
+import logging
+
 from app.config import HIGH_SCORE_THRESHOLD
 from app.models import get_db, normalize_url
-from app.pipeline.tracker import STAGES
+from app.pipeline.tracker import STAGES, advance_stage
 from app.scoring.research import score_job
 from app.jobs.fetch import _fetch_jd_text, is_linkedin_job_url
 from app.jobs.persist import save_job_to_db
-from app.services.scoring_service import score_job_from_url_and_persist
+from app.services.scoring_service import (
+    score_job_from_url_and_persist, score_job_from_text_and_persist,
+)
 
 
 def score_new_job_from_input(url: str, jd_text: str) -> dict:
@@ -132,3 +136,39 @@ def update_job_stage(job_id: int, new_stage: str) -> dict:
         "promoted": promoted,
         "stage_label": STAGES[new_stage]["label"],
     }
+
+
+def promote_job_from_discovery(job_id: int) -> dict:
+    """Move a discovered job to 'identified' and score it via the canonical path.
+
+    Scores from the job's URL first, falling back to pasted jd_text. A scoring
+    failure doesn't block the promotion — the stage change already happened.
+
+    Returns one of:
+      {"status": "not_found"}
+      {"status": "stage_error", "error": str}
+      {"status": "ok"}
+    """
+    with get_db() as conn:
+        job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not job:
+        return {"status": "not_found"}
+    job = dict(job)
+
+    result = advance_stage(job_id, "identified", notes="Promoted from discovery")
+    if not result["ok"]:
+        return {"status": "stage_error", "error": result["error"]}
+
+    # Trigger scoring via the canonical service path (persists the full score
+    # record — evidence, mismatches, bullets, hooks — and handles the alert).
+    # Stage was already advanced above, so no transition_stage here.
+    score_result = {"status": "skipped"}
+    if job.get("url"):
+        score_result = score_job_from_url_and_persist(job_id, job["url"])
+    if score_result.get("status") != "success" and (job.get("jd_text") or "").strip():
+        score_result = score_job_from_text_and_persist(job_id, job["jd_text"])
+    if score_result.get("status") not in ("success", "skipped"):
+        logging.error("Scoring failed during promotion of job %s: %s",
+                      job_id, score_result.get("error"))
+
+    return {"status": "ok"}

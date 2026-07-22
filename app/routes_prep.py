@@ -513,22 +513,41 @@ async def question_they_ask_delete(request: Request):
 
 
 async def question_they_ask_generate(request: Request):
-    """POST /prep/sessions/{session_id}/questions-they-ask/generate — LLM auto-generate likely questions."""
+    """POST /prep/sessions/{session_id}/questions-they-ask/generate — LLM auto-generate likely questions.
+
+    Grounds the questions in the profile's anchor stories and cached company
+    research, not just the bare role fields (upgraded 2026-07-21 — see
+    memory/lessons_learned.md)."""
+    from app.config import load_profile
+    from app.scoring.prompts import QUESTIONS_THEY_ASK_PROMPT
+
     session_id = int(request.path_params['session_id'])
 
     with get_db() as conn:
         session = conn.execute("SELECT * FROM interview_sessions WHERE id = ?", (session_id,)).fetchone()
-        job = conn.execute("SELECT * FROM jobs WHERE id = ?", (session['job_id'],)).fetchone()
+        job = dict(conn.execute("SELECT * FROM jobs WHERE id = ?", (session['job_id'],)).fetchone())
 
-        prompt = f"""You are helping prepare for a job interview. Generate 6 likely questions the interviewer will ask, based on this role:
+        research_row = conn.execute(
+            "SELECT result_json FROM research_cache WHERE company_name = ?", (job['company'],)
+        ).fetchone()
+        research = json.loads(research_row["result_json"]) if research_row else {}
 
-Company: {job['company']}
-Role: {job['job_title']}
-Sector: {job.get('sector', 'Unknown')}
-Pipeline stage: {job['pipeline_stage']}
-Angle: {job.get('recommended_angle', 'general fit')}
+        profile = load_profile()
+        anchor_stories = json.dumps(
+            [{"title": s.get("title", ""), "summary": s.get("summary", ""), "best_for": s.get("best_for", "")}
+             for s in profile.get("interview", {}).get("anchor_stories", [])],
+            indent=2,
+        )
 
-Return ONLY a JSON array of strings (questions only). Example: ["Question 1?", "Question 2?"]"""
+        prompt = QUESTIONS_THEY_ASK_PROMPT.format(
+            job_title=job['job_title'],
+            company=job['company'],
+            sector=job.get('sector', 'Unknown'),
+            pipeline_stage=job['pipeline_stage'],
+            angle=job.get('recommended_angle', 'general fit'),
+            research_summary=json.dumps(research, indent=2),
+            anchor_stories=anchor_stories,
+        )
 
         try:
             text = get_provider().generate(prompt)

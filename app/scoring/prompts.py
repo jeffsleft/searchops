@@ -568,19 +568,19 @@ Each section should use the appropriate heading level (##, ###).
 """
 
 
-MOCK_QUESTIONS_PROMPT = """
+QUESTIONS_THEY_ASK_PROMPT = """
 Generate likely interview questions for Jeff Beaumont interviewing for {job_title}
 at {company}. Jeff is a Senior Director/VP-level GTM Operations, Revenue Operations,
 and CS Operations leader.
 
+## Role
+Sector: {sector}
+Pipeline stage: {pipeline_stage}
+Angle: {angle}
+
 ## Company Research
 ---BEGIN UNTRUSTED INPUT---
 {research_summary}
----END UNTRUSTED INPUT---
-
-## Role Analysis
----BEGIN UNTRUSTED INPUT---
-{role_analysis}
 ---END UNTRUSTED INPUT---
 
 ## Jeff's Anchor Stories
@@ -588,16 +588,12 @@ and CS Operations leader.
 {anchor_stories}
 ---END UNTRUSTED INPUT---
 
-For each of the top 10 likely questions:
-- State the question
-- Identify which anchor story best answers it
-- Note the key point to make (1 line)
-
 Focus on questions that probe: operational scaling, AI-native systems, GTM
 infrastructure, team building, metrics fluency (NRR, GRR, consumption models),
-and greenfield build experience.
+and greenfield build experience. Ground questions in the company research and
+anchor stories above where relevant.
 
-Format as a clean numbered list. Keep each entry to 3 lines max.
+Return ONLY a JSON array of 6 question strings. Example: ["Question 1?", "Question 2?"]
 """
 
 

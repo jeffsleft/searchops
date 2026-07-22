@@ -20,8 +20,6 @@ from app.models import get_db, log_usage_event, log_error_event
 from app.observability import get_logger, new_request_id, set_request_id, reset_request_id
 from app.scoring.engine import classify_score
 from app.scoring.research import research_interviewer, coach_interview
-from app.providers import get_provider
-from app.interview.drive_sync import append_questions_to_prep_doc
 from app.pipeline.tracker import (
     STAGES, advance_stage,
     I_DECLINED_REASONS, THEY_DECLINED_REASONS, JOB_CLOSED_REASONS, DUPLICATE_REASONS,
@@ -31,13 +29,14 @@ from app.pipeline.calibration import compute_calibration
 from app.pipeline.patterns import compute_patterns
 from app.services.calibration_service import record_outcome, get_calibration_summary, get_job_outcomes
 from app.recruiters.crm import add_recruiter, log_contact, get_all_recruiters, get_stale_recruiters
-from app.services.research_service import do_research_company, derive_signals
+from app.services.research_service import do_research_company, do_research_job, derive_signals
 from app.services.scoring_service import (
     persist_score_record_to_job, score_job_from_text_and_persist,
-    score_job_from_url_and_persist, handle_job_add_with_optional_scoring,
+    handle_job_add_with_optional_scoring,
 )
 from app.services.job_actions import (
     score_new_job_from_input, fetch_and_score_stub, update_job_stage,
+    promote_job_from_discovery,
 )
 from app.services.company_actions import (
     import_tier_a_companies, research_companies_batch, scan_target_company,
@@ -786,25 +785,7 @@ async def job_trigger_research(request: Request):
     with get_db() as conn:
         job = conn.execute("SELECT company FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if job:
-        from app.scoring.research import research_company, assess_company_fit
-        research = research_company(job["company"], force=True)
-        assess_company_fit(job["company"], research)
-        with get_db() as conn:
-            conn.execute(
-                """UPDATE jobs SET
-                   has_fde_model = ?,
-                   timing_signal = ?,
-                   timing_signal_rationale = ?
-                   WHERE id = ?""",
-                (research.get("has_fde_model", "Unknown"),
-                 research.get("timing_signal", "Unknown"),
-                 research.get("timing_signal_rationale", ""),
-                 job_id)
-            )
-        from app.pipeline.strategy_brief import get_or_create_brief
-        get_or_create_brief(job_id)
-        from app.questions.bank import seed_questions
-        seed_questions(job_id)
+        do_research_job(job_id, job["company"])
     return RedirectResponse(url=f"/job/{job_id}", status_code=302)
 
 
@@ -980,28 +961,7 @@ async def company_research_redirect(request: Request):
     with get_db() as conn:
         co = conn.execute("SELECT * FROM companies WHERE id = ?", (co_id,)).fetchone()
     if co:
-        try:
-            from app.scoring.research import research_company, assess_company_fit
-            research = research_company(co["name"])
-            fit = assess_company_fit(co["name"], research)
-
-            # Merge fit insights into research for the UI
-            research["fit_rationale"] = fit.get("fit_rationale")
-            research["fit_justification"] = fit.get("fit_justification")
-            research["need_rationale"] = fit.get("need_rationale")
-            research["need_justification"] = fit.get("need_justification")
-
-            with get_db() as conn:
-                conn.execute(
-                    """UPDATE companies SET research_json=?, research_date=?,
-                       fit_score=?, need_assessment=?, funding_stage=?, updated_at=CURRENT_TIMESTAMP
-                       WHERE id=?""",
-                    (json.dumps(research), str(date.today()),
-                     fit.get("fit_score"), fit.get("need_assessment"),
-                     research.get("funding_stage", ""), co_id),
-                )
-        except Exception as e:
-            logging.error("Research failed for company %s (%s): %s", co_id, co['name'], e)
+        do_research_company(co_id, dict(co))
     return RedirectResponse(url="/companies", status_code=302)
 
 
@@ -1292,67 +1252,6 @@ async def coach_interview_post(request: Request):
     except Exception as e:
         safe_e = _html.escape(str(e))
         return HTMLResponse(f'<div class="text-red-400 text-sm">Error: {safe_e}</div>')
-
-
-async def generate_mock_questions_post(request: Request):
-    import re
-    job_id = int(request.path_params["job_id"])
-    with get_db() as conn:
-        row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-    if not row:
-        return HTMLResponse('<div class="text-red-400 text-sm">Job not found.</div>')
-
-    job = dict(row)
-    company = job.get("company", "")
-    job_title = job.get("job_title", "")
-
-    profile = load_profile()
-    with get_db() as conn:
-        research_row = conn.execute(
-            "SELECT result_json FROM research_cache WHERE company_name = ?", (company,)
-        ).fetchone()
-    research = json.loads(research_row["result_json"]) if research_row else {}
-
-    anchor_stories = json.dumps(
-        [{"title": s.get("title", ""), "summary": s.get("summary", ""), "best_for": s.get("best_for", "")}
-         for s in profile.get("interview", {}).get("anchor_stories", [])],
-        indent=2,
-    )
-
-    from app.scoring.prompts import MOCK_QUESTIONS_PROMPT
-    prompt = MOCK_QUESTIONS_PROMPT.format(
-        job_title=job_title,
-        company=company,
-        research_summary=json.dumps(research, indent=2),
-        role_analysis=f"{job_title} at {company}",
-        anchor_stories=anchor_stories,
-    )
-
-    llm = get_provider()
-    raw = llm.generate(prompt)
-
-    # Extract first line of each numbered entry (the question itself)
-    questions = []
-    for line in raw.splitlines():
-        m = re.match(r"^\d+\.\s+(.+)$", line.strip())
-        if m:
-            questions.append(m.group(1).strip())
-
-    from app.questions.bank import add_question
-    for q in questions:
-        add_question(job_id, q, "Strategic", "Any", "Medium", source="mock_questions")
-
-    ok = append_questions_to_prep_doc(company, job_title, questions)
-    if not ok:
-        import logging
-        logging.warning("append_questions_to_prep_doc failed for %s", company)
-
-    safe_count = int(len(questions))
-    html_msg = f'Generated {safe_count} mock questions — added to question bank'
-    if not ok:
-        html_msg += ' (doc write skipped — re-auth needed)'
-    
-    return HTMLResponse(f'<div class="text-green-400 text-sm">{html_msg}.</div>')
 
 
 async def questions_list(request: Request):
@@ -1885,19 +1784,8 @@ async def fix_sheet_headers(request: Request):
 
 async def backfill_question_themes(request: Request):
     """Backfill story anchor tags for questions missing suggested_themes."""
-    from app.questions.bank import infer_themes
-    import json as _json
-    with get_db() as conn:
-        qs = conn.execute(
-            "SELECT id, question, category FROM questions WHERE suggested_themes IS NULL"
-        ).fetchall()
-        for q in qs:
-            themes = _json.dumps(infer_themes(q["question"], q["category"]))
-            conn.execute(
-                "UPDATE questions SET suggested_themes=? WHERE id=?",
-                (themes, q["id"]),
-            )
-    count = len(qs)
+    from app.questions.bank import backfill_missing_themes
+    count = backfill_missing_themes()
     return HTMLResponse(f'<span class="dim">Tagged {count} question{"s" if count != 1 else ""}.</span>')
 
 
@@ -2079,31 +1967,12 @@ async def discovered_row(request: Request):
 
 async def job_promote_from_discovery(request: Request):
     job_id = int(request.path_params["job_id"])
-    with get_db() as conn:
-        job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-        if not job:
-            return HTMLResponse('<div class="text-red-400 text-sm">Job not found</div>')
-        job = dict(job)
-
-    # Move to identified stage
-    from app.pipeline.tracker import advance_stage
-    result = advance_stage(job_id, 'identified', notes='Promoted from discovery')
-    if not result["ok"]:
+    result = promote_job_from_discovery(job_id)
+    if result["status"] == "not_found":
+        return HTMLResponse('<div class="text-red-400 text-sm">Job not found</div>')
+    if result["status"] == "stage_error":
         safe_err = _html.escape(result["error"])
         return HTMLResponse(f'<div class="text-red-400 text-sm">{safe_err}</div>')
-
-    # Trigger scoring via the canonical service path (persists the full score
-    # record — evidence, mismatches, bullets, hooks — and handles the alert).
-    # Stage was already advanced above, so no transition_stage here.
-    score_result = {"status": "skipped"}
-    if job.get('url'):
-        score_result = score_job_from_url_and_persist(job_id, job['url'])
-    if score_result.get("status") != "success" and (job.get('jd_text') or '').strip():
-        score_result = score_job_from_text_and_persist(job_id, job['jd_text'])
-    if score_result.get("status") not in ("success", "skipped"):
-        logging.error("Scoring failed during promotion of job %s: %s",
-                      job_id, score_result.get("error"))
-
     return RedirectResponse(url=f"/job/{job_id}", status_code=302)
 
 

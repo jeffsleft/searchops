@@ -90,6 +90,31 @@ def do_research_company(co_id: int, co: dict) -> None:
         logging.error("Research failed for company %s (%s): %s", co_id, co['name'], e)
 
 
+def do_research_job(job_id: int, company_name: str) -> None:
+    """Run company research for a job's target company, persist FDE/timing
+    signals onto the job row, then refresh its strategy brief and question bank."""
+    from app.scoring.research import research_company, assess_company_fit
+
+    research = research_company(company_name, force=True)
+    assess_company_fit(company_name, research)
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE jobs SET
+               has_fde_model = ?,
+               timing_signal = ?,
+               timing_signal_rationale = ?
+               WHERE id = ?""",
+            (research.get("has_fde_model", "Unknown"),
+             research.get("timing_signal", "Unknown"),
+             research.get("timing_signal_rationale", ""),
+             job_id)
+        )
+    from app.pipeline.strategy_brief import get_or_create_brief
+    get_or_create_brief(job_id)
+    from app.questions.bank import seed_questions
+    seed_questions(job_id)
+
+
 def generate_gap_hypothesis(co_id: int, force_research: bool = False, force_metadata: bool = False) -> dict:
     """
     Run the gap hypothesis pipeline for a Tier A company.

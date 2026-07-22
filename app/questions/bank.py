@@ -174,6 +174,22 @@ def _check_divergence(question_id: int) -> None:
             )
 
 
+def backfill_missing_themes() -> int:
+    """Backfill story anchor tags for questions missing suggested_themes.
+    Returns count of questions tagged."""
+    with get_db() as conn:
+        qs = conn.execute(
+            "SELECT id, question, category FROM questions WHERE suggested_themes IS NULL"
+        ).fetchall()
+        for q in qs:
+            themes = json.dumps(infer_themes(q["question"], q["category"]))
+            conn.execute(
+                "UPDATE questions SET suggested_themes=? WHERE id=?",
+                (themes, q["id"]),
+            )
+    return len(qs)
+
+
 def get_questions(job_id: int, priority: str | None = None, persona: str | None = None) -> list[dict]:
     filters = ["job_id = ?"]
     params: list = [job_id]

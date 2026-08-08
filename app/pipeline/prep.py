@@ -1,5 +1,6 @@
 """Interview prep helpers: scheduling, context building, upcoming interviews."""
 
+import json
 from datetime import datetime, timedelta, timezone
 
 PREP_ELIGIBLE_STAGES = {'discovered', 'evaluated', 'researching', 'outreach', 'applied', 'on_hold', 'recruiter', 'hm_interview', 'panel', 'final_offer'}
@@ -72,6 +73,65 @@ def get_upcoming_interviews(conn, limit=4):
         })
 
     return out[:limit]
+
+
+def check_question_divergence(conn, question_id: int) -> None:
+    """After an answer is recorded on a session_questions_to_ask row, check
+    whether the same question text was already answered under a different
+    persona for the same job (e.g. asked of both the CFO and the CRO) and, if
+    so, flag alignment/divergence via the LLM.
+
+    Rebuilt on the per-session model (2026-07-21) — the original version of
+    this lived on the retired flat `questions` table and matched on
+    `asked_to`; this one matches on `persona` scoped to the same job via
+    `interview_sessions`."""
+    from app.providers import get_provider
+    from app.scoring.prompts import DIVERGENCE_PROMPT
+
+    q = conn.execute(
+        "SELECT * FROM session_questions_to_ask WHERE id = ?", (question_id,)
+    ).fetchone()
+    if not q or not (q["answer"] or "").strip():
+        return
+
+    session = conn.execute(
+        "SELECT job_id FROM interview_sessions WHERE id = ?", (q["session_id"],)
+    ).fetchone()
+    if not session:
+        return
+    job_id = session["job_id"]
+
+    siblings = conn.execute(
+        """SELECT sq.* FROM session_questions_to_ask sq
+           JOIN interview_sessions s ON s.id = sq.session_id
+           WHERE s.job_id = ? AND sq.text = ? AND sq.id != ?
+             AND TRIM(COALESCE(sq.answer, '')) != ''
+             AND sq.persona != ?""",
+        (job_id, q["text"], question_id, q["persona"]),
+    ).fetchall()
+    if not siblings:
+        return
+    sibling = siblings[0]
+
+    job = conn.execute("SELECT company FROM jobs WHERE id = ?", (job_id,)).fetchone()
+
+    prompt = DIVERGENCE_PROMPT.format(
+        company=job["company"] if job else "Unknown",
+        question=q["text"],
+        person_a_title=q["persona"], person_a_name=q["persona"],
+        answer_a=q["answer"],
+        person_b_title=sibling["persona"], person_b_name=sibling["persona"],
+        answer_b=sibling["answer"],
+    )
+    result = get_provider().generate_json(prompt)
+
+    notes = json.dumps(result)
+    is_divergent = not result.get("aligned", True)
+    for qid in (question_id, sibling["id"]):
+        conn.execute(
+            "UPDATE session_questions_to_ask SET divergence_flag=?, divergence_notes=? WHERE id=?",
+            (int(is_divergent), notes, qid),
+        )
 
 
 def build_session_context(conn, session_id: int) -> dict:

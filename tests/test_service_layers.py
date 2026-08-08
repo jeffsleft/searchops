@@ -22,10 +22,31 @@ from app.services.pipeline_service import build_pipeline_view_data
 from app.routes import _enrich_job
 
 
-@pytest.fixture(scope="session", autouse=True)
-def setup_db():
-    """Initialize test database once per test session."""
+@pytest.fixture(scope="module", autouse=True)
+def setup_db(_isolated_test_db):
+    """Initialize test database once per test module and seed one job row.
+
+    Depends explicitly on conftest.py's `_isolated_test_db` fixture (same scope,
+    but an explicit dependency guarantees ordering) so this always seeds the DB
+    that fixture just pointed DATABASE_PATH at — a session-scoped fixture here
+    would set up before a module-scoped one regardless of dependency, orphaning
+    the seed into a path that gets replaced before any test runs.
+
+    Without a seeded row, the "job exists" tests below (test_returns_dict_with_
+    required_keys, test_questions_answered_is_integer, test_flags_fired_structure)
+    always pytest.skip — they used to pass "by accident" off job rows leaked from
+    another test file before the DATABASE_PATH isolation fix (see conftest.py),
+    which is exactly the order-dependent flakiness that fix closed. Seed real data
+    here so these tests exercise their actual code path deterministically.
+    """
     init_db()
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO jobs (company, job_title, url, pipeline_stage, date_found, flags_json) "
+            "VALUES (?, ?, ?, ?, date('now'), ?)",
+            ("Acme", "Director of RevOps", "https://example.com/job/1", "identified",
+             '["modern_tech"]'),
+        )
 
 
 class TestBuildDashboardData:

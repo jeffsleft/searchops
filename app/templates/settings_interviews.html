@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}Interview Performance — SearchOps{% endblock %}
+{% block page_title %}Interview Performance{% endblock %}
+
+{# ---- Rate/scalar renderer. n<gate is a first-class designed state, never a fake 0. ---- #}
+{% macro metric(m, unit='') %}
+  {%- if m.value is none -%}
+    <span class="metric-na">Insufficient data</span> <span class="metric-n">n={{ m.n }}</span>
+  {%- else -%}
+    <span class="metric-big">{{ m.value }}{{ unit }}</span>
+    <span class="metric-n">n={{ m.n }}</span>
+    <span class="conf conf-{{ m.confidence }}">{{ m.confidence }}</span>
+  {%- endif -%}
+{% endmacro %}
+
+{% block content_wrap %}
+<div class="content">
+<div class="page metrics-narrow">
+
+<div class="page-head" style="margin-bottom:18px;">
+  <div>
+    <h1>Interview Performance</h1>
+    <div class="sub">Self-evaluation scores across interview dimensions, session cadence, and performance trends cross-referenced against job funnel outcomes.</div>
+  </div>
+</div>
+
+{% if interviews.empty %}
+<div class="card">
+  <div class="card-body">
+    <div class="empty"><span class="empty-title">No interview sessions recorded yet</span><span class="empty-sub">Interview data will appear here once sessions are synced via the interview-sync endpoint or logged manually.</span></div>
+  </div>
+</div>
+
+{% else %}
+
+{# ---- HEADLINE — total session count. ---- #}
+<div class="stat-grid">
+  <div class="stat"><div class="stat-label">Sessions</div><div class="stat-value">{{ interviews.total_sessions }}</div></div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:16px;">
+
+  <!-- SCORE TRENDS BY DIMENSION -->
+  <div class="card">
+    <div class="card-head"><h3>Score Trends by Dimension</h3><span class="spacer"></span><span class="dim mono" style="font-size:10.5px;">self-eval over time</span></div>
+    <div class="card-body">
+      {% if interviews.score_trends %}
+      <div class="score-grid">
+        {% for dim_data in interviews.score_trends %}
+        <div class="score-card">
+          <div class="score-title">{{ dim_data.dimension | replace('_', ' ') | title }}</div>
+          <div class="metric-line" style="margin-bottom:12px;">{{ metric(dim_data.avg) }}</div>
+          {% if dim_data.trend %}
+          <div class="score-timeline">
+            {% for point in dim_data.trend %}
+            <div class="timeline-point {{ 'has-score' if point.score is not none }}">
+              {% if point.score is not none %}
+              <div class="point-dot" style="opacity: {{ (point.score / 5.0) * 0.8 + 0.2 }};" title="{{ point.date }}: {{ point.score }}/5"></div>
+              {% else %}
+              <div class="point-dot empty"></div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty"><span class="empty-title">No dimension scores recorded</span><span class="empty-sub">Scores will appear once interview sessions include self-evaluation data.</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- SESSION CADENCE -->
+  <div class="card">
+    <div class="card-head"><h3>Session Cadence</h3><span class="spacer"></span><span class="dim" style="font-size:11px;">by week</span></div>
+    <div class="card-body">
+      {% if interviews.session_cadence %}
+      <div class="cadence-list">
+        {% for cadence in interviews.session_cadence %}
+        <div class="cadence-row">
+          <div class="cadence-week">{{ cadence.week }}</div>
+          <div class="cadence-count">{{ cadence.count }} session{% if cadence.count != 1 %}s{% endif %}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty"><span class="empty-title">No cadence data</span><span class="empty-sub">Schedule data will appear once sessions have schedule dates.</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- FUNNEL CROSS-REFERENCE -->
+  <div class="card">
+    <div class="card-head"><h3>Interview Strength vs. Outcome</h3><span class="spacer"></span><span class="dim" style="font-size:11px;">average self-eval score by pipeline stage</span></div>
+    <div class="card-body">
+      {% set fcr = interviews.funnel_cross_ref %}
+      {% if fcr.they_declined.count > 0 or fcr.i_declined.count > 0 or fcr.accepted.count > 0 %}
+      <div class="funnel-matrix">
+        <div class="funnel-row">
+          <div class="funnel-label">They Declined</div>
+          <div class="funnel-metric">
+            {{ metric(fcr.they_declined.avg_score) }}
+            <div class="funnel-count">{{ fcr.they_declined.count }} job{% if fcr.they_declined.count != 1 %}s{% endif %}</div>
+          </div>
+        </div>
+        <div class="funnel-row">
+          <div class="funnel-label">I Declined</div>
+          <div class="funnel-metric">
+            {{ metric(fcr.i_declined.avg_score) }}
+            <div class="funnel-count">{{ fcr.i_declined.count }} job{% if fcr.i_declined.count != 1 %}s{% endif %}</div>
+          </div>
+        </div>
+        <div class="funnel-row">
+          <div class="funnel-label">Accepted</div>
+          <div class="funnel-metric">
+            {{ metric(fcr.accepted.avg_score) }}
+            <div class="funnel-count">{{ fcr.accepted.count }} job{% if fcr.accepted.count != 1 %}s{% endif %}</div>
+          </div>
+        </div>
+        {% if fcr.other.count > 0 %}
+        <div class="funnel-row">
+          <div class="funnel-label">Other</div>
+          <div class="funnel-metric">
+            {{ metric(fcr.other.avg_score) }}
+            <div class="funnel-count">{{ fcr.other.count }} job{% if fcr.other.count != 1 %}s{% endif %}</div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="empty"><span class="empty-title">Insufficient funnel data</span><span class="empty-sub">This cross-reference needs jobs with recorded outcomes and matching interview sessions.</span></div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{% endif %}
+
+</div>
+</div>
+{% endblock %}
+
+<style>
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.score-card {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-secondary);
+}
+
+.score-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.score-timeline {
+  display: flex;
+  gap: 3px;
+  padding: 8px 0;
+}
+
+.timeline-point {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.point-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  transition: all 0.2s ease;
+}
+
+.point-dot.empty {
+  background: var(--border);
+  opacity: 0.3;
+}
+
+.timeline-point.has-score .point-dot:hover {
+  transform: scale(1.5);
+}
+
+.cadence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cadence-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.cadence-row:last-child {
+  border-bottom: none;
+}
+
+.cadence-week {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.cadence-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.funnel-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.funnel-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-secondary);
+}
+
+.funnel-label {
+  font-weight: 500;
+  min-width: 120px;
+}
+
+.funnel-metric {
+  flex: 1;
+  text-align: right;
+}
+
+.funnel-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+</style>

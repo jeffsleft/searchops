@@ -38,16 +38,23 @@
       <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
 
         <div>
-          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Google Sheet (recommended)</div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Discovery scan (automated, primary path for volume)</div>
           <p style="font-size:13px;line-height:1.7;margin:0;">
-            Paste a job URL into the "To Evaluate" tab of the recruiting Sheet. The scheduler runs every 6 hours (midnight, 6am, noon, 6pm UTC) and automatically fetches the JD, scores it, and adds it to the Dashboard. This is the primary inbound path for volume.
+            Runs once daily (6am UTC) against every Tier A company plus a rotating slice of the rest — checks each company's ATS for new postings and runs a handful of broader search queries. New matches land in Discovered auto-scored, no action needed. Manage which companies it watches on the Hunt Targets page.
           </p>
         </div>
 
         <div>
           <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Score manually</div>
           <p style="font-size:13px;line-height:1.7;margin:0;">
-            Use the "Score a Job" form on the Dashboard — paste a URL or raw JD text. Scored immediately, no wait for the scheduler. Best for one-offs you want to evaluate right now.
+            Use the "Score a Job" form on the Dashboard — paste a URL or raw JD text. Scored immediately, no waiting on the scan. Best for one-offs you want to evaluate right now, or roles at companies outside the watched list.
+          </p>
+        </div>
+
+        <div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Posting age</div>
+          <p style="font-size:13px;line-height:1.7;margin:0;">
+            Layer 3 scans the JD for a posting date or "posted X days ago" signal. A ⏱ badge appears on the Dashboard, Pipeline, and job detail page once a listing is over 21 days old — a quick check before spending time on a role that may already be filled. No badge means either the listing is fresh or the JD had no date signal to extract.
           </p>
         </div>
 

@@ -16,6 +16,10 @@
             <span class="pri-{{ q.priority[0]|lower }}">{{ q.priority }}</span>
             <span>·</span>
             <span>Ask: {{ q.persona }}</span>
+            {% if q.divergence_flag %}
+              <span>·</span>
+              <span class="chip warn" title="{{ (q.divergence_notes|fromjson).summary if q.divergence_notes else '' }}">⚠ Divergence</span>
+            {% endif %}
           </div>
           {% if q.asked %}
             <textarea class="textarea" style="margin-top:8px; min-height:54px; font-size:12px; background:var(--bg-sunk)"

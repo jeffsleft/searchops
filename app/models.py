@@ -520,6 +520,10 @@ def init_db():
         _run_migration("ALTER TABLE companies ADD COLUMN match_count INTEGER DEFAULT 0")
         _run_migration("ALTER TABLE companies ADD COLUMN match_best_score REAL")
         _run_migration("ALTER TABLE companies ADD COLUMN matches_refreshed_at TEXT")
+        # Divergence detection, rebuilt on the per-session model (was on the
+        # retired flat questions table's asked_to/status columns)
+        _run_migration("ALTER TABLE session_questions_to_ask ADD COLUMN divergence_flag INTEGER DEFAULT 0")
+        _run_migration("ALTER TABLE session_questions_to_ask ADD COLUMN divergence_notes TEXT")
         # Discovered jobs were historically inserted without company_id (the hunter
         # and on-demand scans only set the denormalized `company` name). Backfill it
         # so match summaries can count + link existing roles to their company.

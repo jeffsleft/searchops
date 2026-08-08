@@ -1,5 +1,6 @@
 import os
 import logging
+import secrets as _secrets
 from pathlib import Path
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -29,6 +30,14 @@ _serializer = URLSafeTimedSerializer(SECRET_KEY)
 
 PUBLIC_PATHS = {"/login", "/favicon.ico"}
 
+# Paths callable by non-browser clients (e.g. the interview-scorecard skill
+# running in Claude Desktop/Cowork) via `Authorization: Bearer <APP_PASSWORD>`
+# instead of a session cookie. Kept to a narrow prefix, not app-wide, to limit
+# blast radius — reuses the existing APP_PASSWORD secret rather than minting a
+# new one (Modal's `secret create` has no additive "add one key" mode, so
+# introducing a fresh secret risks clobbering recruiting-secrets' other keys).
+BEARER_AUTH_PREFIXES = ("/api/sync/",)
+
 
 def create_session_token() -> str:
     return _serializer.dumps("authenticated")
@@ -46,6 +55,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.url.path in PUBLIC_PATHS or request.url.path.startswith("/static"):
             return await call_next(request)
+
+        if request.url.path.startswith(BEARER_AUTH_PREFIXES):
+            from app.config import APP_PASSWORD
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer ") and APP_PASSWORD:
+                presented = auth_header[len("Bearer "):]
+                if _secrets.compare_digest(presented, APP_PASSWORD):
+                    return await call_next(request)
+            # Bearer auth was attempted (or path requires it) but failed —
+            # don't fall through to a redirect; a non-browser client can't
+            # follow it. Return a plain 401.
+            token = request.cookies.get(SESSION_COOKIE)
+            if token and verify_session_token(token):
+                return await call_next(request)
+            return HTMLResponse("Unauthorized", status_code=401)
 
         token = request.cookies.get(SESSION_COOKIE)
         if not token or not verify_session_token(token):

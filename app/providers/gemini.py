@@ -13,7 +13,7 @@ from app.providers import LLMProvider
 DEFAULT_PRO_MODEL = os.environ.get("GEMINI_PRO_MODEL", "gemini-2.5-flash")
 DEFAULT_FLASH_MODEL = os.environ.get("GEMINI_FLASH_MODEL", "gemini-2.5-flash")
 
-_BACKOFF_SCHEDULE = (15, 30, 60, 120, 240)
+_BACKOFF_SCHEDULE = (5, 15, 30)
 
 
 class RateLimitedError(RuntimeError):

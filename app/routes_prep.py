@@ -11,7 +11,7 @@ from starlette.responses import HTMLResponse
 from app.models import get_db
 from app.providers import get_provider
 from app.pipeline.session_seeds import SESSION_TYPES, STAGE_TO_DEFAULT_TYPE, seed_session_content, seed_pinned_anchors
-from app.pipeline.prep import PREP_ELIGIBLE_STAGES, build_session_context
+from app.pipeline.prep import PREP_ELIGIBLE_STAGES, build_session_context, check_question_divergence
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 jinja_prep = Environment(
@@ -420,6 +420,8 @@ async def question_to_ask_update(request: Request):
         values = list(updates.values()) + [q_id]
         with get_db() as conn:
             conn.execute(f"UPDATE session_questions_to_ask SET {set_clause} WHERE id = ?", values)
+            if 'answer' in updates and updates['answer'].strip():
+                check_question_divergence(conn, q_id)
 
     return HTMLResponse("")
 

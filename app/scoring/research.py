@@ -4,6 +4,7 @@ Results are cached in SQLite for RESEARCH_CACHE_TTL_DAYS.
 """
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 
 from app.config import load_profile, RESEARCH_CACHE_TTL_DAYS
@@ -212,6 +213,9 @@ def score_job(jd_text: str, company_info: dict | None = None) -> dict:
 
     # Layer 2 — corpus match (gracefully no-ops if Inventory docx not present)
     match_result = score_match(jd_text, candidate_summary)
+
+    # Pace the two sequential LLM calls to stay under free-tier Gemini RPM ceilings.
+    time.sleep(5)
 
     # Layer 3 — qualitative LLM nudge (role shape)
     llm = get_provider()

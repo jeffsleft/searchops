@@ -24,7 +24,10 @@ def build_pipeline_view_data(archetype: str, _enrich_job_fn) -> dict:
         Dict with keys: jobs_by_stage, stale_items, total, active, max_stage_count
     """
     with get_db() as conn:
-        query = "SELECT * FROM jobs WHERE auto_rejected = 0"
+        # sync_stub jobs are placeholder rows auto-created by the interview-sync
+        # endpoint for companies with no existing pipeline entry — excluded here
+        # so backfilled/informal interviews don't clutter the Kanban board.
+        query = "SELECT * FROM jobs WHERE auto_rejected = 0 AND pipeline_stage != 'sync_stub'"
         params = []
         if archetype:
             query += " AND role_archetype = ?"

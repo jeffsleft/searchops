@@ -53,7 +53,7 @@
               hx-post="/targets/{{ target.id }}/research"
               hx-target="#gap-section-{{ target.id }}"
               hx-swap="outerHTML"
-              onclick="this.textContent='Generating…';this.disabled=true;">
+              data-htmx-before-label="Generating…">
         {% if target.gap_hypothesis %}Re-run{% else %}Generate{% endif %}
       </button>
     </div>
@@ -154,7 +154,7 @@
                 hx-target="#scan-status-{{ target.id }}"
                 hx-swap="outerHTML"
                 hx-indicator="this"
-                onclick="this.textContent='Scanning…';this.disabled=true;">
+                data-htmx-before-label="Scanning…">
           Scan now
         </button>
         <form hx-post="/targets/{{ target.id }}/toggle" hx-swap="none" style="display:inline;">
@@ -169,7 +169,7 @@
                 hx-post="/targets/{{ target.id }}/research"
                 hx-target="#research-status-{{ target.id }}"
                 hx-swap="innerHTML"
-                onclick="this.textContent='Researching…';this.disabled=true;">
+                data-htmx-before-label="Researching…">
           Research
         </button>
         <button class="btn btn-sm btn-ghost"
@@ -177,7 +177,7 @@
                 hx-target="#research-status-{{ target.id }}"
                 hx-swap="innerHTML"
                 title="Overwrites existing remote/HQ/headcount/funding/industry data"
-                onclick="this.textContent='Refreshing…';this.disabled=true;">
+                data-htmx-before-label="Refreshing…">
           Force Refresh
         </button>
       </div>

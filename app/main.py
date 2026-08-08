@@ -426,6 +426,53 @@ def correct_erroneous_applied_at(job_id: int, expected_applied_at: str, dry_run:
     print(f"[correct_erroneous_applied_at] id={job_id} committed.")
 
 
+# Careers-URL backfill (2026-07-27, per Todoist "Add careers URLs to Tier A
+# companies"): 47 of 60 Tier A companies had no careers_url, blocking the
+# discovery scan's ATS detection for them. Each URL must be verified against
+# live content, not just a 200 status -- jobs.ashbyhq.com/{anything} returns
+# HTTP 200 for every slug (a client-side SPA shell), and generic company-name
+# slugs can collide with an unrelated company on the same ATS (jobs.lever.co/
+# alloy resolves to "Alloy.ai", a supply-chain analytics company, not the
+# fintech identity platform actually on this list). See
+# memory/lessons_learned.md for the full verification method.
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets],
+    volumes={"/data": volume},
+    timeout=60,
+)
+def stamp_careers_url(company_name: str, careers_url: str, dry_run: bool = True):
+    init_db()
+    from app.models import get_db
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, name, careers_url FROM companies WHERE name = ? AND tier_a = 1",
+            (company_name,),
+        ).fetchone()
+        if not row:
+            print(f"[stamp_careers_url] no Tier A company named {company_name!r} — nothing done")
+            return
+        if row["careers_url"]:
+            print(
+                f"[stamp_careers_url] '{company_name}' already has "
+                f"careers_url={row['careers_url']!r} — refusing to overwrite"
+            )
+            return
+
+        print(f"[stamp_careers_url] '{company_name}' -> careers_url={careers_url} (dry_run={dry_run})")
+        if dry_run:
+            return
+
+        conn.execute(
+            "UPDATE companies SET careers_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (careers_url, row["id"]),
+        )
+
+    volume.commit()
+    print(f"[stamp_careers_url] '{company_name}' committed.")
+
+
 # W1-T session (2026-07-16): the browser-driven /job/{id}/stage route lost a write
 # (Diligent, job 88 -> job_listing_closed — POST returned 200, live app reflected the
 # change, but a fresh `modal volume get` pull kept showing the pre-change state, no new
@@ -542,10 +589,8 @@ def backfill_decline_outcomes(job_ids: list = None, dry_run: bool = True):
 )
 def research_one_company_task(co_id: int):
     """Worker task to research a single company."""
-    import json
-    from datetime import date
     from app.models import get_db, log_task_event
-    from app.scoring.research import research_company, assess_company_fit
+    from app.services.research_service import do_research_company
 
     with get_db() as conn:
         r = conn.execute("SELECT name, funding_stage FROM companies WHERE id = ?", (co_id,)).fetchone()
@@ -554,33 +599,18 @@ def research_one_company_task(co_id: int):
 
     name = r["name"]
     log_task_event("research", "started", f"Researching {name}", name)
-    try:
-        print(f"[worker] Starting research for: {name}")
-        research = research_company(name)
-        fit = assess_company_fit(name, research)
-
-        # Merge fit insights into research for the UI
-        research["fit_rationale"] = fit.get("fit_rationale")
-        research["fit_justification"] = fit.get("fit_justification")
-        research["need_rationale"] = fit.get("need_rationale")
-        research["need_justification"] = fit.get("need_justification")
-
-        with get_db() as conn:
-            conn.execute(
-                """UPDATE companies SET research_json=?, research_date=?,
-                   fit_score=?, need_assessment=?, funding_stage=?, updated_at=CURRENT_TIMESTAMP
-                   WHERE id=?""",
-                (json.dumps(research), str(date.today()),
-                 fit.get("fit_score"), fit.get("need_assessment"),
-                 research.get("funding_stage", r["funding_stage"] or ""), co_id),
-            )
-        log_task_event("research", "completed", f"Research done — fit={fit.get('fit_score','?')}", name)
+    print(f"[worker] Starting research for: {name}")
+    # Canonical research + fit + persist path (mirrors routes.py's company_research_redirect) —
+    # do_research_company logs and swallows its own exceptions, so check the returned bool
+    # rather than wrapping this in try/except.
+    success = do_research_company(co_id, dict(r))
+    if success:
+        log_task_event("research", "completed", f"Research done for {name}", name)
         print(f"[worker] Success: {name}")
-        return True
-    except Exception as e:
-        log_task_event("research", "failed", str(e)[:200], name)
-        logging.error("[worker] Failed for '%s': %s", name, e)
-        return False
+    else:
+        log_task_event("research", "failed", "do_research_company failed — see server logs", name)
+        logging.error("[worker] Failed for '%s'", name)
+    return success
 
 
 @app.function(
@@ -667,10 +697,22 @@ def run_discovery_scan_remote():
     Useful right after seeding hunt_targets, or for ad-hoc debugging
     without waiting for the 6am UTC scheduler tick.
     """
-    from app.models import init_db
+    from app.models import init_db, log_task_event
     from app.discovery.hunter import run_discovery_scan
     init_db()
-    stats = run_discovery_scan()
+    try:
+        stats = run_discovery_scan()
+    except Exception as e:
+        # run_discovery_scan()'s own "completed"/"partial" log_task_event call is the
+        # last line of that function — any uncaught exception anywhere in the scan
+        # (network, LLM parsing, DB) skips it entirely, leaving a "started" task_log
+        # row with no completion and no way to tell a crash from a genuine zero-yield
+        # day. Close that gap here, at the single entry point both the 6am UTC cron
+        # and manual `modal run` invocations go through, then re-raise so Modal's own
+        # task-failure tracking still fires unchanged.
+        logging.error(f"[discovery] Crashed: {e}")
+        log_task_event("discovery_scan", "failed", f"Crashed: {str(e)[:200]}")
+        raise
     print(f"[discovery] Done: {stats}")
     return stats
 

@@ -1,0 +1,19 @@
+<script>
+(function(){
+  var sel = document.querySelector('#discovered-panel select[name="stage"]');
+  if(sel){
+    sel.style.transition='none';
+    sel.style.borderColor='oklch(65% 0.18 145)';
+    sel.style.backgroundColor='oklch(30% 0.06 145 / 0.25)';
+    setTimeout(function(){
+      sel.style.transition='border-color 600ms ease-out, background-color 600ms ease-out';
+      sel.style.borderColor='';
+      sel.style.backgroundColor='';
+    }, 50);
+  }
+  {% if is_promoted %}
+  var row=document.querySelector('tr[data-job-id="{{ job_id }}"]');if(row)row.remove();
+  {% endif %}
+  if(window.showToast) window.showToast({{ toast_msg | tojson }});
+})();
+</script>

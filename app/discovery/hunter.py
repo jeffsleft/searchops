@@ -1,6 +1,7 @@
 """Job discovery orchestrator — runs daily to find matching roles at target companies."""
 import json
 import logging
+import time
 import yaml
 import requests as _req
 from datetime import datetime, timezone, timedelta
@@ -23,6 +24,11 @@ NON_TIER_A_RESCAN_DAYS = 3
 
 # Minimum JD length to attempt a full score (mirrors score_job's own guard).
 _MIN_JD_FOR_SCORE = 300
+
+# Pacing between sequential LLM calls in batch loops (fit analysis, search dorks,
+# auto-score) — keeps burst rate under free-tier Gemini RPM ceilings. See
+# gemini-api-conventions skill.
+_LLM_CALL_PACING_SECONDS = 5
 
 
 def _auto_score_discovery(job_id: int, url: str, profile: dict, budget: dict) -> str:
@@ -231,6 +237,8 @@ def run_discovery_scan() -> dict:
             except Exception as e:
                 logger.warning("auto-score failed for job %s (%s): %s", new_job_id, company_name, e)
 
+            time.sleep(_LLM_CALL_PACING_SECONDS)
+
         # Update last_scanned
         with get_db() as db:
             db.execute(
@@ -346,9 +354,13 @@ def run_discovery_scan() -> dict:
                             stats['auto_scored'] += 1
                     except Exception as e:
                         logger.warning("auto-score failed for job %s (%s): %s", new_job_id, co_name, e)
-                    
+
+                    time.sleep(_LLM_CALL_PACING_SECONDS)
+
             except Exception as e:
                 logger.error(f"Search dork failed for {name}: {e}")
+
+            time.sleep(_LLM_CALL_PACING_SECONDS)
 
     # Send Slack notification if new jobs found
     if new_jobs:

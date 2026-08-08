@@ -48,8 +48,14 @@ def _map_work_arrangement(wa: str) -> str:
     return wa.strip()
 
 
-def do_research_company(co_id: int, co: dict) -> None:
-    """Run research + fit assessment for a company and persist results."""
+def do_research_company(co_id: int, co: dict) -> bool:
+    """Run research + fit assessment for a company and persist results.
+
+    Returns True on success, False if research/fit/persist raised — callers that
+    need failure visibility (e.g. batch worker tracking) should check this rather
+    than relying on an exception, since failures are logged and swallowed here so
+    fire-and-forget callers (routes.py) never see an uncaught background exception.
+    """
     try:
         from app.scoring.research import research_company, assess_company_fit
         research = research_company(co["name"])
@@ -86,8 +92,10 @@ def do_research_company(co_id: int, co: dict) -> None:
                  remote_val, hq_val, headcount_val, industry_val,
                  co_id),
             )
+        return True
     except Exception as e:
         logging.error("Research failed for company %s (%s): %s", co_id, co['name'], e)
+        return False
 
 
 def do_research_job(job_id: int, company_name: str) -> None:

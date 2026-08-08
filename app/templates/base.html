@@ -118,6 +118,10 @@
           <span class="nav-icon">🩺</span>
           <span>Health</span>
         </a>
+        <a href="/settings/interviews" class="nav-item" aria-current="{% if request.url.path == '/settings/interviews' %}true{% endif %}">
+          <span class="nav-icon">🎤</span>
+          <span>Interviews</span>
+        </a>
       </nav>
 
       <div class="sidebar-foot">
@@ -165,8 +169,19 @@
   </div>
 
   <script>
-    document.body.addEventListener('htmx:beforeRequest', function() {
+    document.body.addEventListener('htmx:beforeRequest', function(evt) {
       document.getElementById('htmx-indicator').style.display = 'block';
+      // data-htmx-before-label dispatcher — CSP-safe replacement for an inline
+      // onclick="this.disabled=true" on the triggering element. That pattern raced
+      // htmx's own click handling: the onclick attribute fires before htmx's
+      // addEventListener-registered listener, so by the time htmx checks the
+      // element it's already disabled and htmx silently skips the request
+      // (htmx.min.js respects `.disabled` on the triggering element). Firing here,
+      // on htmx:beforeRequest, happens only after htmx has already committed to
+      // the request, so disabling can't race it.
+      var el = evt.target;
+      var label = el && el.dataset && el.dataset.htmxBeforeLabel;
+      if (label) { el.textContent = label; el.disabled = true; }
     });
     document.body.addEventListener('htmx:afterRequest', function(evt) {
       document.getElementById('htmx-indicator').style.display = 'none';

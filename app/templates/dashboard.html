@@ -16,7 +16,7 @@
           style="display:flex;flex-direction:column;gap:10px;">
       <div>
         <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:5px;">Job URL</label>
-        <input type="url" name="url" placeholder="https://…" class="input">
+        <input type="url" name="url" id="score-url-input" placeholder="https://…" class="input">
       </div>
       <div>
         <label class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;display:block;margin-bottom:5px;">Or paste JD text</label>
@@ -27,6 +27,18 @@
     </form>
   </div>
 </details>
+<script>
+  (function() {
+    var details = document.getElementById('score-form-details');
+    if (!details) return;
+    details.addEventListener('toggle', function() {
+      if (details.open) {
+        var input = document.getElementById('score-url-input');
+        if (input) input.focus();
+      }
+    });
+  })();
+</script>
 {% endblock %}
 
 {% block content %}

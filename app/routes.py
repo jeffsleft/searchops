@@ -1254,58 +1254,6 @@ async def coach_interview_post(request: Request):
         return HTMLResponse(f'<div class="text-red-400 text-sm">Error: {safe_e}</div>')
 
 
-async def questions_list(request: Request):
-    job_id = int(request.path_params["job_id"])
-    priority = request.query_params.get("priority")
-    from app.questions.bank import get_questions
-    questions = get_questions(job_id, priority=priority)
-
-    # Enrich questions with suggested story bullets
-    from app.scoring.corpus import load_corpus, get_bullets_for_themes
-    import json as _json
-    _corpus = load_corpus()
-    for _q in questions:
-        _raw = _q.get("suggested_themes")
-        _themes = _json.loads(_raw) if _raw else []
-        _q["suggested_bullets"] = get_bullets_for_themes(_themes, _corpus) if _themes else []
-
-    jinja_tmpl = jinja.get_template("components/question_row.html")
-    html = "".join(jinja_tmpl.render(q=q) for q in questions) or '<div class="text-sm text-gray-600">No questions.</div>'
-    return HTMLResponse(html)
-
-
-async def add_question_post(request: Request):
-    job_id = int(request.path_params["job_id"])
-    form = await request.form()
-    from app.questions.bank import add_question
-    qid = add_question(job_id, form.get("question",""), form.get("category","Strategic"),
-                       form.get("persona_target","Any"), form.get("priority","Medium"))
-    with get_db() as conn:
-        q = dict(conn.execute("SELECT * FROM questions WHERE id = ?", (qid,)).fetchone())
-    return HTMLResponse(jinja.get_template("components/question_row.html").render(q=q))
-
-
-async def mark_question_asked(request: Request):
-    _job_id = int(request.path_params["job_id"])
-    q_id = int(request.path_params["q_id"])
-    from app.questions.bank import mark_asked
-    mark_asked(q_id, "Unknown")
-    with get_db() as conn:
-        q = dict(conn.execute("SELECT * FROM questions WHERE id = ?", (q_id,)).fetchone())
-    return HTMLResponse(jinja.get_template("components/question_row.html").render(q=q))
-
-
-async def mark_question_answered(request: Request):
-    _job_id = int(request.path_params["job_id"])
-    q_id = int(request.path_params["q_id"])
-    form = await request.form()
-    from app.questions.bank import mark_answered
-    mark_answered(q_id, form.get("answer_notes",""))
-    with get_db() as conn:
-        q = dict(conn.execute("SELECT * FROM questions WHERE id = ?", (q_id,)).fetchone())
-    return HTMLResponse(jinja.get_template("components/question_row.html").render(q=q))
-
-
 # ---------------------------------------------------------------------------
 # Recruiters
 # ---------------------------------------------------------------------------
@@ -2004,26 +1952,11 @@ async def job_stage_update(request: Request):
     fit_bullets = json.loads(job.get("match_bullets_json") or "[]")
     html = jinja.get_template("components/discovered_detail_panel.html").render(job=job, fit_bullets=fit_bullets)
     is_promoted = result["promoted"]
-    stage_label = _html.escape(result["stage_label"])
-    remove_row_js = f"var row=document.querySelector('tr[data-job-id=\"{job_id}\"]');if(row)row.remove();" if is_promoted else ""
+    stage_label = result["stage_label"]
     toast_msg = f"Moved to {stage_label} — now in Pipeline" if is_promoted else "Stage saved"
-    html += f"""<script>
-(function(){{
-  var sel = document.querySelector('#discovered-panel select[name="stage"]');
-  if(sel){{
-    sel.style.transition='none';
-    sel.style.borderColor='oklch(65% 0.18 145)';
-    sel.style.backgroundColor='oklch(30% 0.06 145 / 0.25)';
-    setTimeout(function(){{
-      sel.style.transition='border-color 600ms ease-out, background-color 600ms ease-out';
-      sel.style.borderColor='';
-      sel.style.backgroundColor='';
-    }}, 50);
-  }}
-  {remove_row_js}
-  if(window.showToast) window.showToast('{toast_msg}');
-}})();
-</script>"""
+    html += jinja.get_template("components/_stage_update_script.html").render(
+        is_promoted=is_promoted, job_id=job_id, toast_msg=toast_msg,
+    )
     return HTMLResponse(html)
 
 
@@ -2438,7 +2371,18 @@ async def targets_research(request: Request):
     async def _run():
         from app.services.research_service import generate_gap_hypothesis
         try:
-            generate_gap_hypothesis(co_id, force_research=True, force_metadata=force_metadata)
+            # generate_gap_hypothesis is a blocking sync call (Gemini research +
+            # fit assessment + gap hypothesis LLM call, can run 60-100+s). Calling
+            # it directly here blocks the whole event loop for that entire duration
+            # instead of running in the background — the request never actually
+            # returns until the blocking call finishes, defeating the fire-and-
+            # forget response below and timing out (408) under any real latency.
+            # asyncio.to_thread runs it off the event loop, matching the identical
+            # fire-and-forget pattern already used correctly in
+            # company_trigger_research (asyncio.create_task(asyncio.to_thread(...))).
+            await asyncio.to_thread(
+                generate_gap_hypothesis, co_id, force_research=True, force_metadata=force_metadata
+            )
         except Exception as e:
             logging.error("Gap hypothesis task failed for company %s: %s", co_id, e)
 
@@ -2540,6 +2484,12 @@ async def settings_health(request: Request):
     )
 
 
+async def settings_interviews(request: Request):
+    """Interview performance dashboard: score trends, cadence, funnel cross-ref."""
+    from app.services.interview_metrics_service import interview_dashboard_metrics
+    return render("settings_interviews.html", request=request, interviews=interview_dashboard_metrics())
+
+
 async def job_record_outcome(request: Request):
     job_id = int(request.path_params["job_id"])
     form = await request.form()
@@ -2553,6 +2503,197 @@ async def job_record_outcome(request: Request):
     tmpl = jinja.get_template("components/outcome_row.html")
     rows = "".join(tmpl.render(o=o) for o in outcomes)
     return HTMLResponse(f'<div id="outcome-list">{rows}</div>')
+
+
+# ---------------------------------------------------------------------------
+# Interview Sync API
+# ---------------------------------------------------------------------------
+
+async def api_sync_interview_session(request: Request):
+    """POST /api/sync/interview-session
+
+    Accept structured interview data and sync to SearchOps database.
+
+    JSON payload:
+    {
+      "company": "string (required)",
+      "job_id": "int or null (optional)",
+      "date": "YYYY-MM-DD (required)",
+      "mode": "prep|live|debrief (required)",
+      "questions_covered": ["question text", ...] (optional, default []),
+      "self_eval_scores": {"dimension": score, ...} (optional, default {}),
+      "notes": "string (optional)",
+      "transcript": "string (optional)"
+    }
+
+    Returns:
+    {
+      "status": "success" | "error",
+      "session_id": int (on success),
+      "message": "string (on error)"
+    }
+    """
+    try:
+        data = await request.json()
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": "Invalid JSON"}, status_code=400)
+
+    # Validate required fields
+    company = data.get("company", "").strip()
+    job_id = data.get("job_id")
+    date_str = data.get("date", "").strip()
+    mode = data.get("mode", "").strip()
+    questions_covered = data.get("questions_covered", [])
+    self_eval_scores = data.get("self_eval_scores", {})
+    notes = data.get("notes", "").strip()
+    transcript = data.get("transcript", "").strip()
+
+    # Validate required fields
+    if not company:
+        return JSONResponse({"status": "error", "message": "company is required"}, status_code=400)
+    if not date_str:
+        return JSONResponse({"status": "error", "message": "date is required"}, status_code=400)
+    if not mode:
+        return JSONResponse({"status": "error", "message": "mode is required"}, status_code=400)
+    if mode not in ("prep", "live", "debrief"):
+        return JSONResponse({"status": "error", "message": "mode must be prep, live, or debrief"}, status_code=400)
+
+    # Validate date format
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return JSONResponse({"status": "error", "message": "date must be YYYY-MM-DD format"}, status_code=400)
+
+    with get_db() as conn:
+        # Deduplicate on (company, date, mode)
+        existing = conn.execute(
+            """SELECT s.id FROM interview_sessions s
+               JOIN jobs j ON j.id = s.job_id
+               WHERE j.company = ? AND s.schedule_date = ? AND s.schedule_mode = ?""",
+            (company, date_str, mode),
+        ).fetchone()
+
+        if existing:
+            return JSONResponse({"status": "success", "session_id": existing["id"], "message": "Session already exists"})
+
+        # Resolve or validate job_id
+        resolved_job_id = None
+        if job_id is not None:
+            # If job_id provided, verify it exists and is associated with this company
+            job = conn.execute(
+                "SELECT id FROM jobs WHERE id = ? AND company = ?",
+                (job_id, company),
+            ).fetchone()
+            if job:
+                resolved_job_id = job["id"]
+            # If job_id provided but doesn't match company, still proceed with null job_id
+            # (graceful degradation per the task spec)
+        else:
+            # Try to find a job for this company
+            job = conn.execute(
+                "SELECT id FROM jobs WHERE company = ? ORDER BY final_score DESC LIMIT 1",
+                (company,),
+            ).fetchone()
+            if job:
+                resolved_job_id = job["id"]
+
+        # If no job found, we'll create the session with null job_id
+        # (But the schema requires job_id NOT NULL, so we need to handle this differently)
+        # Actually, looking at the schema, job_id is NOT NULL REFERENCES jobs(id) ON DELETE CASCADE
+        # So we cannot insert without a valid job_id. We need to handle this case.
+
+        if not resolved_job_id:
+            # Try to find or create a placeholder company entry
+            # Actually, we should create a minimal job entry so we can reference it
+            # This is getting complex. Let me reconsider.
+
+            # Per the task: "Handle the case where job_id doesn't match an existing job gracefully (store null, don't crash)."
+            # But the schema doesn't allow null job_id. This is a mismatch.
+            #
+            # Best approach: Return a validation error that job must be found or provided and valid.
+            # OR: Create a placeholder job entry if the company doesn't exist.
+            #
+            # Let me check if company exists; if it does, create a minimal job for it.
+
+            # Stub jobs get pipeline_stage='sync_stub', a stage excluded from the
+            # live /pipeline board query (build_pipeline_view_data) so backfilled
+            # or informal interviews don't clutter the Kanban view with phantom
+            # cards. discovery_source='interview-sync' also identifies them.
+            company_row = conn.execute("SELECT id FROM companies WHERE name = ?", (company,)).fetchone()
+            if company_row:
+                # Create a minimal job entry for this company
+                cursor = conn.execute(
+                    """INSERT INTO jobs
+                       (company_id, company, job_title, status, pipeline_stage, date_found, discovery_source)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (company_row["id"], company, "[Interview Sync]", "Identified", "sync_stub", date_str, "interview-sync"),
+                )
+                resolved_job_id = cursor.lastrowid
+            else:
+                # Create both company and job
+                cursor = conn.execute(
+                    "INSERT INTO companies (name, date_added) VALUES (?, ?)",
+                    (company, date_str),
+                )
+                company_id = cursor.lastrowid
+
+                cursor = conn.execute(
+                    """INSERT INTO jobs
+                       (company_id, company, job_title, status, pipeline_stage, date_found, discovery_source)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (company_id, company, "[Interview Sync]", "Identified", "sync_stub", date_str, "interview-sync"),
+                )
+                resolved_job_id = cursor.lastrowid
+
+        # Create interview session
+        # Map mode to a type_id for session seeds (default to custom if no match)
+        mode_to_type = {"prep": "recruiter", "live": "hm", "debrief": "final"}
+        type_id = mode_to_type.get(mode, "custom")
+
+        now = datetime.now(timezone.utc).isoformat()
+        cursor = conn.execute(
+            """INSERT INTO interview_sessions
+               (job_id, type_id, label, position, schedule_date, schedule_mode, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (resolved_job_id, type_id, f"Interview ({mode})", 0, date_str, mode, now, now),
+        )
+        session_id = cursor.lastrowid
+
+        # Seed template content for this session type
+        from app.pipeline.session_seeds import seed_session_content, seed_pinned_anchors
+        seed_session_content(conn, session_id, type_id)
+        seed_pinned_anchors(conn, session_id)
+
+        # Add provided questions to the "asked" list
+        if questions_covered:
+            for i, q in enumerate(questions_covered):
+                if isinstance(q, str):
+                    conn.execute(
+                        """INSERT INTO session_questions_they_ask (session_id, prompt, position)
+                           VALUES (?, ?, ?)""",
+                        (session_id, q, i),
+                    )
+
+        # Store notes and transcript if provided
+        if notes:
+            conn.execute(
+                "UPDATE interview_sessions SET scratchpad = ? WHERE id = ?",
+                (notes, session_id),
+            )
+        if transcript:
+            conn.execute(
+                "UPDATE interview_sessions SET transcript = ? WHERE id = ?",
+                (transcript, session_id),
+            )
+
+        # Store self_eval_scores in transcript_insights_json
+        if self_eval_scores:
+            conn.execute(
+                "UPDATE interview_sessions SET transcript_insights_json = ? WHERE id = ?",
+                (json.dumps({"self_eval_scores": self_eval_scores}), session_id),
+            )
+
+    return JSONResponse({"status": "success", "session_id": session_id})
 
 
 # ---------------------------------------------------------------------------
@@ -2692,11 +2833,13 @@ def create_app(batch_research_fn=None, commit_fn=None) -> Starlette:
         Route("/targets/{co_id:int}/refresh-matches", targets_refresh_matches, methods=["POST"]),
         Route("/targets/{co_id:int}/research", targets_research,     methods=["POST"]),
         Route("/api/discovery/scan",          api_discovery_scan,    methods=["POST"]),
+        Route("/api/sync/interview-session",  api_sync_interview_session, methods=["POST"]),
         Route("/api/task-status",             api_task_status,        methods=["GET"]),
         Route("/api/sync-status",             api_sync_status,        methods=["GET"]),
         Route("/settings/calibration",        settings_calibration,   methods=["GET"]),
         Route("/settings/progress",           settings_progress,      methods=["GET"]),
         Route("/settings/health",             settings_health,        methods=["GET"]),
+        Route("/settings/interviews",         settings_interviews,    methods=["GET"]),
         Route("/job/{job_id:int}/outcome",    job_record_outcome,     methods=["POST"]),
     ]
 

@@ -2565,15 +2565,68 @@ async def api_sync_interview_session(request: Request):
         return JSONResponse({"status": "error", "message": "date must be YYYY-MM-DD format"}, status_code=400)
 
     with get_db() as conn:
-        # Deduplicate on (company, date, mode)
+        # Deduplicate on (company, date, mode) — but "mode" here means two different
+        # things depending on where a session came from. Sync-created sessions store
+        # the raw prep/live/debrief string in schedule_mode (see INSERT below); UI-created
+        # sessions store a communication medium there instead (Video/Phone/Onsite) and
+        # carry the real round type in type_id. A plain schedule_mode string match only
+        # ever catches sync-vs-sync duplicates — it silently misses a sync call that
+        # duplicates a session Jeff already entered by hand (e.g. logging a Vercel round
+        # from the app's own Interview Prep UI, then later backfilling the same round
+        # from a Claude Desktop transcript). Widen the match to also treat an existing
+        # session as the same event if its type_id is one this mode would plausibly
+        # produce, while still keeping same-day prep/live/debrief sessions distinct from
+        # each other (test_different_mode_not_deduplicated depends on that).
+        mode_equivalent_types = {
+            "prep": ("recruiter", "hm_followup"),
+            "live": ("hm", "peer", "panel", "presentation"),
+            "debrief": ("final",),
+        }.get(mode, ())
+        placeholders = ",".join("?" for _ in mode_equivalent_types) or "NULL"
         existing = conn.execute(
-            """SELECT s.id FROM interview_sessions s
+            f"""SELECT s.id FROM interview_sessions s
                JOIN jobs j ON j.id = s.job_id
-               WHERE j.company = ? AND s.schedule_date = ? AND s.schedule_mode = ?""",
-            (company, date_str, mode),
+               WHERE j.company = ? AND s.schedule_date = ?
+                 AND (s.schedule_mode = ? OR s.type_id IN ({placeholders}))""",
+            (company, date_str, mode, *mode_equivalent_types),
         ).fetchone()
 
         if existing:
+            # Duplicate — but don't silently drop whatever new content this call
+            # brought (notes/transcript/questions/scores). A prior sync attempt, or a
+            # manually-created UI session, may have none of that yet.
+            updates = {}
+            if notes:
+                row = conn.execute("SELECT scratchpad FROM interview_sessions WHERE id = ?", (existing["id"],)).fetchone()
+                existing_notes = (row["scratchpad"] or "").strip()
+                updates["scratchpad"] = (existing_notes + "\n\n" + notes) if existing_notes and existing_notes != notes else notes
+            if transcript:
+                row = conn.execute("SELECT transcript FROM interview_sessions WHERE id = ?", (existing["id"],)).fetchone()
+                if not (row["transcript"] or "").strip():
+                    updates["transcript"] = transcript
+            if self_eval_scores:
+                row = conn.execute("SELECT transcript_insights_json FROM interview_sessions WHERE id = ?", (existing["id"],)).fetchone()
+                insights = json.loads(row["transcript_insights_json"]) if row["transcript_insights_json"] else {}
+                insights.setdefault("self_eval_scores", {}).update(self_eval_scores)
+                updates["transcript_insights_json"] = json.dumps(insights)
+            if updates:
+                updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+                set_clause = ", ".join(f"{k} = ?" for k in updates)
+                conn.execute(f"UPDATE interview_sessions SET {set_clause} WHERE id = ?", (*updates.values(), existing["id"]))
+            if questions_covered:
+                existing_prompts = {r["prompt"] for r in conn.execute(
+                    "SELECT prompt FROM session_questions_they_ask WHERE session_id = ?", (existing["id"],)
+                ).fetchall()}
+                max_pos = conn.execute(
+                    "SELECT COALESCE(MAX(position), -1) + 1 FROM session_questions_they_ask WHERE session_id = ?",
+                    (existing["id"],),
+                ).fetchone()[0]
+                for i, q in enumerate(questions_covered):
+                    if isinstance(q, str) and q not in existing_prompts:
+                        conn.execute(
+                            "INSERT INTO session_questions_they_ask (session_id, prompt, position) VALUES (?, ?, ?)",
+                            (existing["id"], q, max_pos + i),
+                        )
             return JSONResponse({"status": "success", "session_id": existing["id"], "message": "Session already exists"})
 
         # Resolve or validate job_id

@@ -210,6 +210,88 @@ class TestInterviewSyncEndpoint:
         # Should be different sessions
         assert session_id_prep != session_id_live
 
+    def test_dedup_matches_ui_created_session_by_type_id(self, client):
+        """A sync call must not duplicate a session already entered through the
+        Interview Prep UI. UI sessions store a communication medium in
+        schedule_mode (Video/Phone/Onsite), not the sync mode string, so the
+        match has to fall back to type_id equivalence, not just schedule_mode."""
+        with get_db() as conn:
+            co_id = _create_test_company(conn, "Vercel-Like Co")
+            job_id = _create_test_job(conn, co_id, "Vercel-Like Co")
+            now = "2026-08-10T00:00:00+00:00"
+            cursor = conn.execute(
+                """INSERT INTO interview_sessions
+                   (job_id, type_id, label, position, schedule_date, schedule_mode, created_at, updated_at)
+                   VALUES (?, 'peer', 'Peer — Someone (7/16)', 0, '2026-07-16', 'Video', ?, ?)""",
+                (job_id, now, now),
+            )
+            ui_session_id = cursor.lastrowid
+
+        payload = {
+            "company": "Vercel-Like Co",
+            "date": "2026-07-16",
+            "mode": "live",
+        }
+        resp = client.post("/api/sync/interview-session", json=payload)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["session_id"] == ui_session_id
+        assert body["message"] == "Session already exists"
+
+        # Confirm no second row was created for the same round
+        with get_db() as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM interview_sessions WHERE job_id = ?", (job_id,)
+            ).fetchone()[0]
+            assert count == 1
+
+    def test_dedup_merges_new_content_into_existing_session(self, client):
+        """A dedup hit shouldn't silently discard new notes/transcript/scores/
+        questions the sync call brought — merge them into the existing session
+        instead of dropping them on the floor."""
+        with get_db() as conn:
+            co_id = _create_test_company(conn, "Merge Co")
+            job_id = _create_test_job(conn, co_id, "Merge Co")
+            now = "2026-08-10T00:00:00+00:00"
+            cursor = conn.execute(
+                """INSERT INTO interview_sessions
+                   (job_id, type_id, label, position, schedule_date, schedule_mode, scratchpad, created_at, updated_at)
+                   VALUES (?, 'hm', 'Hiring manager', 0, '2026-08-01', 'Phone', 'Pre-existing prep note.', ?, ?)""",
+                (job_id, now, now),
+            )
+            session_id = cursor.lastrowid
+
+        payload = {
+            "company": "Merge Co",
+            "date": "2026-08-01",
+            "mode": "live",
+            "notes": "Went well, strong rapport.",
+            "transcript": "Full transcript text.",
+            "questions_covered": ["What does success look like?"],
+            "self_eval_scores": {"fit_differentiation": 4},
+        }
+        resp = client.post("/api/sync/interview-session", json=payload)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["session_id"] == session_id
+        assert body["message"] == "Session already exists"
+
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT scratchpad, transcript, transcript_insights_json FROM interview_sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            assert "Pre-existing prep note." in row["scratchpad"]
+            assert "Went well, strong rapport." in row["scratchpad"]
+            assert row["transcript"] == "Full transcript text."
+            insights = json.loads(row["transcript_insights_json"])
+            assert insights["self_eval_scores"]["fit_differentiation"] == 4
+
+            prompts = [r["prompt"] for r in conn.execute(
+                "SELECT prompt FROM session_questions_they_ask WHERE session_id = ?", (session_id,)
+            ).fetchall()]
+            assert "What does success look like?" in prompts
+
     def test_missing_company_field(self, client):
         """Reject POST with missing company."""
         payload = {

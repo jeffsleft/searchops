@@ -7,11 +7,10 @@ its sample size and confidence gate; nothing is shown without sufficient data.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from app.config import CALIBRATION_MIN_SAMPLE, BOARD_CONFIDENCE_SOLID_N
 from app.models import get_db
-from app.services.metrics_service import _metric, _confidence
+from app.services.metrics_service import _metric
 from app.pipeline.tracker import STAGES
 
 

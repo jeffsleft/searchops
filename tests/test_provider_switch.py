@@ -46,3 +46,30 @@ def test_unknown_provider_falls_back_to_gemini(_dummy_keys, monkeypatch):
     assert isinstance(p, FallbackProvider), (
         f"unknown provider should fall back to Gemini/FallbackProvider, got {type(p).__name__}"
     )
+
+
+def test_fallback_reraises_when_anthropic_key_is_placeholder(_dummy_keys, monkeypatch):
+    """A RateLimitedError must not surface as a confusing Anthropic 401 when the
+    fallback key is still the deploy-unblocking placeholder — it should re-raise
+    the original error instead of attempting the doomed Anthropic call."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "placeholder-not-yet-configured")
+    from app.providers import FallbackProvider
+    from app.providers.gemini import RateLimitedError
+
+    p = FallbackProvider()
+    p._primary = type("_P", (), {"generate": lambda self, *a, **kw: (_ for _ in ()).throw(RateLimitedError("429"))})()
+
+    with pytest.raises(RateLimitedError):
+        p.generate("prompt")
+    assert p._fallback is None, "should not have attempted to construct AnthropicProvider"
+
+
+def test_fallback_uses_anthropic_when_key_is_real(_dummy_keys, monkeypatch):
+    from app.providers import FallbackProvider
+    from app.providers.gemini import RateLimitedError
+
+    p = FallbackProvider()
+    p._primary = type("_P", (), {"generate": lambda self, *a, **kw: (_ for _ in ()).throw(RateLimitedError("429"))})()
+    p._fallback = type("_F", (), {"generate": lambda self, *a, **kw: "claude-response"})()
+
+    assert p.generate("prompt") == "claude-response"

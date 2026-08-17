@@ -12,7 +12,7 @@ and full accomplishments corpus. It runs in **four layers, in order**, with a
 **single clamp at the end**.
 
 ```
-final = clamp_0_10( base (5.0) + Layer 4 + Layer 2 + Layer 3 )
+final = clamp_0_10( base (3.5) + Layer 4 + Layer 2 + Layer 3 )
 ```
 
 If Layer 1 (Auto-Reject) triggers, the rest of the pipeline is skipped and
@@ -21,8 +21,8 @@ If Layer 1 (Auto-Reject) triggers, the rest of the pipeline is skipped and
 | # | Layer | Type | Range | Code |
 |---|---|---|---|---|
 | 1 | Auto-Reject | Deterministic | → 0.0 | `app/scoring/engine.py::check_auto_reject` |
-| 2 | Match to Candidate | LLM + corpus | −3.0 to +3.0 | `app/scoring/match.py::score_match` |
-| 3 | LLM Qualitative | LLM | −1.0 to +1.0 | `app/scoring/research.py::score_job` + `SCORING_PROMPT` |
+| 2 | Match to Candidate | LLM + corpus | −4.0 to +4.0 | `app/scoring/match.py::score_match` |
+| 3 | LLM Qualitative | LLM | −1.5 to +1.5 | `app/scoring/research.py::score_job` + `SCORING_PROMPT` |
 | 4 | Adjustment Weights | Deterministic substrings | additive | `app/scoring/engine.py::calculate_adjustment_weights` |
 
 Orchestrator: `app/scoring/research.py::score_job()`.
@@ -69,7 +69,7 @@ Any hit → `final = 0.0`, layers 2-4 are skipped.
 
 ## 3. Layer 2 — Match to Candidate (highest weight)
 
-**Range**: −3.0 to +3.0
+**Range**: −4.0 to +4.0
 **Cost**: one Gemini call per scored job
 **Prompt**: `app/scoring/prompts.py::MATCH_PROMPT`
 **Inputs**:
@@ -94,7 +94,7 @@ high-severity mismatch entry.
 
 ```json
 {
-  "match_score": <float in [-3.0, +3.0]>,
+  "match_score": <float in [-4.0, +4.0]>,
   "match_summary": "<2-3 sentences>",
   "evidence": [
     {"jd_requirement": "...", "matched_accomplishment": "...", "strength": "Strong|Moderate|Weak"}
@@ -112,19 +112,20 @@ high-severity mismatch entry.
 
 | match_score | Meaning |
 |---|---|
-| +2.5 to +3.0 | Direct, recent, scaled evidence. Multiple Strong matches, no High-severity gaps. |
-| +1.0 to +2.4 | Solid partial match. Key responsibilities have evidence at smaller scale or adjacent domain. |
-| −0.9 to +0.9 | Mixed. Some evidence, meaningful gaps. |
-| −2.4 to −1.0 | Mostly mismatch. Core requirements lack corpus support. |
-| −3.0 to −2.5 | Fundamental mismatch — never done at any scale in any related domain. |
+| +3.0 to +4.0 | Direct, recent, scaled evidence for the JD's core asks. Multiple Strong matches, no High-severity gaps. |
+| +1.5 to +2.9 | Solid partial match. Key responsibilities have evidence, but at smaller scale, in adjacent domain, or with 1-2 medium gaps. |
+| −1.0 to +1.4 | Mixed. Some evidence, but meaningful gaps on what the JD emphasizes most. |
+| −2.0 to −0.9 | Mostly mismatch. The JD's core requirements lack corpus support, even if the candidate could "stretch" into the role. |
+| −3.0 to −2.1 | Fundamental mismatch — the role asks for things the candidate has never done, at any scale, in any related domain. |
+| −4.0 to −3.1 | Anti-match: role directly conflicts with candidate's stated preferences or requires skills explicitly excluded from the profile. |
 
-Score is `_clamp(score, -3.0, 3.0)` in `match.py` before being returned.
+Score is `_clamp(score, -4.0, 4.0)` in `match.py` before being returned.
 
 ---
 
 ## 4. Layer 3 — LLM Qualitative Adjustment
 
-**Range**: −1.0 to +1.0
+**Range**: −1.5 to +1.5
 **Cost**: one Gemini call per scored job
 **Prompt**: `app/scoring/prompts.py::SCORING_PROMPT`
 **Job**: role-shape vibe check — IC vs leadership balance, authority, reporting
@@ -164,7 +165,7 @@ function — additive contribution to `compute_final_score()`.
 ## 6. Final composition
 
 ```python
-raw = base (profile["scoring"]["base_score"], default 5.0)
+raw = base (profile["scoring"]["base_score"], default 3.5)
     + adjustment_weights_score   # Layer 4 (can be negative)
     + match_score                # Layer 2
     + llm_adjustment             # Layer 3

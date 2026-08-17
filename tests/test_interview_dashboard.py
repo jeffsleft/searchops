@@ -11,7 +11,6 @@ Covers:
 import os
 import tempfile
 import json
-from datetime import datetime, timedelta
 
 os.environ.setdefault("SESSION_SECRET", "0" * 64)
 os.environ.setdefault("APP_PASSWORD", "test-password")
@@ -336,7 +335,7 @@ class TestInterviewDashboardView:
     def test_empty_metrics_returns_empty_flag(self, client):
         """Metrics include empty=True when no sessions exist."""
         metrics = interview_dashboard_metrics()
-        assert metrics["empty"] == True
+        assert metrics["empty"]
 
     def test_score_trend_timeline_points(self, client):
         """Each dimension's trend includes timeline point for each session."""
@@ -403,7 +402,7 @@ class TestInterviewDashboardView:
             # Create session with malformed JSON
             from datetime import datetime as dt, timezone
             now = dt.now(timezone.utc).isoformat()
-            cursor = conn.execute(
+            conn.execute(
                 """INSERT INTO interview_sessions
                    (job_id, type_id, label, position, schedule_date, schedule_mode,
                     transcript_insights_json, created_at, updated_at)
@@ -450,7 +449,7 @@ class TestInterviewMetricsService:
 
         metrics = interview_dashboard_metrics()
 
-        assert metrics["empty"] == True
+        assert metrics["empty"]
         assert metrics["total_sessions"] == 0
         assert len(metrics["score_trends"]) == 6
         assert metrics["session_cadence"] == []

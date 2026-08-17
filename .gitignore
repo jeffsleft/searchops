@@ -66,3 +66,10 @@ implementation_plan.md
 
 # Dated audit/report exports at repo root (internal artifacts, not source)
 /*-audit-report.docx
+sessions.json
+
+# Design assets (screenshots, gifs, source files) — not source, not for repo
+/design-files/
+
+# Editor/OS lock artifacts
+.fuse_hidden*

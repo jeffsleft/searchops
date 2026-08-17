@@ -83,6 +83,13 @@ def get_provider() -> "LLMProvider":
     return FallbackProvider()
 
 
+def _anthropic_key_usable() -> bool:
+    """False if ANTHROPIC_API_KEY is unset or still the deploy-unblocking placeholder."""
+    import os
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    return bool(key) and not key.startswith("placeholder")
+
+
 class FallbackProvider(LLMProvider):
     """Wraps GeminiProvider (primary) with automatic Anthropic fallback on RateLimitedError."""
 
@@ -123,6 +130,9 @@ class FallbackProvider(LLMProvider):
                 model_override=model_override,
             )
         except RateLimitedError as e:
+            if not _anthropic_key_usable():
+                print(f"[fallback] Gemini rate-limited: {e}. Anthropic key not configured — re-raising.")
+                raise
             print(f"[fallback] Gemini rate-limited: {e}. Retrying with Anthropic.")
             fallback = self._get_fallback()
             return fallback.generate(
@@ -151,6 +161,9 @@ class FallbackProvider(LLMProvider):
                 model_override=model_override,
             )
         except RateLimitedError as e:
+            if not _anthropic_key_usable():
+                print(f"[fallback] Gemini rate-limited: {e}. Anthropic key not configured — re-raising.")
+                raise
             print(f"[fallback] Gemini rate-limited: {e}. Retrying with Anthropic.")
             fallback = self._get_fallback()
             return fallback.generate_json(

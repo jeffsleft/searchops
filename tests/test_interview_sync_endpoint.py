@@ -210,11 +210,12 @@ class TestInterviewSyncEndpoint:
         # Should be different sessions
         assert session_id_prep != session_id_live
 
-    def test_dedup_matches_ui_created_session_by_type_id(self, client):
+    def test_dedup_matches_ui_created_session_regardless_of_type(self, client):
         """A sync call must not duplicate a session already entered through the
-        Interview Prep UI. UI sessions store a communication medium in
-        schedule_mode (Video/Phone/Onsite), not the sync mode string, so the
-        match has to fall back to type_id equivalence, not just schedule_mode."""
+        Interview Prep UI, no matter what round type it is. UI sessions store a
+        communication medium in schedule_mode (Video/Phone/Onsite) or leave it
+        unset — never a sync-mode string — which is what the match relies on,
+        not any guess about which type_id a given mode 'should' produce."""
         with get_db() as conn:
             co_id = _create_test_company(conn, "Vercel-Like Co")
             job_id = _create_test_job(conn, co_id, "Vercel-Like Co")
@@ -244,6 +245,34 @@ class TestInterviewSyncEndpoint:
                 "SELECT COUNT(*) FROM interview_sessions WHERE job_id = ?", (job_id,)
             ).fetchone()[0]
             assert count == 1
+
+    def test_dedup_matches_ui_session_with_recruiter_type_and_no_schedule_mode(self, client):
+        """Regression case found against real production data: a recruiter-screen
+        round entered via the UI has type_id='recruiter' and often no schedule_mode
+        set at all (Jeff didn't pick a communication medium). An earlier version of
+        this fix guessed which type_ids each mode implies (prep~recruiter,
+        live~hm/peer/panel...) — that guess put 'recruiter' only under 'prep', so a
+        real backfill reporting this same round as mode='live' (it's the live call,
+        not a prep conversation) would have duplicated it. The fix must not depend
+        on type_id at all — only on schedule_mode not being a sync-mode string."""
+        with get_db() as conn:
+            co_id = _create_test_company(conn, "Recruiter-Type Co")
+            job_id = _create_test_job(conn, co_id, "Recruiter-Type Co")
+            now = "2026-08-10T00:00:00+00:00"
+            cursor = conn.execute(
+                """INSERT INTO interview_sessions
+                   (job_id, type_id, label, position, schedule_date, schedule_mode, created_at, updated_at)
+                   VALUES (?, 'recruiter', 'Recruiter screen', 0, '2026-06-23', NULL, ?, ?)""",
+                (job_id, now, now),
+            )
+            ui_session_id = cursor.lastrowid
+
+        payload = {"company": "Recruiter-Type Co", "date": "2026-06-23", "mode": "live"}
+        resp = client.post("/api/sync/interview-session", json=payload)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["session_id"] == ui_session_id
+        assert body["message"] == "Session already exists"
 
     def test_dedup_merges_new_content_into_existing_session(self, client):
         """A dedup hit shouldn't silently discard new notes/transcript/scores/
@@ -291,6 +320,68 @@ class TestInterviewSyncEndpoint:
                 "SELECT prompt FROM session_questions_they_ask WHERE session_id = ?", (session_id,)
             ).fetchall()]
             assert "What does success look like?" in prompts
+
+    def test_same_day_same_mode_without_label_still_deduplicates(self, client):
+        """Baseline: two same-company/date/mode POSTs with no session_label
+        keep colliding exactly as before (backward compatible default)."""
+        payload = {"company": "NoLabel Corp", "date": "2026-08-05", "mode": "live"}
+        resp1 = client.post("/api/sync/interview-session", json=payload)
+        resp2 = client.post("/api/sync/interview-session", json=payload)
+        assert resp1.json()["session_id"] == resp2.json()["session_id"]
+
+    def test_same_day_same_mode_different_label_creates_separate_sessions(self, client):
+        """Regression: a discovery panel and a same-day comp call for the same
+        company, both mode='live', must land as two distinct rows when each
+        carries its own session_label — otherwise the second POST reads as a
+        dedup hit on the first and overwrites its self_eval_scores via the
+        dict.update() merge path instead of creating its own session."""
+        company = "DoubleHeader Corp"
+        date = "2026-08-05"
+
+        payload_panel = {
+            "company": company, "date": date, "mode": "live",
+            "session_label": "Panel", "self_eval_scores": {"curiosity_questions": 5},
+        }
+        resp_panel = client.post("/api/sync/interview-session", json=payload_panel)
+        session_id_panel = resp_panel.json()["session_id"]
+
+        payload_comp = {
+            "company": company, "date": date, "mode": "live",
+            "session_label": "Comp call", "self_eval_scores": {"curiosity_questions": 3},
+        }
+        resp_comp = client.post("/api/sync/interview-session", json=payload_comp)
+        session_id_comp = resp_comp.json()["session_id"]
+
+        assert session_id_panel != session_id_comp
+
+        with get_db() as conn:
+            panel_row = conn.execute(
+                "SELECT label, transcript_insights_json FROM interview_sessions WHERE id = ?",
+                (session_id_panel,),
+            ).fetchone()
+            comp_row = conn.execute(
+                "SELECT label, transcript_insights_json FROM interview_sessions WHERE id = ?",
+                (session_id_comp,),
+            ).fetchone()
+            assert panel_row["label"] == "Panel"
+            assert comp_row["label"] == "Comp call"
+            panel_scores = json.loads(panel_row["transcript_insights_json"])["self_eval_scores"]
+            comp_scores = json.loads(comp_row["transcript_insights_json"])["self_eval_scores"]
+            assert panel_scores["curiosity_questions"] == 5
+            assert comp_scores["curiosity_questions"] == 3
+
+    def test_same_day_same_mode_same_label_still_deduplicates(self, client):
+        """Re-POSTing the same labeled session (idempotent re-run of a backfill
+        file) must still merge into the existing row, not create a new one."""
+        company = "RelabelRerun Corp"
+        date = "2026-08-05"
+        payload = {
+            "company": company, "date": date, "mode": "live",
+            "session_label": "Panel", "self_eval_scores": {"curiosity_questions": 5},
+        }
+        resp1 = client.post("/api/sync/interview-session", json=payload)
+        resp2 = client.post("/api/sync/interview-session", json=payload)
+        assert resp1.json()["session_id"] == resp2.json()["session_id"]
 
     def test_missing_company_field(self, client):
         """Reject POST with missing company."""
@@ -416,7 +507,7 @@ class TestInterviewSyncEndpoint:
             assert q_to_ask["cnt"] > 0
 
             # Should have seeded "questions_they_ask"
-            q_they_ask = conn.execute(
+            conn.execute(
                 "SELECT COUNT(*) as cnt FROM session_questions_they_ask WHERE session_id = ?",
                 (session_id,),
             ).fetchone()
@@ -443,7 +534,7 @@ class TestInterviewSyncEndpoint:
 
         # Verify pinned anchors
         with get_db() as conn:
-            pinned = conn.execute(
+            conn.execute(
                 "SELECT COUNT(*) as cnt FROM session_pinned_anchors WHERE session_id = ?",
                 (session_id,),
             ).fetchone()

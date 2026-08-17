@@ -1,7 +1,9 @@
 """ATS API clients for automated job discovery."""
 import re
+import time
 import logging
 import httpx
+from urllib.parse import quote, unquote
 from app.security.url_guard import validate_url
 
 logger = logging.getLogger(__name__)
@@ -20,10 +22,13 @@ def detect_ats(careers_url: str) -> tuple[str, str]:
     if lv_match:
         return 'lever', lv_match.group(1)
 
-    # Ashby: jobs.ashbyhq.com/company
-    ash_match = re.search(r'ashbyhq\.com/([a-z0-9_-]+)', url)
+    # Ashby: jobs.ashbyhq.com/company — the org's "hosted jobs page name" can
+    # contain spaces (e.g. "Trunk Tools"), URL-encoded as %20 in the stored
+    # careers_url, so capture the whole path segment and decode it rather
+    # than stopping at the first non-slug character.
+    ash_match = re.search(r'ashbyhq\.com/([^/?#]+)', url)
     if ash_match:
-        return 'ashby', ash_match.group(1)
+        return 'ashby', unquote(ash_match.group(1))
 
     return 'generic', ''
 
@@ -80,18 +85,35 @@ def fetch_lever_jobs(handle: str) -> list[dict]:
 
 
 def fetch_ashby_jobs(handle: str) -> list[dict]:
-    """Fetch jobs from Ashby GraphQL API."""
+    """Fetch jobs from Ashby GraphQL API.
+
+    As of 8/2026, jobBoardWithTeams.jobPostings only returns lightweight
+    briefs (id/title/employmentType/locationName) — Ashby dropped isListed
+    and jobRequisition.description from that type, which silently zeroed
+    out every Ashby company's discovery yield (query errored, caught, and
+    swallowed by the except below). Full JD text now requires a second
+    per-posting `jobPosting` query.
+    """
     url = "https://jobs.ashbyhq.com/api/non-user-graphql"
-    query = """
+    list_query = """
     query ApiJobBoardWithTeams($organizationHostedJobsPageName: String!) {
       jobBoard: jobBoardWithTeams(
         organizationHostedJobsPageName: $organizationHostedJobsPageName
       ) {
         jobPostings {
-          id title isListed employmentType
+          id title employmentType
           locationName
-          jobRequisition { description }
         }
+      }
+    }
+    """
+    detail_query = """
+    query ApiJobPosting($organizationHostedJobsPageName: String!, $jobPostingId: String!) {
+      jobPosting(
+        organizationHostedJobsPageName: $organizationHostedJobsPageName
+        jobPostingId: $jobPostingId
+      ) {
+        descriptionHtml
       }
     }
     """
@@ -99,7 +121,7 @@ def fetch_ashby_jobs(handle: str) -> list[dict]:
         validate_url(url)
         resp = httpx.post(url, json={
             'operationName': 'ApiJobBoardWithTeams',
-            'query': query,
+            'query': list_query,
             'variables': {'organizationHostedJobsPageName': handle}
         }, timeout=15)
         resp.raise_for_status()
@@ -107,15 +129,30 @@ def fetch_ashby_jobs(handle: str) -> list[dict]:
         postings = data.get('data', {}).get('jobBoard', {}).get('jobPostings', []) or []
         jobs = []
         for j in postings:
-            if not j.get('isListed', True):
-                continue
+            posting_id = j.get('id', '')
             desc = ''
-            req = j.get('jobRequisition')
-            if req and isinstance(req, dict):
-                desc = req.get('description', '')
+            try:
+                # Ashby's public endpoint rate-limits (429) under rapid
+                # sequential N+1 detail requests — boards with 100+ postings
+                # (e.g. EliseAI) hit it within a couple dozen calls otherwise.
+                time.sleep(0.3)
+                d_resp = httpx.post(url, json={
+                    'operationName': 'ApiJobPosting',
+                    'query': detail_query,
+                    'variables': {
+                        'organizationHostedJobsPageName': handle,
+                        'jobPostingId': posting_id,
+                    }
+                }, timeout=15)
+                d_resp.raise_for_status()
+                d_data = d_resp.json()
+                posting = d_data.get('data', {}).get('jobPosting') or {}
+                desc = posting.get('descriptionHtml', '') or ''
+            except Exception as e:
+                logger.warning(f"Ashby description fetch failed for {handle}/{posting_id}: {e}")
             jobs.append({
                 'title': j.get('title', ''),
-                'url': f"https://jobs.ashbyhq.com/{handle}/{j.get('id', '')}",
+                'url': f"https://jobs.ashbyhq.com/{quote(handle)}/{posting_id}",
                 'description': desc,
                 'posted_at': '',
                 'location': j.get('locationName', ''),

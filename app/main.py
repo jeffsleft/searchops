@@ -689,7 +689,11 @@ def backfill_legacy_research(only_name: str | None = None):
     image=image,
     secrets=[recruiting_secrets, anthropic_secret],
     volumes={"/data": volume},
-    timeout=900,
+    # 900s was silently truncating the queue: the 08-14 06:00 UTC run got through
+    # only ~26-30 of 64 hunt-enabled companies (~31s/company observed) before the
+    # container was killed mid-write, never reaching several never-scanned/stale
+    # targets. 2700s gives ~40% margin over the ~2000s a full 64-company run needs.
+    timeout=2700,
 )
 def run_discovery_scan_remote():
     """Manually trigger run_discovery_scan against the Volume-backed DB.

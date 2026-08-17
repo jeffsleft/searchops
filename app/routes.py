@@ -2523,7 +2523,12 @@ async def api_sync_interview_session(request: Request):
       "questions_covered": ["question text", ...] (optional, default []),
       "self_eval_scores": {"dimension": score, ...} (optional, default {}),
       "notes": "string (optional)",
-      "transcript": "string (optional)"
+      "transcript": "string (optional)",
+      "session_label": "string (optional) - disambiguates multiple same-day,
+          same-mode sessions for one company (e.g. a discovery panel and a
+          same-day comp call). Without it, a second same-day/same-mode POST
+          is treated as a dedup hit against the first and its scores get
+          overwritten, not merged."
     }
 
     Returns:
@@ -2535,7 +2540,7 @@ async def api_sync_interview_session(request: Request):
     """
     try:
         data = await request.json()
-    except Exception as e:
+    except Exception:
         return JSONResponse({"status": "error", "message": "Invalid JSON"}, status_code=400)
 
     # Validate required fields
@@ -2547,6 +2552,7 @@ async def api_sync_interview_session(request: Request):
     self_eval_scores = data.get("self_eval_scores", {})
     notes = data.get("notes", "").strip()
     transcript = data.get("transcript", "").strip()
+    session_label = (data.get("session_label") or "").strip()
 
     # Validate required fields
     if not company:
@@ -2568,27 +2574,34 @@ async def api_sync_interview_session(request: Request):
         # Deduplicate on (company, date, mode) — but "mode" here means two different
         # things depending on where a session came from. Sync-created sessions store
         # the raw prep/live/debrief string in schedule_mode (see INSERT below); UI-created
-        # sessions store a communication medium there instead (Video/Phone/Onsite) and
-        # carry the real round type in type_id. A plain schedule_mode string match only
-        # ever catches sync-vs-sync duplicates — it silently misses a sync call that
-        # duplicates a session Jeff already entered by hand (e.g. logging a Vercel round
-        # from the app's own Interview Prep UI, then later backfilling the same round
-        # from a Claude Desktop transcript). Widen the match to also treat an existing
-        # session as the same event if its type_id is one this mode would plausibly
-        # produce, while still keeping same-day prep/live/debrief sessions distinct from
-        # each other (test_different_mode_not_deduplicated depends on that).
-        mode_equivalent_types = {
-            "prep": ("recruiter", "hm_followup"),
-            "live": ("hm", "peer", "panel", "presentation"),
-            "debrief": ("final",),
-        }.get(mode, ())
-        placeholders = ",".join("?" for _ in mode_equivalent_types) or "NULL"
+        # sessions store a communication medium there instead (Video/Phone/Onsite, or
+        # nothing) and never contain 'prep'/'live'/'debrief'. That's a reliable tell,
+        # simpler and more accurate than guessing a round's type_id from its mode (tried
+        # that first — it's wrong in practice: a recruiter screen's *type_id* is
+        # 'recruiter' regardless of whether the sync call reporting it says mode='live',
+        # so a type-based guess list misses real UI-entered rounds it should have
+        # matched). Any existing session whose schedule_mode isn't itself a sync-mode
+        # string is necessarily UI-entered (or otherwise not from this endpoint) and
+        # represents a real scheduled/held round — match it regardless of type_id. Two
+        # sync-created sessions still only collide when their modes are identical
+        # (test_different_mode_not_deduplicated depends on prep vs. live staying apart).
+        #
+        # That's not enough for two *real, separate* same-mode calls on one day
+        # (e.g. a discovery panel and a same-day comp call) — without a tiebreaker
+        # the second POST reads as a duplicate of the first and its self_eval_scores
+        # silently overwrite the first's via the dict.update() below. When the
+        # caller supplies session_label, require it to also match before treating
+        # a same-mode row as the same session; callers that omit it (the common
+        # case — most rounds are the only one that day) get the original behavior
+        # unchanged.
         existing = conn.execute(
-            f"""SELECT s.id FROM interview_sessions s
+            """SELECT s.id FROM interview_sessions s
                JOIN jobs j ON j.id = s.job_id
                WHERE j.company = ? AND s.schedule_date = ?
-                 AND (s.schedule_mode = ? OR s.type_id IN ({placeholders}))""",
-            (company, date_str, mode, *mode_equivalent_types),
+                 AND (s.schedule_mode = ? OR s.schedule_mode IS NULL
+                      OR s.schedule_mode NOT IN ('prep', 'live', 'debrief'))
+                 AND (? = '' OR s.label = ?)""",
+            (company, date_str, mode, session_label, session_label),
         ).fetchone()
 
         if existing:
@@ -2704,11 +2717,12 @@ async def api_sync_interview_session(request: Request):
         type_id = mode_to_type.get(mode, "custom")
 
         now = datetime.now(timezone.utc).isoformat()
+        label = session_label or f"Interview ({mode})"
         cursor = conn.execute(
             """INSERT INTO interview_sessions
                (job_id, type_id, label, position, schedule_date, schedule_mode, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (resolved_job_id, type_id, f"Interview ({mode})", 0, date_str, mode, now, now),
+            (resolved_job_id, type_id, label, 0, date_str, mode, now, now),
         )
         session_id = cursor.lastrowid
 

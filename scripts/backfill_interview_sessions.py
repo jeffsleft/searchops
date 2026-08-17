@@ -17,14 +17,20 @@ Input file: a JSON list of session objects, e.g.:
                           "question_handling": 3, "executive_presence": 3,
                           "fit_differentiation": 4, "curiosity_questions": 4},
     "notes": "Weighted read + two things to sharpen, combined.",
-    "transcript": "optional full transcript text"
+    "transcript": "optional full transcript text",
+    "session_label": "optional, e.g. 'Panel' or 'Comp call' - required to
+                       distinguish two real sessions for the same company on
+                       the same day and mode (otherwise the second POST reads
+                       as a duplicate of the first and overwrites its scores)"
   },
   ...
 ]
 
 Without --live, does a dry run: validates the file and prints what would be
 sent, without POSTing anything. The endpoint dedupes server-side on
-(company, date, mode), so re-running against the same file is safe.
+(company, date, mode, session_label), so re-running against the same file is
+safe. Two records sharing company/date/mode MUST carry distinct session_label
+values or the second will silently overwrite the first's self_eval_scores.
 """
 import json
 import os
@@ -89,6 +95,28 @@ def main():
     if all_errors:
         print(f"Validation failed ({len(all_errors)} error(s)):")
         for e in all_errors:
+            print(f"  - {e}")
+        sys.exit(1)
+
+    # Two records sharing (company, date, mode) with no session_label to tell
+    # them apart will collide server-side — the second overwrites the first's
+    # self_eval_scores instead of creating its own session. Catch it here
+    # rather than discovering it after a --live run.
+    seen = {}
+    collision_errors = []
+    for i, record in enumerate(records):
+        key = (record["company"], record["date"], record["mode"])
+        label = (record.get("session_label") or "").strip()
+        if key in seen and not label:
+            collision_errors.append(
+                f"record {i}: same (company, date, mode) as record {seen[key]} "
+                f"({key}) with no session_label — the second POST will overwrite "
+                f"the first's self_eval_scores. Add a distinct session_label to both."
+            )
+        seen[key] = i
+    if collision_errors:
+        print(f"Collision check failed ({len(collision_errors)} error(s)):")
+        for e in collision_errors:
             print(f"  - {e}")
         sys.exit(1)
 

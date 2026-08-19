@@ -13,6 +13,40 @@ from app.jobs.fetch import _fetch_jd_text, is_linkedin_job_url
 from app.jobs.persist import save_job_to_db, _cap_json
 
 
+def _append_score_history(conn, job_id: int, score_record: dict) -> None:
+    """Record one row per scoring event, on the caller's connection.
+
+    Must reuse `conn`. SQLite is single-writer, so opening a second connection
+    from inside an open transaction deadlocks — that is the Session 46 bug, and
+    it failed silently under a bare except.
+
+    There are two score-persistence paths, and until 2026-08-17 only one of them
+    recorded history: `save_job_to_db()` (URL-keyed, app/jobs/persist.py) always
+    appended, while this job_id-keyed path overwrote `jobs.final_score` in place
+    with no record of what produced it. Anything scored through here — rescore,
+    promote-from-discovery, discovery auto-score — silently lost its history.
+    In production that left 26 of 117 scored jobs with no history row, and one
+    job whose live score disagreed with its own newest history entry.
+
+    Keep the two writers in step. `tests/test_score_history.py` asserts they
+    record the same columns.
+    """
+    conn.execute(
+        """INSERT INTO score_history
+           (job_id, final_score, deterministic_score, llm_adjustment,
+            match_score, adjustment_weights_score)
+           VALUES (?,?,?,?,?,?)""",
+        (
+            job_id,
+            score_record.get("final_score"),
+            score_record.get("deterministic_score"),
+            score_record.get("llm_adjustment"),
+            score_record.get("match_score"),
+            score_record.get("adjustment_weights_score"),
+        ),
+    )
+
+
 def persist_score_record_to_job(job_id: int, score_record: dict, jd_text: str = "", transition_stage: bool = False) -> None:
     """Write a score_record dict to a job row in the database.
 
@@ -78,6 +112,8 @@ def persist_score_record_to_job(job_id: int, score_record: dict, jd_text: str = 
                     job_id,
                 ),
             )
+
+            _append_score_history(conn, job_id, score_record)
 
             # If transition_stage is True, transition identified jobs to discovered
             if transition_stage:

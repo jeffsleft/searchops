@@ -2514,6 +2514,13 @@ async def api_sync_interview_session(request: Request):
 
     Accept structured interview data and sync to SearchOps database.
 
+    Required headers (both, or the request is rejected before reaching here):
+      Authorization: Bearer <APP_PASSWORD>   -- AuthMiddleware, BEARER_AUTH_PREFIXES
+      X-Requested-With: XMLHttpRequest       -- CSRFValidationMiddleware; the
+          /api/sync/ prefix is NOT exempt from it, so a non-browser client that
+          sends only the bearer token gets a 403 {"error": "CSRF validation
+          failed"} and never reaches this handler.
+
     JSON payload:
     {
       "company": "string (required)",

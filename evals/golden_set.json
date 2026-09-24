@@ -1,0 +1,53 @@
+[
+  {
+    "id": "forgeline_vp_gtm_ops",
+    "seed_id": "seed_001",
+    "expect_auto_reject": false,
+    "llm": true,
+    "match_score_range": [
+      1.0,
+      4.0
+    ],
+    "rubric": "A strong-fit GTM Ops leadership role for this candidate. The match_score should be clearly positive. Every evidence row must quote or closely paraphrase a real accomplishment from the corpus; tailored bullets and cover-letter hooks must use only metrics present in the corpus or JD. Any invented metric, employer, or accomplishment is a failure."
+  },
+  {
+    "id": "acme_healthtech_allowed_weak_fit",
+    "seed_id": "seed_002",
+    "expect_auto_reject": false,
+    "llm": true,
+    "match_score_range": [
+      -4.0,
+      2.0
+    ],
+    "rubric": "HealthTech SaaS is allowed (only Traditional Healthcare is blocked), so this must be scored, not rejected. It is a weak fit: a cleanup mandate reporting to the CFO, hybrid 3 days, small team. The output should name those gaps and must not inflate thin evidence into Strong matches. No invented metrics or accomplishments.",
+    "note": "Not a reject case: see docs/lessons_learned.md, HealthTech SaaS is allowed."
+  },
+  {
+    "id": "sentora_head_gtm",
+    "seed_id": "seed_003",
+    "expect_auto_reject": false,
+    "llm": true,
+    "match_score_range": [
+      1.0,
+      4.0
+    ],
+    "rubric": "A strong-fit GTM strategy and operations role. Positive match_score. Evidence rows cite real corpus accomplishments; no invented metrics, employers, or tools the corpus doesn't mention."
+  },
+  {
+    "id": "midco_bizops_mid_fit",
+    "seed_id": "seed_004",
+    "expect_auto_reject": false,
+    "llm": true,
+    "match_score_range": [
+      -2.0,
+      3.0
+    ],
+    "rubric": "A partial-fit business operations role. The output should name real gaps honestly in mismatches, not stretch weak evidence into Strong matches. No invented metrics or accomplishments."
+  },
+  {
+    "id": "pokerstars_gambling_reject",
+    "seed_id": "seed_005",
+    "expect_auto_reject": true,
+    "llm": false
+  }
+]

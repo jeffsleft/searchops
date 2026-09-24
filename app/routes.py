@@ -15,6 +15,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 
 from app.background import BackgroundRunner, offload
+from app.security.rate_limit import AIRateLimitMiddleware
+from app.auth import MAX_AGE as SESSION_MAX_AGE
 from app.auth import AuthMiddleware, SESSION_COOKIE, create_session_token, login_page, verify_session_token
 from app.config import load_profile, HIGH_SCORE_THRESHOLD, APP_PASSWORD, USAGE_TRACKING_ENABLED
 from app.models import get_db, log_usage_event, log_error_event
@@ -294,11 +296,17 @@ def _enrich_job(row: dict) -> dict:
 # comparability — do not use time.monotonic() here.
 _LOGIN_MAX_FAILS = 5
 _LOGIN_WINDOW_S = 900  # 15-minute rolling window (also the effective lockout)
+# Cap across ALL addresses. A caller can put anything in X-Forwarded-For, so a
+# per-IP count alone lets a guesser rotate fake addresses forever. For a
+# one-user app, briefly locking everyone out beats unlimited guesses.
+_LOGIN_GLOBAL_MAX_FAILS = 25
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    return fwd or (request.client.host if request.client else "unknown")
+    # The rightmost X-Forwarded-For entry is the one our proxy appended; the
+    # leftmost is whatever the caller claimed.
+    hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
+    return hops[-1] if hops else (request.client.host if request.client else "unknown")
 
 
 def _login_locked(ip: str) -> bool:
@@ -311,7 +319,10 @@ def _login_locked(ip: str) -> bool:
             "SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND attempted_at >= ?",
             (ip, cutoff),
         ).fetchone()[0]
-    return n >= _LOGIN_MAX_FAILS
+        total = conn.execute(
+            "SELECT COUNT(*) FROM login_attempts WHERE attempted_at >= ?", (cutoff,)
+        ).fetchone()[0]
+    return n >= _LOGIN_MAX_FAILS or total >= _LOGIN_GLOBAL_MAX_FAILS
 
 
 def _record_login_failure(ip: str) -> None:
@@ -341,7 +352,7 @@ async def login_post(request: Request):
         _clear_login_failures(ip)
         token = create_session_token()
         response = RedirectResponse(url="/", status_code=302)
-        response.set_cookie(SESSION_COOKIE, token, max_age=60 * 60 * 24 * 30,
+        response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_MAX_AGE,
                             httponly=True, samesite="strict", secure=True)
         return response
     _record_login_failure(ip)
@@ -3053,6 +3064,7 @@ def create_app(commit_fn=None, background=None) -> Starlette:
             Middleware(SecurityHeadersMiddleware),
             Middleware(CSRFValidationMiddleware),
             Middleware(AuthMiddleware),
+            Middleware(AIRateLimitMiddleware),
             # Innermost: wraps the route handler directly so it sees the real
             # response status before any outer middleware touches it.
             Middleware(VolumeCommitMiddleware, commit_fn=commit_fn),

@@ -24,7 +24,7 @@ if len(SESSION_SECRET) < 32:
 
 SECRET_KEY = SESSION_SECRET
 SESSION_COOKIE = "re_session"
-MAX_AGE = 60 * 60 * 24 * 30  # 30 days
+MAX_AGE = 60 * 60 * 24 * 7  # 7 days: a stolen laptop or cookie stops working within a week
 
 _serializer = URLSafeTimedSerializer(SECRET_KEY)
 

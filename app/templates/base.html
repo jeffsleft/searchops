@@ -195,12 +195,12 @@
       if (url.indexOf('/login') !== -1 && location.pathname.indexOf('/login') === -1) {
         return { ok: false, why: 'Your session expired. Reload the page and sign in.' };
       }
-      if (!evt.detail.successful) return { ok: false, why: 'Server error ' + xhr.status + '.' };
-      // Routes that fail with 200 (so the inline error still swaps in) say so
-      // here, with the reason when the page won't show the body.
       var status = xhr.getResponseHeader('X-Save-Status');
       var reason = xhr.getResponseHeader('X-Save-Message');
       reason = reason ? decodeURIComponent(reason) : '';
+      if (!evt.detail.successful) return { ok: false, why: reason || ('Server error ' + xhr.status + '.') };
+      // Routes that fail with 200 (so the inline error still swaps in) say so
+      // here, with the reason when the page won't show the body.
       if (status === 'failed') return { ok: false, why: reason || 'See the message on the page.' };
       if (status === 'noop') return { ok: true, msg: reason || 'Nothing changed.' };
       return { ok: true };
@@ -351,7 +351,10 @@
           return r.text().then(function(text) {
             var data = {};
             try { data = JSON.parse(text); } catch (_) {}
-            if (!r.ok || data.ok === false) throw new Error(data.error || ('Server error ' + r.status + '.'));
+            var hdr = r.headers.get('X-Save-Message');
+            if (!r.ok || data.ok === false) {
+              throw new Error(data.error || (hdr ? decodeURIComponent(hdr) : 'Server error ' + r.status + '.'));
+            }
             return data;
           });
         }, function() { throw new Error('No connection.'); });

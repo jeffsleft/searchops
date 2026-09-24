@@ -464,7 +464,9 @@ def get_db():
     # commit than WAL did (a writer briefly blocks readers), so busy_timeout below
     # makes SQLite retry instead of immediately raising "database is locked".
     conn.execute("PRAGMA journal_mode=DELETE")
-    conn.execute("PRAGMA busy_timeout=5000")
+    # 15s: a Volume commit holds a write lock while it snapshots (app/main.py
+    # _commit_volume), so a write can briefly wait on it.
+    conn.execute("PRAGMA busy_timeout=15000")
     conn.execute("PRAGMA foreign_keys=ON")
     try:
         yield conn

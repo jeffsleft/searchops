@@ -22,6 +22,8 @@ verified live. A static check is the reliable regression guard here.
 """
 import inspect
 
+import time
+
 import pytest
 from starlette.testclient import TestClient
 
@@ -32,12 +34,11 @@ from app.auth import create_session_token, SESSION_COOKIE
 HX_HEADERS = {"X-Requested-With": "XMLHttpRequest"}
 
 
-def test_targets_research_wraps_the_blocking_call_in_to_thread():
+def test_targets_research_hands_the_blocking_call_to_the_background_runner():
     source = inspect.getsource(targets_research)
-    assert "asyncio.to_thread(" in source, (
-        "generate_gap_hypothesis (or its replacement) must be called via "
-        "asyncio.to_thread inside targets_research — calling it directly "
-        "blocks the whole event loop for the duration of the research pipeline."
+    assert ".background.submit(" in source, (
+        "generate_gap_hypothesis must run on the background runner — calling it "
+        "inline holds the request for the whole 60-100s research pipeline."
     )
 
 
@@ -76,4 +77,8 @@ def test_research_route_fires_the_pipeline_and_returns_the_placeholder(
 
     assert resp.status_code == 200
     assert "Researching" in resp.text
+    for _ in range(100):  # the job runs on a background thread
+        if calls:
+            break
+        time.sleep(0.02)
     assert calls == [(company_id, True, False)]

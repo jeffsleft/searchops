@@ -1,4 +1,5 @@
 import logging
+import threading
 from pathlib import Path
 
 import modal
@@ -71,97 +72,133 @@ anthropic_secret = modal.Secret.from_name("anthropic-key")
 # serve /api/notes/.
 notes_api_secret = modal.Secret.from_name("notes-api-token")
 
+# Single writer. Only web() mounts `volume`, and it runs as exactly one container.
+# Every other function reaches the database by putting a job on `job_queue`; the
+# web container's consumer thread runs it and posts the result to `job_results`.
+# Why: app/background.py. Never add `volumes=` to another function.
+#
+# Never `modal run` or `modal serve` this file. Either starts a temporary copy of
+# the whole app, including a second web() with the Volume mounted, which is a
+# second writer that also drains the shared job queue. One-off tools live in
+# app/admin.py, a separate app with no web() and no Volume.
+job_queue = modal.Queue.from_name("recruiting-engine-jobs", create_if_missing=True)
+job_results = modal.Dict.from_name("recruiting-engine-job-results", create_if_missing=True)
 
-# Scheduler runs at midnight, 6am, noon, 6pm UTC.
+_commit_lock = threading.Lock()
+
+
+def _commit_volume():
+    """Persist the Volume. Holds a SQLite write lock for the duration so the
+    snapshot never catches a half-written transaction (a writer mid-commit
+    leaves the .db and its rollback journal out of step)."""
+    import sqlite3
+    from app.config import DATABASE_PATH
+
+    with _commit_lock:
+        conn = sqlite3.connect(DATABASE_PATH, timeout=30)
+        try:
+            conn.execute("BEGIN IMMEDIATE")  # waits for any in-flight write to finish
+            volume.commit()
+        finally:
+            conn.rollback()
+            conn.close()
+
+
+def _enqueue(name: str) -> None:
+    """Queue job `name` for the web container without waiting. app/admin.py
+    has the waiting version for one-off tools."""
+    job_queue.put({"id": None, "name": name, "kwargs": {}, "wait": False})
+
+
+def _reply_fn(job_id: str, wait: bool):
+    def reply(res: dict):
+        if wait:
+            try:
+                job_results.put(job_id, res)
+            except Exception:
+                logging.getLogger("app.background").exception("could not post result for %s", job_id)
+    return reply
+
+
+def _consume_jobs(runner):
+    """Web-container thread: run each queued job on the BackgroundRunner."""
+    import queue
+    import time
+    from app.background import run_capturing_output
+    from app.background_jobs import JOBS
+
+    log = logging.getLogger("app.background")
+    while True:
+        try:
+            msg = job_queue.get(block=True, timeout=60)
+        except queue.Empty:
+            continue
+        except Exception:
+            log.exception("job queue read failed")
+            time.sleep(5)
+            continue
+        if not msg:
+            continue
+        name = msg.get("name")
+        reply = _reply_fn(msg.get("id"), msg.get("wait", False))
+        fn = JOBS.get(name) or ADMIN_JOBS.get(name)
+        if fn is None:
+            log.error("unknown job %r", name)
+            reply({"ok": False, "error": f"unknown job {name!r}"})
+            continue
+        fut = runner.submit(name, run_capturing_output, fn, **msg.get("kwargs", {}))
+        if fut is None:
+            reply({"ok": False, "error": f"{name} is already running"})
+            continue
+
+        def _done(f, reply=reply):
+            try:
+                result, output = f.result()
+                reply({"ok": True, "result": result, "output": output})
+            except Exception as e:
+                reply({"ok": False, "error": repr(e)[:500]})
+
+        fut.add_done_callback(_done)
+
+
+# Scheduler runs at midnight, 6am, noon, 6pm UTC. It only enqueues: every job
+# runs in the web container, the single Volume writer (see the note above).
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
     schedule=modal.Cron("0 0,6,12,18 * * *"),
-    timeout=120,
+    timeout=60,
 )
 def scheduler():
-    """
-    Single cron entry — runs at midnight, 6am, noon, 6pm UTC.
-    - 6am UTC: run automated job discovery scan.
-    - Monday 8am PT: also send weekly Slack digest.
+    """Queue this tick's jobs for the web container.
+
+    - every tick: research up to 5 un-researched outreach targets
+    - 00 UTC: prune observability tables
+    - 06 UTC: discovery scan (sends its own score-aware Slack digest)
+    - Monday 18 UTC (11am PDT / 10am PST): weekly Slack digest
+    - Sunday 00 UTC: DB backup (folded in here: Modal caps the workspace at 5 crons)
+    - 1st of month 00 UTC: progress snapshot (same cap)
     """
     from datetime import datetime, timezone
 
-    from app.observability import configure_logging
-    configure_logging()
-    init_db()
-
-    # Also research a batch of 5 outreach targets if they exist
-    from app.models import get_db
-    with get_db() as conn:
-        rows = conn.execute("SELECT id FROM companies WHERE research_date IS NULL LIMIT 5").fetchall()
-    if rows:
-        print(f"[scheduler] Triggering background research for {len(rows)} outreach targets.")
-        batch_research_companies.spawn([r["id"] for r in rows])
-
-    now_utc = datetime.now(timezone.utc)
-
-    # Prune observability tables once daily (midnight UTC tick) to bound Volume growth.
-    if now_utc.hour == 0:
-        from app.models import prune_observability_tables
-        from app.config import USAGE_RETENTION_DAYS
-        prune_observability_tables(USAGE_RETENTION_DAYS)
-
-    # Run discovery scan daily at 6am UTC. Offloaded to run_discovery_scan_remote
-    # via .spawn() (its own container, timeout=900) rather than run inline: the scan
-    # loops every hunt-enabled company through network fetches + LLM search dorks and
-    # routinely exceeds this cron's timeout. The scan sends the score-aware Slack
-    # digest ("N new roles ≥ 8.0 today") when it finds new roles.
-    if now_utc.hour == 6:
-        run_discovery_scan_remote.spawn()
-
-    # Send the weekly Slack digest once a week at the Monday 18:00 UTC tick
-    # (== 11am PDT / 10am PST). Gated to an actual cron tick: the previous
-    # "Monday 8am PT" gate never fired, since the cron only ticks at
-    # 0/6/12/18 UTC and 8am PT lands on none of them.
-    if now_utc.weekday() == 0 and now_utc.hour == 18:
-        from app.notifications.slack import send_weekly_digest
-        send_weekly_digest()
-
-    # Weekly DB backup — Sunday 00:00 UTC tick. Folded into this cron (rather than
-    # its own scheduled function) because Modal caps the workspace at 5 scheduled
-    # functions. backup_database() Slack-pings on its own failures; catch here so a
-    # backup error never aborts the rest of the scheduler run.
-    if now_utc.weekday() == 6 and now_utc.hour == 0:
-        from app.maintenance.db_backup import backup_database
-        try:
-            backup_database()
-        except Exception as e:
-            print(f"[scheduler] DB backup failed: {e}")
-
-    # Monthly progress snapshot — 1st-of-month, 00:00 UTC tick. Also folded into this
-    # cron rather than its own scheduled function (same 5-cron-cap constraint as the
-    # backup above). snapshot_progress() is idempotent on snapshot_date (INSERT OR
-    # REPLACE), so it's safe even if this branch somehow fires more than once in a day.
-    if now_utc.day == 1 and now_utc.hour == 0:
-        from app.crons.progress import snapshot_progress
-        try:
-            result = snapshot_progress()
-            print(f"[scheduler] Progress snapshot captured for {result['snapshot_date']}")
-        except Exception as e:
-            print(f"[scheduler] Progress snapshot failed: {e}")
+    now = datetime.now(timezone.utc)
+    jobs = ["research"]
+    if now.hour == 0:
+        jobs.append("prune_observability")
+    if now.hour == 6:
+        jobs.append("discovery_scan")
+    if now.weekday() == 0 and now.hour == 18:
+        jobs.append("weekly_digest")
+    if now.weekday() == 6 and now.hour == 0:
+        jobs.append("backup")
+    if now.day == 1 and now.hour == 0:
+        jobs.append("progress_snapshot")
+    for name in jobs:
+        _enqueue(name)
+    print(f"[scheduler] queued: {', '.join(jobs)}")
 
 
-# Not scheduled (Modal's 5-scheduled-function cap is full) — the weekly run is driven
-# by scheduler() above. Kept as a manually-invokable function for on-demand backups
-# and verification: `modal run app/main.py::backup_db`.
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-    timeout=300,
-)
-def backup_db():
-    """Snapshot recruiting.db → /data/backups (rotates last 8)."""
-    init_db()
-    from app.maintenance.db_backup import backup_database
-    backup_database()
+# On-demand backup: `modal run app/admin.py::backup_db`. Snapshots recruiting.db to
+# /data/backups (rotates last 8).
 
 
 _STUB_JOBS_QUERY = """
@@ -178,15 +215,10 @@ _STUB_JOBS_QUERY = """
 # Read-only. Classifies Discovered-panel stub rows (blank/Unknown company or title,
 # or never-scored 'identified' rows) into Bucket 1 (jd_text already saved — just
 # needs the existing rescore logic re-run) vs Bucket 2 (no usable jd_text — needs
-# the JD sourced before anything can be scored). Invoke: `modal run app/main.py::diagnose_stubs`
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-    timeout=120,
-)
-def diagnose_stubs():
-    init_db()
+# the JD sourced before anything can be scored). Invoke: `modal run app/admin.py::diagnose_stubs`
+
+
+def _diagnose_stubs_impl():
     from app.models import get_db
 
     with get_db() as conn:
@@ -212,15 +244,10 @@ def diagnose_stubs():
 # same score_job_from_text_and_persist() call the existing /job/{id}/rescore route
 # uses. Never touches Bucket 2 rows (no JD text) — the Python filter below skips
 # them before any scoring call, and the service itself also hard-fails on short
-# jd_text. Invoke: `modal run app/main.py::remediate_bucket1`
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-    timeout=600,
-)
-def remediate_bucket1():
-    init_db()
+# jd_text. Invoke: `modal run app/admin.py::remediate_bucket1`
+
+
+def _remediate_bucket1_impl():
     from app.models import get_db
     from app.services.scoring_service import score_job_from_text_and_persist
 
@@ -260,8 +287,8 @@ def remediate_bucket1():
 # scored before the 2026-06-22 overhaul (no score_history row since then), skipping
 # auto-rejects and jobs without usable JD text. Appends score_history so old-engine
 # and new-engine scores stay auditable. Invoke:
-#   modal run app/main.py::rescore_stale --dry-run   (list targets, no LLM calls)
-#   modal run app/main.py::rescore_stale             (real run, ~5s pacing per job)
+#   modal run app/admin.py::rescore_stale --dry-run   (list targets, no LLM calls)
+#   modal run app/admin.py::rescore_stale             (real run, ~5s pacing per job)
 _STALE_SCORE_QUERY = """
     SELECT j.id, j.company, j.job_title, j.final_score,
            LENGTH(COALESCE(j.jd_text, '')) AS jd_len
@@ -277,16 +304,9 @@ _STALE_SCORE_QUERY = """
 """
 
 
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-    timeout=3600,
-)
-def rescore_stale(dry_run: bool = False):
+def _rescore_stale_impl(dry_run: bool = False):
     import time
 
-    init_db()
     from app.models import get_db
     from app.services.scoring_service import score_job_from_text_and_persist
 
@@ -327,23 +347,17 @@ def rescore_stale(dry_run: bool = False):
         time.sleep(5)  # AI_RULES §1 pacing between LLM calls
 
     print(f"[rescore_stale] Done: {ok} rescored, {errors} errors of {len(rows)} targeted.")
-    volume.commit()
 
 
 # One-off admin fix (W1-REDACT, 2026-07-14 plan): Tebra (id 140) has an application
 # sent but never got its applied_at stamped, so KR1 and the calibration count
 # undercount it. Refuses to overwrite a row that already has applied_at set — this
 # is a single deliberate backfill, not a general-purpose field editor.
-# Invoke via the deployed function only (never `modal run` — Session 47 lesson),
+# Invoke: `modal run app/admin.py::<name>` (runs in the deployed web container),
 # off the 0/6/12/18 UTC cron ticks: dry_run first, then dry_run=False to commit.
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets],
-    volumes={"/data": volume},
-    timeout=60,
-)
-def stamp_applied_at(job_id: int, applied_date: str, dry_run: bool = True):
-    init_db()
+
+
+def _stamp_applied_at_impl(job_id: int, applied_date: str, dry_run: bool = True):
     from app.models import get_db
 
     with get_db() as conn:
@@ -369,7 +383,6 @@ def stamp_applied_at(job_id: int, applied_date: str, dry_run: bool = True):
 
         conn.execute("UPDATE jobs SET applied_at = ? WHERE id = ?", (applied_date, job_id))
 
-    volume.commit()
     print(f"[stamp_applied_at] id={job_id} committed.")
 
 
@@ -381,14 +394,9 @@ def stamp_applied_at(job_id: int, applied_date: str, dry_run: bool = True):
 # the outcome row only if its notes carry this session's marker text (so this can't
 # accidentally touch a legitimate row). Pipeline stage was already reverted via the UI
 # (record_stage_change) before this runs.
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets],
-    volumes={"/data": volume},
-    timeout=60,
-)
-def correct_erroneous_applied_at(job_id: int, expected_applied_at: str, dry_run: bool = True):
-    init_db()
+
+
+def _correct_erroneous_applied_at_impl(job_id: int, expected_applied_at: str, dry_run: bool = True):
     from app.models import get_db
 
     with get_db() as conn:
@@ -427,7 +435,6 @@ def correct_erroneous_applied_at(job_id: int, expected_applied_at: str, dry_run:
             (job_id,),
         )
 
-    volume.commit()
     print(f"[correct_erroneous_applied_at] id={job_id} committed.")
 
 
@@ -440,14 +447,9 @@ def correct_erroneous_applied_at(job_id: int, expected_applied_at: str, dry_run:
 # alloy resolves to "Alloy.ai", a supply-chain analytics company, not the
 # fintech identity platform actually on this list). See
 # memory/lessons_learned.md for the full verification method.
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets],
-    volumes={"/data": volume},
-    timeout=60,
-)
-def stamp_careers_url(company_name: str, careers_url: str, dry_run: bool = True):
-    init_db()
+
+
+def _stamp_careers_url_impl(company_name: str, careers_url: str, dry_run: bool = True):
     from app.models import get_db
 
     with get_db() as conn:
@@ -474,7 +476,6 @@ def stamp_careers_url(company_name: str, careers_url: str, dry_run: bool = True)
             (careers_url, row["id"]),
         )
 
-    volume.commit()
     print(f"[stamp_careers_url] '{company_name}' committed.")
 
 
@@ -486,14 +487,9 @@ def stamp_careers_url(company_name: str, careers_url: str, dry_run: bool = True)
 # volume.commit(). This wraps the exact same sanctioned call the route uses
 # (advance_stage -> record_stage_change) with an explicit commit, for reliability during
 # this session's triage. Not a permanent fix — the underlying route gap is still open.
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets],
-    volumes={"/data": volume},
-    timeout=60,
-)
-def change_pipeline_stage(job_id: int, to_stage: str, decline_reason: str = "", notes: str = "", dry_run: bool = True):
-    init_db()
+
+
+def _change_pipeline_stage_impl(job_id: int, to_stage: str, decline_reason: str = "", notes: str = "", dry_run: bool = True):
     from app.pipeline.tracker import advance_stage, STAGES
     from app.models import get_db
 
@@ -520,7 +516,6 @@ def change_pipeline_stage(job_id: int, to_stage: str, decline_reason: str = "", 
         print(f"[change_pipeline_stage] id={job_id} FAILED: {result['error']}")
         return
 
-    volume.commit()
     print(f"[change_pipeline_stage] id={job_id} committed: {result}")
 
 
@@ -528,16 +523,11 @@ def change_pipeline_stage(job_id: int, to_stage: str, decline_reason: str = "", 
 # container, one volume.commit(), so a bulk close can't hit the rapid-container-churn
 # last-writer-wins clobber (Session 47/51). Only touches jobs still in a pre-application
 # stage, so a job that moved on since the liveness check is skipped, never auto-closed.
-# Invoke via the DEPLOYED function (modal.Function.from_name), dry_run first — never
-# `modal run`. Verify with a fresh `modal volume get`, not another container.
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets],
-    volumes={"/data": volume},
-    timeout=300,
-)
-def bulk_close_listings(job_ids: list, decline_reason: str = "Listing removed", dry_run: bool = True):
-    init_db()
+# Invoke: `modal run app/admin.py::bulk_close_listings`, dry_run first. Verify with a
+# fresh `modal volume get`, not another container.
+
+
+def _bulk_close_listings_impl(job_ids: list, decline_reason: str = "Listing removed", dry_run: bool = True):
     from app.pipeline.tracker import advance_stage
     from app.models import get_db
 
@@ -567,8 +557,6 @@ def bulk_close_listings(job_ids: list, decline_reason: str = "Listing removed", 
             else:
                 actions.append(f"id={job_id} '{row['company']}' FAILED: {result['error']}")
 
-    if not dry_run and closed:
-        volume.commit()
     for a in actions:
         print(f"[bulk_close_listings] {a}")
     print(f"[bulk_close_listings] Done: {closed} closed of {len(job_ids)} (dry_run={dry_run}).")
@@ -580,18 +568,13 @@ def bulk_close_listings(job_ids: list, decline_reason: str = "Listing removed", 
 # it), so they never produced an application_outcomes row and KR2 undercounts. This
 # replays the auto-logging rules exactly — outcome only where applied_at IS NOT NULL,
 # mapped from the job's CURRENT stage, idempotent (skip if a row already exists).
-# Invoke via the DEPLOYED function only (never `modal run` — Session 47 lesson), AFTER
+# Invoke: `modal run app/admin.py::<name>` (runs in the deployed web container), AFTER
 # the PR is merged + deployed, off the 0/6/12/18 UTC cron ticks: dry_run first, then
 # dry_run=False. Default targets are the 5 unlogged declines (Notion 32, Semrush 39,
 # NerdWallet 60, Airwallex 102, Asana 103); pass job_ids to override.
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets],
-    volumes={"/data": volume},
-    timeout=60,
-)
-def backfill_decline_outcomes(job_ids: list = None, dry_run: bool = True):
-    init_db()
+
+
+def _backfill_decline_outcomes_impl(job_ids: list = None, dry_run: bool = True):
     from app.models import get_db
     from app.services.pipeline_service import STAGE_TO_OUTCOME
     from app.services.calibration_service import record_outcome
@@ -628,8 +611,6 @@ def backfill_decline_outcomes(job_ids: list = None, dry_run: bool = True):
                 record_outcome(job_id, outcome, notes="backfill: W1-B unlogged decline", conn=conn)
                 logged += 1
 
-    if not dry_run:
-        volume.commit()
     summary = {"dry_run": dry_run, "logged": logged, "actions": actions}
     for a in actions:
         print(f"[backfill_outcomes] {a}")
@@ -637,77 +618,17 @@ def backfill_decline_outcomes(job_ids: list = None, dry_run: bool = True):
     return summary
 
 
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-    timeout=300,
-)
-def research_one_company_task(co_id: int):
-    """Worker task to research a single company."""
-    from app.models import get_db, log_task_event
-    from app.services.research_service import do_research_company
-
-    with get_db() as conn:
-        r = conn.execute("SELECT name, funding_stage FROM companies WHERE id = ?", (co_id,)).fetchone()
-    if not r:
-        return False
-
-    name = r["name"]
-    log_task_event("research", "started", f"Researching {name}", name)
-    print(f"[worker] Starting research for: {name}")
-    # Canonical research + fit + persist path (mirrors routes.py's company_research_redirect) —
-    # do_research_company logs and swallows its own exceptions, so check the returned bool
-    # rather than wrapping this in try/except.
-    success = do_research_company(co_id, dict(r))
-    if success:
-        log_task_event("research", "completed", f"Research done for {name}", name)
-        print(f"[worker] Success: {name}")
-    else:
-        log_task_event("research", "failed", "do_research_company failed — see server logs", name)
-        logging.error("[worker] Failed for '%s'", name)
-    return success
-
-
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-    timeout=600,
-)
-def batch_research_companies(company_ids: list[int]):
-    """Orchestrator to run multiple research tasks in parallel."""
-    from app.models import log_task_event
-    n = len(company_ids)
-    log_task_event("batch_research", "started", f"Queued {n} companies for parallel research")
-    print(f"[batch] Spawning research for {n} companies in parallel.")
-    results = list(research_one_company_task.map(company_ids))
-    done = sum(1 for r in results if r)
-    status = "completed" if done == n else "partial"
-    log_task_event("batch_research", status, f"Finished {done}/{n} successfully")
-    print(f"[batch] Completed {done}/{n} successfully.")
-    return done
-
-
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-    timeout=1800,
-)
-def backfill_legacy_research(only_name: str | None = None):
+def _backfill_legacy_research_impl(only_name: str | None = None):
     """Re-research companies whose research_json predates the fit/need-justification feature.
 
     Targets rows that have been researched (research_date IS NOT NULL) but whose JSON
     lacks the fit_justification field. Optionally restrict to a single company via
     `only_name` for spot-checking.
 
-    Uses the existing research_one_company_task worker so the heavy LLM calls run in
-    parallel containers, not sequentially in this orchestrator.
+    Runs the companies one after another in the web container (single writer).
     """
     import json
-    from app.models import init_db, get_db
-    init_db()
+    from app.models import get_db
 
     with get_db() as conn:
         if only_name:
@@ -734,56 +655,19 @@ def backfill_legacy_research(only_name: str | None = None):
         print("[backfill] nothing to do — all researched companies already have justifications")
         return {"queued": 0, "done": 0}
 
-    print(f"[backfill] re-researching {len(legacy_ids)} companies in parallel")
-    results = list(research_one_company_task.map(legacy_ids))
-    done = sum(1 for r in results if r)
+    from app.background_jobs import research_companies
+    print(f"[backfill] re-researching {len(legacy_ids)} companies")
+    done = research_companies(legacy_ids)
     print(f"[backfill] done: {done}/{len(legacy_ids)} successful")
     return {"queued": len(legacy_ids), "done": done}
 
 
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-    # 900s was silently truncating the queue: the 08-14 06:00 UTC run got through
-    # only ~26-30 of 64 hunt-enabled companies (~31s/company observed) before the
-    # container was killed mid-write, never reaching several never-scanned/stale
-    # targets. 2700s gives ~40% margin over the ~2000s a full 64-company run needs.
-    timeout=2700,
-)
-def run_discovery_scan_remote():
-    """Manually trigger run_discovery_scan against the Volume-backed DB.
-
-    Useful right after seeding hunt_targets, or for ad-hoc debugging
-    without waiting for the 6am UTC scheduler tick.
-    """
-    from app.models import init_db, log_task_event
-    from app.discovery.hunter import run_discovery_scan
-    init_db()
-    try:
-        stats = run_discovery_scan()
-    except Exception as e:
-        # run_discovery_scan()'s own "completed"/"partial" log_task_event call is the
-        # last line of that function — any uncaught exception anywhere in the scan
-        # (network, LLM parsing, DB) skips it entirely, leaving a "started" task_log
-        # row with no completion and no way to tell a crash from a genuine zero-yield
-        # day. Close that gap here, at the single entry point both the 6am UTC cron
-        # and manual `modal run` invocations go through, then re-raise so Modal's own
-        # task-failure tracking still fires unchanged.
-        logging.error(f"[discovery] Crashed: {e}")
-        log_task_event("discovery_scan", "failed", f"Crashed: {str(e)[:200]}")
-        raise
-    print(f"[discovery] Done: {stats}")
-    return stats
+# Manual discovery scan, e.g. right after seeding hunt targets:
+# `modal run app/admin.py::run_discovery_scan_remote`. Runs in the web container;
+# a full ~64-company run takes ~2000s.
 
 
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-    timeout=120,
-)
-def seed_hunt_targets_remote():
+def _seed_hunt_targets_remote_impl():
     """Seed companies table from app/discovery/hunt_targets.yaml against the Volume-backed DB.
 
     Idempotent: existing companies (matched by name) are updated with hunt_enabled=1
@@ -792,10 +676,9 @@ def seed_hunt_targets_remote():
     import yaml
     from datetime import date
     from pathlib import Path
-    from app.models import get_db, init_db
+    from app.models import get_db
     from app.discovery.ats_clients import detect_ats
 
-    init_db()
     config_path = Path("/root/app/discovery/hunt_targets.yaml")
     if not config_path.exists():
         # Fall back to repo-relative path inside the image
@@ -843,106 +726,35 @@ def seed_hunt_targets_remote():
     return {"inserted": inserted, "updated": updated}
 
 
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-)
-def list_available_models():
-    """List all models available to the current Gemini API key."""
-    import os
-    from google import genai
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    print("[debug] Listing available models...")
-    try:
-        models = client.models.list()
-        available = []
-        for m in models:
-            # Inspection to find the right attribute
-            name = getattr(m, 'name', 'unknown')
-            model_id = getattr(m, 'model_id', 'unknown')
-            print(f"[debug] Found: {name} / {model_id}")
-            available.append(name)
-        return available
-    except Exception as e:
-        print(f"[debug] Failed to list models: {e}")
-        return str(e)
+# Admin one-offs above, run by the web container's job consumer.
+ADMIN_JOBS = {
+    name: globals()[f"_{name}_impl"]
+    for name in (
+        "diagnose_stubs", "remediate_bucket1", "rescore_stale", "stamp_applied_at",
+        "correct_erroneous_applied_at", "stamp_careers_url", "change_pipeline_stage",
+        "bulk_close_listings", "backfill_decline_outcomes", "backfill_legacy_research",
+        "seed_hunt_targets_remote",
+    )
+}
 
 
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    timeout=300,
-)
-def probe_model_quota():
-    """Try a 1-token prompt against each candidate model. Reports which ones have non-zero quota."""
-    import os
-    from google import genai
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    candidates = [
-        "gemini-pro-latest",
-        "gemini-flash-latest",
-        "gemini-flash-lite-latest",
-        "gemini-2.5-pro",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-001",
-        "gemini-2.0-flash-lite",
-        "gemini-2.0-flash-lite-001",
-    ]
-    results = {}
-    for model in candidates:
-        try:
-            resp = client.models.generate_content(model=model, contents="ok")
-            txt = (resp.text or "").strip()[:30]
-            print(f"[probe] OK    {model:35s} -> {txt!r}")
-            results[model] = "ok"
-        except Exception as e:
-            msg = str(e)
-            if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
-                print(f"[probe] 429   {model:35s} -> rate limited (limit:0 likely)")
-                results[model] = "429"
-            elif "NOT_FOUND" in msg or "404" in msg:
-                print(f"[probe] 404   {model:35s} -> not found")
-                results[model] = "404"
-            else:
-                print(f"[probe] ERR   {model:35s} -> {msg[:80]}")
-                results[model] = f"err: {msg[:80]}"
-    print(f"[probe] Summary: {results}")
-    return results
-
-
-@app.function(
-    image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
-    volumes={"/data": volume},
-)
-def progress_snapshot_cron():
-    """Monthly progress snapshot: captures funnel metrics and auto-emits wins.md entry.
-
-    Not scheduled directly (Modal's 5-scheduled-function cap is full — see the
-    backup_db() note above) — the monthly run is driven by scheduler() below, gated
-    on day-of-month. Kept as a manually-invokable function for on-demand runs and
-    verification: `modal run app/main.py::progress_snapshot_cron`.
-    """
-    from app.observability import configure_logging
-    configure_logging()
-    init_db()
-    from app.crons.progress import snapshot_progress
-    result = snapshot_progress()
-    print(f"[progress_snapshot_cron] Snapshot captured for {result['snapshot_date']}")
-    return result
-
-
+# The only function that mounts the Volume. Exactly one container, always on:
+# a second container would be a second writer (last-writer-wins clobber), and
+# always-on removes the cold start. @modal.concurrent lets that one container
+# serve overlapping requests; app/background.py keeps each off the event loop.
 @app.function(
     image=image,
     secrets=[recruiting_secrets, anthropic_secret, notes_api_secret],
     volumes={"/data": volume},
     timeout=600,
+    min_containers=1,
+    max_containers=1,
 )
+@modal.concurrent(max_inputs=32)
 @modal.asgi_app()
 def web():
     """HTMX web interface."""
+    from app.background import BackgroundRunner
     from app.observability import configure_logging
     configure_logging()
     init_db()
@@ -950,7 +762,6 @@ def web():
     capture_repo_baselines()
     seed_milestones()
     from app.routes import create_app
-    return create_app(
-        batch_research_fn=batch_research_companies,
-        commit_fn=volume.commit,
-    )
+    runner = BackgroundRunner(commit_fn=_commit_volume, max_workers=4)
+    threading.Thread(target=_consume_jobs, args=(runner,), daemon=True, name="job-consumer").start()
+    return create_app(commit_fn=_commit_volume, background=runner)

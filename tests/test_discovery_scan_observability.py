@@ -1,14 +1,16 @@
 """
-Tests the observability fix for run_discovery_scan_remote() (app/main.py).
+Tests the observability fix for the discovery-scan entry point
+(app/background_jobs.discovery_scan, run by the web container for both the 6am
+UTC cron and manual runs).
 
 Prior to this fix, run_discovery_scan()'s own "completed"/"partial" task_log
 entry sits on the last line of that function — any uncaught exception mid-scan
 skipped it entirely, leaving a "started" row with no way to distinguish a
 crash from a genuine zero-yield day. Confirmed live: 6 of 11 daily scans since
 2026-07-15 had no completion row. The fix wraps the single entry point both
-the 6am UTC cron and manual `modal run` invocations go through.
+the cron, the Run Scan Now button, and manual `modal run` invocations go through.
 """
-import app.main as main_module
+from app.background_jobs import discovery_scan
 from app.models import get_db
 
 
@@ -19,7 +21,7 @@ def test_crash_logs_failed_and_reraises(monkeypatch):
     monkeypatch.setattr("app.discovery.hunter.run_discovery_scan", _boom)
 
     try:
-        main_module.run_discovery_scan_remote.local()
+        discovery_scan()
         assert False, "expected the crash to propagate"
     except RuntimeError as e:
         assert "simulated scan crash" in str(e)
@@ -44,7 +46,7 @@ def test_success_path_unaffected(monkeypatch):
         lambda: {"scanned": 3, "new_found": 0, "errors": 0, "discovered_via_search": 0, "auto_scored": 0},
     )
 
-    stats = main_module.run_discovery_scan_remote.local()
+    stats = discovery_scan()
     assert stats["scanned"] == 3
 
     with get_db() as conn:

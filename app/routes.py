@@ -14,6 +14,7 @@ from starlette.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 
+from app.background import BackgroundRunner, offload
 from app.auth import AuthMiddleware, SESSION_COOKIE, create_session_token, login_page, verify_session_token
 from app.config import load_profile, HIGH_SCORE_THRESHOLD, APP_PASSWORD, USAGE_TRACKING_ENABLED
 from app.models import get_db, log_usage_event, log_error_event
@@ -990,18 +991,21 @@ _do_research_company = do_research_company  # backward-compat alias used by comp
 
 
 async def company_trigger_research(request: Request):
-    import asyncio
     co_id = int(request.path_params["co_id"])
     with get_db() as conn:
         co = conn.execute("SELECT * FROM companies WHERE id = ?", (co_id,)).fetchone()
     if not co:
         return HTMLResponse('<div class="dim" style="padding:24px;">Company not found.</div>')
-    asyncio.create_task(asyncio.to_thread(_do_research_company, co_id, dict(co)))
+    # Background runner, not asyncio.create_task: routes run under offload(), whose
+    # per-request event loop cancels any task still pending when the response returns.
+    started = request.app.state.background.submit(
+        f"research_company:{co_id}", _do_research_company, co_id, dict(co))
     if request.headers.get("HX-Request"):
+        msg = ("Research started — takes ~60 seconds. Close and reopen this panel when done."
+               if started else "Research is already running for this company.")
         return HTMLResponse(
             '<div style="padding:24px;font-size:13px;color:var(--text-muted);">'
-            'Research started — takes ~60 seconds. Close and reopen this panel when done.'
-            '</div>'
+            f'{msg}</div>'
         )
     return RedirectResponse(url=f"/companies/{co_id}/research-redirect", status_code=302)
 
@@ -1069,7 +1073,7 @@ async def company_promote(request: Request):
 
 
 async def companies_research_batch(request: Request):
-    msg = research_companies_batch(request.app.state.batch_research_fn)
+    msg = research_companies_batch(request.app.state.background)
     safe_msg = _html.escape(msg)
     return HTMLResponse(f'<span class="dim" style="font-size:12px;">{safe_msg}</span>')
 
@@ -2379,7 +2383,6 @@ async def targets_scan_now(request: Request):
 
 async def targets_research(request: Request):
     """Run research pipeline for a Hunt Target company. Populates metadata + gap hypothesis."""
-    import asyncio
     co_id = int(request.path_params["co_id"])
 
     with get_db() as conn:
@@ -2389,25 +2392,16 @@ async def targets_research(request: Request):
 
     force_metadata = request.query_params.get("force") == "1"
 
-    async def _run():
-        from app.services.research_service import generate_gap_hypothesis
-        try:
-            # generate_gap_hypothesis is a blocking sync call (Gemini research +
-            # fit assessment + gap hypothesis LLM call, can run 60-100+s). Calling
-            # it directly here blocks the whole event loop for that entire duration
-            # instead of running in the background — the request never actually
-            # returns until the blocking call finishes, defeating the fire-and-
-            # forget response below and timing out (408) under any real latency.
-            # asyncio.to_thread runs it off the event loop, matching the identical
-            # fire-and-forget pattern already used correctly in
-            # company_trigger_research (asyncio.create_task(asyncio.to_thread(...))).
-            await asyncio.to_thread(
-                generate_gap_hypothesis, co_id, force_research=True, force_metadata=force_metadata
-            )
-        except Exception as e:
-            logging.error("Gap hypothesis task failed for company %s: %s", co_id, e)
+    # generate_gap_hypothesis blocks for 60-100+s (research + fit + gap LLM calls).
+    # Hand it to the background runner so the response returns now; calling it
+    # inline timed out with a 408 (2026-07-29). Looked up at call time so tests
+    # can patch it.
+    def _run():
+        from app.services import research_service
+        research_service.generate_gap_hypothesis(
+            co_id, force_research=True, force_metadata=force_metadata)
 
-    asyncio.create_task(_run())
+    request.app.state.background.submit(f"gap_hypothesis:{co_id}", _run)
 
     return HTMLResponse(
         f'Researching… panel will refresh automatically in ~70s.'
@@ -2442,9 +2436,13 @@ async def companies_refresh_matches(request: Request):
 
 
 async def api_discovery_scan(request: Request):
-    from app.discovery.hunter import run_discovery_scan
-    stats = run_discovery_scan()
-    return JSONResponse(stats)
+    # The scan takes up to ~35 minutes. It used to run inside this request,
+    # freezing the app and dying at the 600s request timeout mid-write.
+    from app.background_jobs import discovery_scan
+    started = request.app.state.background.submit("discovery_scan", discovery_scan)
+    msg = ("Scan started. New roles appear here as they are found."
+           if started else "A scan is already running.")
+    return HTMLResponse(_html.escape(msg))
 
 
 async def api_task_status(request: Request):
@@ -2869,7 +2867,9 @@ async def favicon(request: Request):
     return Response(status_code=204)
 
 
-def create_app(batch_research_fn=None, commit_fn=None) -> Starlette:
+def create_app(commit_fn=None, background=None) -> Starlette:
+    """`background` is the web container's BackgroundRunner (app/main.py). Local
+    runs and tests get a fresh one that commits nowhere."""
     routes = [
         Route("/favicon.ico", favicon, methods=["GET"]),
         Route("/login",  login_get,  methods=["GET"]),
@@ -3010,6 +3010,9 @@ def create_app(batch_research_fn=None, commit_fn=None) -> Starlette:
         Route("/settings/interviews",         settings_interviews,    methods=["GET"]),
         Route("/job/{job_id:int}/outcome",    job_record_outcome,     methods=["POST"]),
     ]
+    # One container serves every request (app/main.py), so no handler may block
+    # the event loop. See app/background.py.
+    routes = [Route(r.path, offload(r.endpoint), methods=r.methods, name=r.name) for r in routes]
 
     app = Starlette(
         routes=routes,
@@ -3026,6 +3029,6 @@ def create_app(batch_research_fn=None, commit_fn=None) -> Starlette:
         ],
         exception_handlers={Exception: unhandled_exception_handler},
     )
-    app.state.batch_research_fn = batch_research_fn
+    app.state.background = background or BackgroundRunner(commit_fn=commit_fn)
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
     return app

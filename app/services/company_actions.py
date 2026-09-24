@@ -22,11 +22,12 @@ def import_tier_a_companies() -> dict:
     return {"status": "fetch_error", "error": "Google Sheets removed. Add companies via the Companies tab."}
 
 
-def research_companies_batch(batch_research_fn=None, batch_size: int = 5) -> str:
+def research_companies_batch(runner=None, batch_size: int = 5) -> str:
     """Research the next batch of un-researched companies.
 
-    Spawns the Modal background task when available; otherwise runs the research
-    sequentially in-process. Returns a human-readable status message.
+    Hands the batch to the web container's BackgroundRunner when given one;
+    otherwise runs the research sequentially in-process. Returns a
+    human-readable status message.
     """
     with get_db() as conn:
         rows = conn.execute(
@@ -39,9 +40,11 @@ def research_companies_batch(batch_research_fn=None, batch_size: int = 5) -> str
 
     ids = [r["id"] for r in rows]
 
-    if batch_research_fn:
-        batch_research_fn.spawn(ids)
-        return f"Started background research for {len(ids)} companies in parallel. Refresh in 1-2 mins."
+    if runner is not None:
+        from app.background_jobs import research_companies
+        if runner.submit("research", research_companies, ids) is None:
+            return "Research is already running. Refresh in a few minutes."
+        return f"Started background research for {len(ids)} companies. Refresh in a few minutes."
 
     from app.scoring.research import research_company, assess_company_fit
     done = 0

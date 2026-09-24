@@ -574,6 +574,25 @@ def init_db():
         # column is NOT NULL DEFAULT CURRENT_TIMESTAMP and this is a one-time cosmetic
         # gap, not a scoring-integrity one (contrast the score_history backfill, which
         # was deliberately skipped for that reason — see commit 7fea91c).
+        # The Discovered "Dismiss" button used to write i_declined. It now has its own
+        # 'dismissed' stage; move the rows that button made (tagged by its decline
+        # reason) so triage stops counting as considered declines. Never touches a
+        # job with an application. Idempotent. Goes through record_stage_change,
+        # the single stage writer, so each move gets a history row.
+        from app.services.pipeline_service import record_stage_change
+        # Only the job's LATEST move to i_declined counts: a job dismissed once,
+        # then reopened and declined for a real reason, must stay i_declined
+        # (this runs on every container start).
+        dismissed_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM jobs WHERE pipeline_stage = 'i_declined' AND applied_at IS NULL "
+            "  AND (SELECT h.notes FROM pipeline_history h WHERE h.job_id = jobs.id "
+            "       AND h.to_stage = 'i_declined' ORDER BY h.id DESC LIMIT 1) "
+            "      LIKE '%dismissed_from_discovery%'"
+        ).fetchall()]
+        for job_id in dismissed_ids:
+            record_stage_change(conn, job_id, "dismissed",
+                                note="Moved from I Declined: the Dismiss button now has its own stage",
+                                changed_by="migration")
         _run_migration(
             "INSERT INTO job_notes (job_id, text, source) "
             "SELECT id, notes, 'legacy' FROM jobs "

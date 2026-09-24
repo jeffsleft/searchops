@@ -45,14 +45,14 @@
     {%- else -%}<span class="dim">—</span>{%- endif -%}
   </td>
   <td>
+    {# The stage's registry label, same as every other screen. "New" is this
+       inbox's word for a role nobody has reviewed yet. #}
     {% if j.pipeline_stage in ('discovered', 'identified') %}
     <span class="tag green">New</span>
-    {% elif j.pipeline_stage == 'i_declined' %}
-    <span class="tag">Dismissed</span>
-    {% elif j.pipeline_stage == 'job_listing_closed' %}
-    <span class="tag" style="opacity:0.7;">Closed</span>
+    {% elif j.pipeline_stage in TERMINAL_STAGES %}
+    <span class="tag" style="opacity:0.75;">{{ stage_label(j.pipeline_stage) }}</span>
     {% else %}
-    <span class="tag clay">Promoted</span>
+    <span class="tag clay">{{ stage_label(j.pipeline_stage) }}</span>
     {% endif %}
   </td>
 </tr>

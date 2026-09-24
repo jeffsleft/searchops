@@ -12,6 +12,7 @@ from app.models import get_db
 from app.providers import get_provider
 from app.pipeline.session_seeds import SESSION_TYPES, STAGE_TO_DEFAULT_TYPE, seed_session_content, seed_pinned_anchors
 from app.pipeline.prep import PREP_ELIGIBLE_STAGES, build_session_context, check_question_divergence
+from app.pipeline.tracker import STAGES, TERMINAL_STAGES, stage_label
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 jinja_prep = Environment(
@@ -20,6 +21,7 @@ jinja_prep = Environment(
 )
 jinja_prep.filters['fromjson'] = json.loads
 jinja_prep.globals['now'] = lambda: datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+jinja_prep.globals.update(STAGES=STAGES, TERMINAL_STAGES=TERMINAL_STAGES, stage_label=stage_label)
 
 def render_prep(template: str, **ctx) -> HTMLResponse:
     """Render a prep template."""

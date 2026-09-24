@@ -40,7 +40,7 @@
         <div>
           <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Discovery scan (automated, primary path for volume)</div>
           <p style="font-size:13px;line-height:1.7;margin:0;">
-            Runs once daily (6am UTC) against every Tier A company plus a rotating slice of the rest — checks each company's ATS for new postings and runs a handful of broader search queries. New matches land in Discovered auto-scored, no action needed. Manage which companies it watches on the Hunt Targets page.
+            Runs once daily (6am UTC) against every Tier A company plus a rotating slice of the rest — checks each company's ATS for new postings and runs a handful of broader search queries. New matches land in Discovered auto-scored, no action needed. Manage which companies it watches on the Watched Companies page.
           </p>
         </div>
 
@@ -172,8 +172,8 @@
           <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Inbound (jobs with a specific open role)</div>
           <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
             <li><strong>Dashboard</strong> — Score new jobs, see everything scored in the last 30 days</li>
-            <li><strong>Discovered</strong> — Jobs auto-found by the discovery scanner from Hunt Target ATS feeds. Review and promote (→ Dashboard/Pipeline) or dismiss.</li>
-            <li><strong>Pipeline</strong> — All jobs you've moved past Watchlist. Your active candidates.</li>
+            <li><strong>Discovered</strong> — Jobs auto-found by the discovery scanner on your Watched Companies' job boards. Review and promote (→ Dashboard/Pipeline) or dismiss.</li>
+            <li><strong>Pipeline</strong> — Jobs you're actively working, from Researching through Final / Offer.</li>
             <li><strong>Auto-rejected</strong> — Jobs that hit a hard filter. Review occasionally to confirm the filter is working as expected.</li>
             <li><strong>Ethics Vetting</strong> — Jobs that need your manual ethics sign-off before advancing.</li>
           </ul>
@@ -183,7 +183,7 @@
           <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Outbound (no open role yet — cold outreach)</div>
           <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
             <li><strong>Outreach Targets</strong> — Companies you want to cold-reach. Add them, run research, track outreach status. These are <em>not</em> scored jobs — no JD, no Layer 2.</li>
-            <li><strong>Hunt Targets</strong> — Companies in your active discovery scan. The scanner checks their ATS for new openings and creates Discovered jobs automatically.</li>
+            <li><strong>Watched Companies</strong> — Companies in your active discovery scan. The scanner checks their ATS for new openings and creates Discovered jobs automatically.</li>
           </ul>
         </div>
 
@@ -204,11 +204,14 @@
       <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
 
         <p style="font-size:13px;line-height:1.7;margin:0;">
-          Watchlist → Researching → Outreach → Applied → Screening → Interviewing → Offer → Accepted
+          New roles land in <strong>Discovered</strong>. Promote the good ones into the Pipeline:
+          Researching → Outreach → Applied → Recruiter Screen → HM Interview → Panel / Loop → Final / Offer → Accepted.
         </p>
 
         <p style="font-size:13px;line-height:1.7;margin:0;">
-          Two exit paths: "I Declined" (you passed) and "They Declined" (they passed).
+          Ways out: <strong>Dismissed</strong> (passed on from the Discovered inbox), <strong>I Declined</strong>
+          (you walked away after a real look), <strong>They Declined</strong>, <strong>Job Listing Closed</strong>
+          and <strong>Duplicate</strong>. Only I Declined and They Declined count toward your decline metrics.
         </p>
 
         <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:12px 14px;font-size:12px;line-height:1.6;border-left:3px solid var(--accent);">
@@ -216,27 +219,8 @@
         </div>
 
         <div>
-          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Stage guide</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">
-            {% set stage_info = [
-              ('Watchlist', 'Scored, not yet applied'),
-              ('Researching', 'Deep-dive in progress'),
-              ('Outreach', 'Contacted recruiter/HM'),
-              ('Applied', 'Application submitted'),
-              ('Screening', 'Recruiter / HR screen'),
-              ('Interviewing', 'Active interview loop'),
-              ('Offer', 'Offer received'),
-              ('Accepted', 'Offer accepted'),
-              ('I Declined', 'You passed on it'),
-              ('They Declined', 'They passed on you'),
-            ] %}
-            {% for stage, desc in stage_info %}
-            <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:8px 10px;">
-              <div style="font-size:12px;font-weight:500;">{{ stage }}</div>
-              <div class="dim" style="font-size:11px;margin-top:2px;">{{ desc }}</div>
-            </div>
-            {% endfor %}
-          </div>
+          <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Every stage</div>
+          {% include "components/_stage_guide.html" %}
         </div>
 
       </div>

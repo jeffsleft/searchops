@@ -10,27 +10,9 @@
 <span class="logo-sq{% if size %} {{ size }}{% endif %}" style="--logo-hue:{{ (n|length * 17 % 300) + 20 }};">{{ n[:2]|upper }}</span>
 {%- endmacro -%}
 
-{# Human-readable pipeline-stage label from its DB code. Single source of
-   truth so the drawer, tables, and panels never show raw codes like
-   `hm_interview`. #}
+{# Human-readable pipeline-stage label from its DB code. Reads the one stage
+   registry (app/pipeline/tracker.py STAGES, a Jinja global) so no screen
+   keeps its own copy of the labels. #}
 {%- macro stage_label(code) -%}
-{%- set labels = {
-  'identified': 'Identified',
-  'discovered': 'Discovered',
-  'evaluated': 'Evaluated',
-  'researching': 'Researching',
-  'outreach': 'Outreach',
-  'applied': 'Applied',
-  'recruiter': 'Recruiter Screen',
-  'hm_interview': 'HM Interview',
-  'panel': 'Panel / Loop',
-  'final_offer': 'Final / Offer',
-  'accepted': 'Accepted',
-  'i_declined': 'I Declined',
-  'they_declined': 'They Declined',
-  'job_listing_closed': 'Job Listing Closed',
-  'on_hold': 'On Hold',
-  'duplicate': 'Duplicate',
-} -%}
-{{- labels.get(code, code or '—') -}}
+{{- STAGES[code].label if code in STAGES else (code or '—') -}}
 {%- endmacro -%}

@@ -22,7 +22,7 @@ from app.observability import get_logger, new_request_id, set_request_id, reset_
 from app.scoring.engine import classify_score
 from app.scoring.research import research_interviewer, coach_interview
 from app.pipeline.tracker import (
-    STAGES, advance_stage,
+    STAGES, TERMINAL_STAGES, advance_stage, stage_label,
     I_DECLINED_REASONS, THEY_DECLINED_REASONS, JOB_CLOSED_REASONS, DUPLICATE_REASONS,
 )
 from app.pipeline.followups import get_followups_due
@@ -238,6 +238,8 @@ jinja = Environment(
     loader=FileSystemLoader(str(TEMPLATES_DIR)),
     autoescape=select_autoescape(["html"]),
 )
+# The stage registry, so no template keeps its own copy of stage labels.
+jinja.globals.update(STAGES=STAGES, TERMINAL_STAGES=TERMINAL_STAGES, stage_label=stage_label)
 
 
 def render(template: str, **ctx) -> HTMLResponse:
@@ -1878,7 +1880,7 @@ async def discovered_view(request: Request):
         all_jobs = [j for j in all_jobs if j.get("discovery_source") not in ("manual", "linkedin", None, "")]
 
     def is_new(j):       return j.get("pipeline_stage") in ("discovered", "identified")
-    def is_dismissed(j): return j.get("pipeline_stage") in ("i_declined", "job_listing_closed", "duplicate")
+    def is_dismissed(j): return j.get("pipeline_stage") in ("dismissed", "i_declined", "job_listing_closed", "duplicate")
     def is_promoted(j):  return not is_new(j) and not is_dismissed(j)
 
     counts = {
@@ -1971,9 +1973,10 @@ async def job_promote_from_discovery(request: Request):
 async def job_dismiss_from_discovery(request: Request):
     job_id = int(request.path_params["job_id"])
 
-    # Move to i_declined stage
+    # Its own stage, not i_declined: a glance-and-pass must not count as a
+    # considered decline in the funnel and calibration metrics.
     from app.pipeline.tracker import advance_stage
-    result = advance_stage(job_id, 'i_declined', decline_reason='dismissed_from_discovery')
+    result = advance_stage(job_id, 'dismissed', decline_reason='dismissed_from_discovery')
     if not result["ok"]:
         safe_err = _html.escape(result["error"])
         return HTMLResponse(f'<div class="text-red-400 text-sm">{safe_err}</div>',
@@ -2123,10 +2126,13 @@ def _render_job_add_result(result: dict) -> HTMLResponse:
     status = result["status"]
     if status == "duplicate":
         label = _html.escape(f"{result['company']} — {result['job_title']}")
-        dest = "/discovered?tab=dismissed" if result.get("pipeline_stage") in ("i_declined", "they_declined", "job_listing_closed") else "/discovered"
+        # Link to the job itself: works for every stage, including ones no
+        # Discovered tab lists (accepted, they_declined).
+        dest = f"/job/{int(result['job_id'])}"
+        stage = _html.escape(stage_label(result.get("pipeline_stage")))
         return HTMLResponse(
             f'<div style="padding:12px;font-size:13px;">'
-            f'⚠️ Already in your pipeline: <a href="{dest}" style="text-decoration:underline;">{label} — view →</a>'
+            f'⚠️ Already tracked ({stage}): <a href="{dest}" style="text-decoration:underline;">{label} — view →</a>'
             f'</div>'
         )
     if status == "error":
@@ -2138,7 +2144,7 @@ def _render_job_add_result(result: dict) -> HTMLResponse:
         return HTMLResponse(
             f'<div style="padding:12px;font-size:13px;">'
             f'✓ {co} logged as declined — '
-            f'<a href="/discovered?tab=dismissed" style="text-decoration:underline;">view in Dismissed →</a>'
+            f'<a href="/discovered?tab=dismissed" style="text-decoration:underline;">view in Closed →</a>'
             f'</div>'
         )
     if status == "added_no_fetch":
@@ -2233,7 +2239,7 @@ async def admin_import_tier_a(request: Request):
     return HTMLResponse(
         f'<span style="font-size:13px;color:var(--text);">'
         f'Done — {result["inserted"]} inserted, {result["updated"]} updated. '
-        f'<a href="/targets" style="text-decoration:underline;">View Hunt Targets →</a>'
+        f'<a href="/targets" style="text-decoration:underline;">View Watched Companies →</a>'
         f'</span>'
     )
 

@@ -37,26 +37,7 @@
 
       <div>
         <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Pipeline stages</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">
-          {% set stage_info = [
-            ('Watchlist', 'Scored, not yet applied'),
-            ('Researching', 'Deep-dive in progress'),
-            ('Outreach', 'Contacted recruiter/HM'),
-            ('Applied', 'Application submitted'),
-            ('Screening', 'Recruiter / HR screen'),
-            ('Interviewing', 'Active interview loop'),
-            ('Offer', 'Offer received'),
-            ('Accepted', 'Offer accepted'),
-            ('I Declined', 'You passed on it'),
-            ('They Declined', 'They passed on you'),
-          ] %}
-          {% for stage, desc in stage_info %}
-          <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:8px 10px;">
-            <div style="font-size:12px;font-weight:500;">{{ stage }}</div>
-            <div class="dim" style="font-size:11px;margin-top:2px;">{{ desc }}</div>
-          </div>
-          {% endfor %}
-        </div>
+        {% include "components/_stage_guide.html" %}
       </div>
 
       <div>

@@ -361,8 +361,14 @@ a:hover { text-decoration: underline; }
 .stage.final_offer           { color: var(--tier-dream); }
 .stage.accepted::before      { background: var(--tier-solid); }
 .stage.accepted              { color: var(--tier-solid); }
-.stage.i_declined::before, .stage.they_declined::before { background: var(--text-dim); }
-.stage.i_declined, .stage.they_declined { color: var(--text-dim); }
+.stage.discovered::before    { background: oklch(55% 0.02 80); }
+.stage.applied::before       { background: oklch(64% 0.10 230); }
+.stage.applied               { color: oklch(72% 0.09 230); }
+/* Closed-out stages (TERMINAL_STAGES in app/pipeline/tracker.py), all dimmed. */
+.stage.i_declined::before, .stage.they_declined::before, .stage.dismissed::before,
+.stage.job_listing_closed::before, .stage.duplicate::before { background: var(--text-dim); }
+.stage.i_declined, .stage.they_declined, .stage.dismissed,
+.stage.job_listing_closed, .stage.duplicate { color: var(--text-dim); }
 .stage.on_hold::before       { background: oklch(65% 0.10 60); }
 .stage.on_hold               { color: oklch(74% 0.10 60); }
 

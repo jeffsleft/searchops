@@ -23,6 +23,8 @@
         {%- else %} tier-pass{%- endif %}">
         <span class="dot"></span>{% if job.auto_rejected %}REJECT{% else %}{{ "%.1f"|format(s) }}{% endif %}
       </span>
+      {# Same label and color as the Pipeline, Dashboard and Discovered screens. #}
+      <span class="stage {{ job.pipeline_stage }}">{{ stage_label(job.pipeline_stage) }}</span>
     </div>
     <div class="muted" style="font-size:12.5px;">
       {{ job.company }} · {{ job.sector or '—' }}
@@ -40,15 +42,20 @@
     <a href="/pipeline" class="btn btn-sm btn-ghost">← Pipeline</a>
   </div>
 </div>
-{% if job.pipeline_stage not in ('i_declined', 'they_declined', 'job_listing_closed', 'duplicate', 'accepted') %}
+{% if job.pipeline_stage not in TERMINAL_STAGES %}
 <div class="action-rail" style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-lg) var(--radius-lg);">
   <div class="action-rail-label">Next</div>
   <div class="action-rail-why">
-    {%- if job.pipeline_stage == 'applied' -%}Follow up if no response in 7 days
-    {%- elif job.pipeline_stage in ('phone_screen', 'first_interview', 'interviewing') -%}Prep your talking points
-    {%- elif job.pipeline_stage == 'offer' -%}Review and negotiate the offer
-    {%- elif job.pipeline_stage == 'researching' -%}Research the company before applying
-    {%- else -%}Score this role to rank it in your pipeline
+    {%- set st = job.pipeline_stage -%}
+    {%- if job.final_score is none -%}Score this role to rank it in your pipeline
+    {%- elif st in ('discovered', 'identified') -%}Move it into your pipeline or dismiss it
+    {%- elif st in ('evaluated', 'researching') -%}Research the company before applying
+    {%- elif st == 'outreach' -%}Follow up with your contact in a week
+    {%- elif st == 'applied' -%}Follow up if no response in 7 days
+    {%- elif st in ('recruiter', 'hm_interview', 'panel') -%}Prep your talking points
+    {%- elif st == 'final_offer' -%}Review and negotiate the offer
+    {%- elif st == 'on_hold' -%}Check back when it restarts
+    {%- else -%}Review where this role stands
     {%- endif -%}
   </div>
   <a href="/prep/{{ job.id }}" class="actionbtn">Prep →</a>
@@ -157,8 +164,8 @@
             <option value="phone_screen">Phone screen</option>
             <option value="interview">Interview</option>
             <option value="offer">Offer</option>
-            <option value="rejected_them">I declined them</option>
-            <option value="rejected_me">They declined me</option>
+            <option value="rejected_them">I Declined</option>
+            <option value="rejected_me">They Declined</option>
             <option value="ghosted">Ghosted</option>
           </select>
         </div>
@@ -236,7 +243,7 @@
         <dt>Pipeline stage</dt>
         <dd>
           <select id="stageSelect" class="select" style="font-size:12px;">
-            {% for code, info in all_stages.items() %}
+            {% for code, info in all_stages.items() if code != 'dismissed' or code == job.pipeline_stage %}
             <option value="{{ code }}" {% if code == job.pipeline_stage %}selected{% endif %}>{{ info.label }}</option>
             {% endfor %}
           </select>

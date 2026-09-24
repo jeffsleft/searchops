@@ -4,25 +4,41 @@ requires decline reasons on terminal stages.
 """
 from app.models import get_db
 
-# Stage codes and terminal status
+# The one list of pipeline stages. Every screen reads labels, order and
+# descriptions from here (Jinja global STAGES, app/routes.py); never hardcode a
+# stage label or a set of stage codes anywhere else. Order is display order.
 STAGES = {
-    "discovered":    {"label": "Discovered",        "terminal": False},
-    "identified":    {"label": "Identified",       "terminal": False},
-    "evaluated":     {"label": "Evaluated",         "terminal": False},
-    "researching":   {"label": "Researching",       "terminal": False},
-    "outreach":      {"label": "Outreach",          "terminal": False},
-    "applied":       {"label": "Applied",           "terminal": False},
-    "recruiter":     {"label": "Recruiter Screen",  "terminal": False},
-    "hm_interview":  {"label": "HM Interview",      "terminal": False},
-    "panel":         {"label": "Panel / Loop",      "terminal": False},
-    "final_offer":   {"label": "Final / Offer",     "terminal": False},
-    "accepted":          {"label": "Accepted",            "terminal": True},
-    "i_declined":        {"label": "I Declined",          "terminal": True},
-    "they_declined":     {"label": "They Declined",       "terminal": True},
-    "job_listing_closed": {"label": "Job Listing Closed", "terminal": True},
-    "on_hold":           {"label": "On Hold",             "terminal": False},
-    "duplicate":         {"label": "Duplicate",           "terminal": True},
+    "discovered":    {"label": "Discovered",       "terminal": False, "desc": "New role waiting for your review"},
+    "identified":    {"label": "Identified",       "terminal": False, "desc": "Added by you; not fetched and scored yet"},
+    "evaluated":     {"label": "Evaluated",        "terminal": False, "desc": "Reviewed and worth pursuing"},
+    "researching":   {"label": "Researching",      "terminal": False, "desc": "Digging into the company"},
+    "outreach":      {"label": "Outreach",         "terminal": False, "desc": "Reached out to a recruiter or hiring manager"},
+    "applied":       {"label": "Applied",          "terminal": False, "desc": "Application submitted"},
+    "recruiter":     {"label": "Recruiter Screen", "terminal": False, "desc": "Recruiter screen scheduled or done"},
+    "hm_interview":  {"label": "HM Interview",     "terminal": False, "desc": "Interviewing with the hiring manager"},
+    "panel":         {"label": "Panel / Loop",     "terminal": False, "desc": "Panel or full interview loop"},
+    "final_offer":   {"label": "Final / Offer",    "terminal": False, "desc": "Final round or offer"},
+    "accepted":           {"label": "Accepted",           "terminal": True,  "desc": "Offer accepted"},
+    "i_declined":         {"label": "I Declined",         "terminal": True,  "desc": "You walked away after a real look"},
+    "they_declined":      {"label": "They Declined",      "terminal": True,  "desc": "They passed on you"},
+    "job_listing_closed": {"label": "Job Listing Closed", "terminal": True,  "desc": "The listing came down"},
+    "on_hold":            {"label": "On Hold",            "terminal": False, "desc": "Paused on either side"},
+    "duplicate":          {"label": "Duplicate",          "terminal": True,  "desc": "Same role tracked twice"},
+    # One-click pass from the Discovered inbox. Kept apart from i_declined so a
+    # two-second triage never counts as a considered decline in the metrics.
+    "dismissed":          {"label": "Dismissed",          "terminal": True,  "desc": "Passed on from the Discovered inbox"},
 }
+
+TERMINAL_STAGES = frozenset(code for code, s in STAGES.items() if s["terminal"])
+
+# Terminal stages that need a reason from the user (the decline dialog).
+REASON_REQUIRED_STAGES = ("i_declined", "they_declined", "job_listing_closed", "duplicate")
+
+
+def stage_label(code: str | None) -> str:
+    """Display label for a stage code. Unknown codes show as-is, empty as a dash."""
+    return STAGES[code]["label"] if code in STAGES else (code or "—")
+
 
 I_DECLINED_REASONS = [
     "Compensation too low",
@@ -72,7 +88,7 @@ def advance_stage(job_id: int, to_stage: str, notes: str = "", decline_reason: s
     if to_stage not in STAGES:
         return {"ok": False, "error": f"Unknown stage: {to_stage}"}
 
-    if to_stage in ("i_declined", "they_declined", "job_listing_closed", "duplicate") and not decline_reason:
+    if to_stage in REASON_REQUIRED_STAGES and not decline_reason:
         return {"ok": False, "error": "Decline reason is required"}
 
     with get_db() as conn:
@@ -101,16 +117,18 @@ def get_pipeline_summary() -> dict:
 
 def get_stale_pipeline(days: int = 14) -> list[dict]:
     """Return jobs with no stage change in more than `days` days."""
+    terminal = sorted(TERMINAL_STAGES)
+    placeholders = ",".join("?" * len(terminal))
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT j.id, j.company, j.job_title, j.pipeline_stage,
+            f"""SELECT j.id, j.company, j.job_title, j.pipeline_stage,
                       MAX(h.changed_at) as last_changed
                FROM jobs j
                LEFT JOIN pipeline_history h ON h.job_id = j.id
-               WHERE j.pipeline_stage NOT IN ('accepted','i_declined','they_declined','job_listing_closed','duplicate')
+               WHERE j.pipeline_stage NOT IN ({placeholders})
                GROUP BY j.id
                HAVING last_changed < datetime('now', ? || ' days')
                   OR last_changed IS NULL""",
-            (f"-{days}",),
+            (*terminal, f"-{days}"),
         ).fetchall()
     return [dict(r) for r in rows]

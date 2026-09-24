@@ -38,7 +38,9 @@
 {% if view != 'funnel' %}
 <div class="kanban">
   {% for stage_code, stage_label in stages %}
-  {% if stage_code not in ('evaluated', 'accepted', 'i_declined', 'they_declined', 'job_listing_closed', 'duplicate', 'discovered') %}
+  {# Board columns: working stages only. Closed-out stages come from the registry;
+     Discovered is the inbox's job, and Evaluated goes unused. #}
+  {% if stage_code not in TERMINAL_STAGES and stage_code not in ('evaluated', 'discovered') %}
   {%- set stage_jobs = jobs_by_stage.get(stage_code, []) -%}
   <div class="kanban-col">
     <div class="kanban-col-head">
@@ -117,7 +119,7 @@
         <select class="select kanban-stage-select" style="width:100%;font-size:10px;margin-top:4px;"
                 data-job-id="{{ job.id }}"
                 data-current-stage="{{ job.pipeline_stage }}">
-          {% for sc, sl in stages %}
+          {% for sc, sl in stages if sc != 'dismissed' %}
           <option value="{{ sc }}"{% if sc == job.pipeline_stage %} selected{% endif %}>{{ sl }}</option>
           {% endfor %}
         </select>

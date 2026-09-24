@@ -6,10 +6,8 @@ Returns a dict ready for template rendering.
 """
 import sqlite3
 from app.models import get_db
-from app.pipeline.tracker import get_stale_pipeline
+from app.pipeline.tracker import TERMINAL_STAGES, get_stale_pipeline
 
-
-TERMINAL_STAGES = {'accepted', 'i_declined', 'they_declined', 'job_listing_closed', 'duplicate'}
 
 
 def build_pipeline_view_data(archetype: str, _enrich_job_fn) -> dict:

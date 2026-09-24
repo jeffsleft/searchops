@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Hunt Targets — Recruiting Engine{% endblock %}
-{% block page_title %}Hunt Targets{% endblock %}
+{% block title %}Watched Companies — Recruiting Engine{% endblock %}
+{% block page_title %}Watched Companies{% endblock %}
 
 {% block topbar_actions %}
 <button class="btn btn-sm"
@@ -18,8 +18,8 @@
 
 <div class="page-head" style="margin-bottom:18px;">
   <div>
-    <h1>Hunt Targets</h1>
-    <div class="sub">57 Tier A companies · proactive monitoring · no hook required to track</div>
+    <h1>Watched Companies</h1>
+    <div class="sub">{{ counts.tier_a }} Tier A companies · the scanner checks their job boards daily for new roles</div>
   </div>
 </div>
 

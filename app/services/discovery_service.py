@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.models import get_db
+from app.pipeline.tracker import TERMINAL_STAGES
 
 _TITLE_FILTERS: dict | None = None
 
@@ -24,7 +25,7 @@ def _get_title_filters() -> dict:
 
 
 # Pipeline stages that mean a role is no longer an open, matchable opportunity.
-_CLOSED_STAGES = ("job_listing_closed", "they_declined", "i_declined", "accepted")
+_CLOSED_STAGES = tuple(sorted(TERMINAL_STAGES))
 
 
 def recompute_company_match_summary(co_id: int) -> dict:

@@ -62,7 +62,7 @@
     {% set tabs = [
       ('new',       'New'),
       ('promoted',  'Promoted'),
-      ('dismissed', 'Dismissed'),
+      ('dismissed', 'Closed'),
       ('all',       'All'),
     ] %}
     {% for val, label in tabs %}
@@ -135,7 +135,7 @@
     <div class="empty-sub">You've promoted all new roles. Check the <a href="/discovered?tab=promoted">Promoted tab</a> or <a href="/targets">add companies to monitor →</a></div>
   {% elif tab == 'new' and counts.all == 0 %}
     <div class="empty-title">No roles discovered yet</div>
-    <div class="empty-sub">Add companies to your <a href="/targets">Hunt Targets</a> list and run a scan, or paste a job URL above.</div>
+    <div class="empty-sub">Add companies to your <a href="/targets">Watched Companies</a> list and run a scan, or paste a job URL above.</div>
   {% else %}
     <div class="empty-title">Nothing in this view</div>
     <div class="empty-sub">Switch tabs or <a href="/targets">add companies to monitor →</a></div>

@@ -1,0 +1,10 @@
+{# Every pipeline stage with its one-line meaning, straight from the stage
+   registry (app/pipeline/tracker.py). Shown on the User Guide and Settings. #}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">
+  {% for code, stage in STAGES.items() %}
+  <div style="background:var(--bg-sunk);border-radius:var(--radius);padding:8px 10px;">
+    <div style="font-size:12px;font-weight:500;"><span class="stage {{ code }}">{{ stage.label }}</span></div>
+    <div class="dim" style="font-size:11px;margin-top:4px;">{{ stage.desc }}</div>
+  </div>
+  {% endfor %}
+</div>

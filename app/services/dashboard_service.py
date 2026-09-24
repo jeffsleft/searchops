@@ -8,12 +8,12 @@ from datetime import datetime, timezone
 from app.models import get_db
 from app.pipeline.followups import get_followups_due
 from app.pipeline.prep import get_upcoming_interviews
+from app.pipeline.tracker import TERMINAL_STAGES
 
 
-TERMINAL_STAGES = {
-    'accepted', 'i_declined', 'they_declined', 'job_listing_closed',
-    'duplicate', 'identified', 'evaluated', 'discovered'
-}
+# The dashboard shows jobs you're actively working. Closed-out jobs and ones
+# still waiting in the Discovered inbox (new, unscored or unreviewed) stay off it.
+DASHBOARD_HIDDEN_STAGES = TERMINAL_STAGES | {"discovered", "identified", "evaluated"}
 
 
 def build_dashboard_data(archetype: str, _enrich_job_fn) -> dict:
@@ -43,12 +43,12 @@ def build_dashboard_data(archetype: str, _enrich_job_fn) -> dict:
         # High-score jobs (≥ 7.0), top 6 — exclude terminal/triage stages
         high = [j for j in live_list
                 if j.get('final_score', 0) >= 7.0
-                and j.get('pipeline_stage') not in TERMINAL_STAGES][:6]
+                and j.get('pipeline_stage') not in DASHBOARD_HIDDEN_STAGES][:6]
 
         # Recently added — sorted by date_found DESC, top 5 — exclude terminal/triage stages
-        recent_pool = [j for j in live_list if j.get('pipeline_stage') not in TERMINAL_STAGES]
+        recent_pool = [j for j in live_list if j.get('pipeline_stage') not in DASHBOARD_HIDDEN_STAGES]
         recent = sorted(recent_pool, key=lambda x: x.get('date_found') or '', reverse=True)[:5]
-        in_pipeline = [j for j in live_list if j.get('pipeline_stage') not in TERMINAL_STAGES]
+        in_pipeline = [j for j in live_list if j.get('pipeline_stage') not in DASHBOARD_HIDDEN_STAGES]
 
         # Interviewing (advanced stages)
         interviewing_stages = {'recruiter', 'hm_interview', 'panel', 'final_offer'}

@@ -86,9 +86,11 @@
                   hx-target="#discovered-panel"
                   hx-swap="innerHTML"
                   class="select">
-            {# From the stage registry. 'dismissed' is set only by the Dismiss button,
-               so it's listed only when it's already the job's stage. #}
-            {% for val, stage in STAGES.items() if val != 'dismissed' or job.pipeline_stage == val %}
+            {# From the stage registry. Stages that need a reason (declines, closures,
+               duplicates) and 'dismissed' (the Dismiss button's) aren't offered in this
+               quick dropdown; each is listed only when it's already the job's stage. #}
+            {% for val, stage in STAGES.items()
+                 if (not stage.terminal or val == 'accepted') or job.pipeline_stage == val %}
             <option value="{{ val }}" {% if job.pipeline_stage == val %}selected{% endif %}>{{ stage.label }}</option>
             {% endfor %}
           </select>

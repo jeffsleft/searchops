@@ -22,7 +22,6 @@ from app.config import load_profile, HIGH_SCORE_THRESHOLD, APP_PASSWORD, USAGE_T
 from app.models import get_db, log_usage_event, log_error_event
 from app.observability import get_logger, new_request_id, set_request_id, reset_request_id
 from app.scoring.engine import classify_score
-from app.scoring.research import research_interviewer, coach_interview
 from app.pipeline.tracker import (
     STAGES, TERMINAL_STAGES, advance_stage, stage_label,
     I_DECLINED_REASONS, THEY_DECLINED_REASONS, JOB_CLOSED_REASONS, DUPLICATE_REASONS,
@@ -1139,176 +1138,6 @@ async def pipeline_view(request: Request):
     )
 
 
-async def generate_cheatsheet(request: Request):
-    job_id = int(request.path_params["job_id"])
-    form = await request.form()
-    from app.pipeline.strategy_brief import generate_cheatsheet
-    result = generate_cheatsheet(job_id, form.get("round",""), form.get("interviewers",""))
-    safe_result = _html.escape(str(result))
-    return HTMLResponse(f'<div class="whitespace-pre-wrap text-sm text-gray-300">{safe_result}</div>')
-
-
-async def analyze_transcript_post(request: Request):
-    job_id = int(request.path_params["job_id"])
-    form = await request.form()
-    from app.pipeline.transcript import analyze_transcript
-    result = analyze_transcript(
-        job_id=job_id,
-        raw_transcript=form.get("raw_transcript",""),
-        granola_analysis=form.get("granola_analysis") or None,
-        contact_name=form.get("contact_name",""),
-        contact_title=form.get("contact_title",""),
-    )
-    analysis = result["gemini_analysis"]
-    comparison = result.get("comparison_result")
-
-    parts = ["<div class='space-y-4'>"]
-    if analysis.get("key_signals"):
-        parts.append("<div><div class='text-xs font-semibold text-gray-400 mb-1'>Key Signals</div>")
-        for s in analysis["key_signals"]:
-            safe_s = _html.escape(str(s))
-            parts.append(f"<div class='text-sm text-gray-300'>· {safe_s}</div>")
-        parts.append("</div>")
-
-    if analysis.get("operational_debt_signals"):
-        parts.append("<div><div class='text-xs font-semibold text-gray-400 mb-1'>Debt Signals</div>")
-        for d in analysis["operational_debt_signals"]:
-            color = "red" if d.get("severity") == "High" else "yellow"
-            safe_type = _html.escape(str(d.get("type", "")))
-            safe_signal = _html.escape(str(d.get("signal", "")))
-            parts.append(f"<div class='text-sm text-{color}-300'>· [{safe_type}] {safe_signal}</div>")
-        parts.append("</div>")
-
-    if comparison:
-        parts.append("<div class='border-t border-gray-700 pt-3'><div class='text-xs font-semibold text-purple-400 mb-1'>Gemini vs Granola</div>")
-        if comparison.get("divergences"):
-            for div in comparison["divergences"]:
-                safe_topic = _html.escape(str(div.get("topic", "")))
-                safe_rec = _html.escape(str(div.get("recommendation", "")))
-                parts.append(f"<div class='text-xs text-orange-300'>⚠ {safe_topic}: {safe_rec}</div>")
-        safe_comp_summary = _html.escape(str(comparison.get('summary','')))
-        parts.append(f"<div class='text-xs text-gray-400 mt-1'>{safe_comp_summary}</div></div>")
-
-    q_count = len(analysis.get('unanswered_questions',[]) ) + len(analysis.get('new_questions_to_ask',[]))
-    parts.append(f"<div class='text-xs text-gray-500'>Questions added to bank: {q_count}</div>")
-    parts.append("</div>")
-    return HTMLResponse("".join(parts))
-
-
-async def research_interviewer_post(request: Request):
-    try:
-        form = await request.form()
-        name = form.get("name", "").strip()
-        title = form.get("title", "").strip()
-        company = form.get("company", "").strip()
-        if not name or not title or not company:
-            return HTMLResponse('<div class="text-red-400 text-sm">All fields required (Name, Title, Company).</div>')
-        result = research_interviewer(name, title, company)
-        parts = ["<div class='space-y-3'>"]
-        sections = [
-            ("background", "Background", ["summary", "notable_companies", "conversation_approach"]),
-            ("leadership_philosophy", "Leadership Philosophy", ["summary", "focus_areas"]),
-            ("strategy_perspective", "Strategy Perspective", ["summary"]),
-            ("hiring_signals", "Hiring Signals", ["what_they_emphasize", "stated_hiring_views"]),
-            ("likely_interview_focus", "Likely Interview Focus", ["probable_topics", "likely_questions", "what_success_looks_like"]),
-            ("engagement_strategy", "Engagement Strategy", ["how_to_resonate", "rapport_topics", "questions_to_ask_them"]),
-        ]
-        for key, label, fields in sections:
-            sec = result.get(key)
-            if not sec:
-                continue
-            parts.append('<div class="border border-gray-700 rounded p-3">')
-            safe_label = _html.escape(label)
-            parts.append(f'<div class="text-xs font-semibold text-gray-400 mb-2">{safe_label}</div>')
-            for f in fields:
-                val = sec.get(f)
-                if not val:
-                    continue
-                if isinstance(val, list):
-                    for item in val[:4]:
-                        safe_item = _html.escape(str(item))
-                        parts.append(f'<div class="text-xs text-gray-400">• {safe_item}</div>')
-                else:
-                    safe_val = _html.escape(str(val))
-                    parts.append(f'<div class="text-sm text-gray-300">{safe_val}</div>')
-            parts.append("</div>")
-        parts.append("</div>")
-        return HTMLResponse("".join(parts))
-    except Exception as e:
-        safe_e = _html.escape(str(e))
-        return HTMLResponse(f'<div class="text-red-400 text-sm">Error: {safe_e}</div>')
-
-
-async def coach_interview_post(request: Request):
-    try:
-        form = await request.form()
-        transcript = form.get("transcript", "").strip()
-        company = form.get("company", "").strip()
-        job_title = form.get("job_title", "").strip()
-        interviewer = form.get("interviewer", "").strip()
-        interview_date = form.get("interview_date", "").strip()
-        if not transcript or not company:
-            return HTMLResponse('<div class="text-red-400 text-sm">Transcript and Company are required.</div>')
-        result = coach_interview(transcript, company, job_title, interviewer, interview_date)
-        parts = ["<div class='space-y-4'>"]
-
-        if result.get("per_response"):
-            parts.append('<div class="text-xs font-semibold text-gray-400 mb-3">Per-Answer Analysis</div>')
-            for resp in result["per_response"][:8]:
-                parts.append('<div class="border border-gray-700 rounded p-3 mb-2">')
-                if resp.get("question_asked"):
-                    safe_q = _html.escape(str(resp["question_asked"]))
-                    parts.append(f'<div class="text-xs text-gray-500 mb-2">Q: {safe_q}</div>')
-                scores = resp.get("scores", {})
-                for score_key in ["overall", "content", "structure", "delivery"]:
-                    score_val = float(scores.get(score_key, 0))
-                    bar_pct = int((score_val / 10) * 100)
-                    color = "bg-green-600" if score_val >= 8 else "bg-yellow-600" if score_val >= 6 else "bg-red-600"
-                    parts.append(f'<div class="flex items-center gap-2 mb-1"><span class="text-xs text-gray-500 w-16">{score_key.capitalize()}</span><div class="flex-1 bg-gray-800 rounded h-1.5"><div class="{color} h-full rounded" style="width:{bar_pct}%"></div></div><span class="text-xs text-gray-400">{score_val}</span></div>')
-                for label, field, color in [("Strengths", "did_well", "text-green-400"), ("Improve", "improve", "text-yellow-400")]:
-                    items = resp.get(field, [])[:2]
-                    if items:
-                        parts.append(f'<div class="text-xs {color} mt-1">{label}:</div>')
-                        for item in items:
-                            safe_item = _html.escape(str(item))
-                            parts.append(f'<div class="text-xs text-gray-400">• {safe_item}</div>')
-                parts.append("</div>")
-
-        if result.get("filler_words"):
-            fw = result["filler_words"]
-            parts.append('<div class="border border-gray-700 rounded p-3">')
-            parts.append('<div class="text-xs font-semibold text-gray-400 mb-2">Filler Words</div>')
-            if fw.get("filler_rate_pct") is not None:
-                parts.append(f'<div class="text-sm text-gray-300">Rate: {float(fw["filler_rate_pct"]):.1f}%</div>')
-            for word, count in list((fw.get("breakdown") or {}).items())[:5]:
-                if count:
-                    safe_word = _html.escape(str(word))
-                    parts.append(f'<div class="text-xs text-gray-400">• {safe_word}: {int(count)}</div>')
-            parts.append("</div>")
-
-        if result.get("overall"):
-            ov = result["overall"]
-            parts.append('<div class="border border-gray-700 rounded p-3 bg-gray-800">')
-            parts.append('<div class="text-xs font-semibold text-gray-400 mb-2">Overall</div>')
-            for label, field, color in [("Strengths", "top_strengths", "text-green-400"), ("Improvements", "top_improvements", "text-yellow-400")]:
-                items = ov.get(field, [])[:3]
-                if items:
-                    parts.append(f'<div class="text-xs {color} mt-1">{label}:</div>')
-                    for item in items:
-                        safe_item = _html.escape(str(item))
-                        parts.append(f'<div class="text-xs text-gray-400">• {safe_item}</div>')
-            if ov.get("interviewer_sentiment"):
-                safe_sent = _html.escape(str(ov["interviewer_sentiment"]))
-                parts.append(f'<div class="text-xs text-gray-500 mt-2">Interviewer sentiment: {safe_sent}</div>')
-            parts.append("</div>")
-
-        parts.append("</div>")
-        return HTMLResponse("".join(parts))
-    except Exception as e:
-        safe_e = _html.escape(str(e))
-        return HTMLResponse(f'<div class="text-red-400 text-sm">Error: {safe_e}</div>')
-
-
 # ---------------------------------------------------------------------------
 # Recruiters
 # ---------------------------------------------------------------------------
@@ -2004,6 +1833,9 @@ async def job_stage_update(request: Request):
 
     if result["status"] == "invalid_stage":
         return HTMLResponse('<div class="dim" style="padding:24px;">Invalid stage.</div>', status_code=400)
+    if result["status"] == "needs_reason":
+        msg = "That stage needs a reason. Use Dismiss here, or open the job page to decline."
+        return HTMLResponse(_html.escape(msg), status_code=400, headers=save_failed(msg))
     if result["status"] == "not_found":
         return HTMLResponse('<div class="dim" style="padding:24px;">Job not found.</div>', headers=SAVE_FAILED)
 

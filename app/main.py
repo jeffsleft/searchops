@@ -133,8 +133,10 @@ def _consume_jobs(runner):
             msg = job_queue.get(block=True, timeout=60)
         except queue.Empty:
             continue
-        except Exception:
-            log.exception("job queue read failed")
+        except Exception as e:
+            # Routine when Modal recycles or replaces this container: the blocking
+            # read is cut off mid-wait. One line, not a traceback.
+            log.warning("job queue read interrupted (%s); retrying", type(e).__name__)
             time.sleep(5)
             continue
         if not msg:
@@ -726,6 +728,44 @@ def _seed_hunt_targets_remote_impl():
     return {"inserted": inserted, "updated": updated}
 
 
+# One-off (2026-09-24, Jeff approved): bulk triage from the Discovered inbox was
+# recorded as i_declined before the 'dismissed' stage existed, inflating the
+# considered-decline count. Moves only jobs never applied to, declined straight out
+# of discovered/identified, whose latest decline note is one of the bulk-triage
+# reasons below. Real declines (in-office, culture, comp, anything researched)
+# stay put. Goes through record_stage_change so each move has a history row.
+# Invoke: `modal run app/admin.py::reclassify_triage_declines` (dry run), then
+# `--no-dry-run`.
+_TRIAGE_NOTE_PREFIXES = (
+    "60+ days old", "45+ days old", "Non-US region", "Below target seniority",
+    "Could not score automatically", "JD fetch hung", "Declined per W1-T backlog triage",
+)
+
+
+def _reclassify_triage_declines_impl(dry_run: bool = True):
+    from app.models import get_db
+    from app.services.pipeline_service import record_stage_change
+
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT j.id, j.company, h.notes FROM jobs j
+               JOIN pipeline_history h ON h.id = (
+                   SELECT MAX(h2.id) FROM pipeline_history h2
+                   WHERE h2.job_id = j.id AND h2.to_stage = 'i_declined')
+               WHERE j.pipeline_stage = 'i_declined' AND j.applied_at IS NULL
+                 AND h.from_stage IN ('discovered', 'identified')"""
+        ).fetchall()
+        targets = [r for r in rows if (r["notes"] or "").startswith(_TRIAGE_NOTE_PREFIXES)]
+        print(f"[reclassify] {len(targets)} of {len(rows)} inbox declines match a triage note (dry_run={dry_run})")
+        for r in targets:
+            print(f"[reclassify] id={r['id']} '{r['company']}' — {(r['notes'] or '')[:50]!r}")
+            if not dry_run:
+                record_stage_change(conn, r["id"], "dismissed",
+                                    note="Reclassified: bulk inbox triage, not a considered decline",
+                                    changed_by="reclassify")
+    return {"dry_run": dry_run, "matched": len(targets), "moved": 0 if dry_run else len(targets)}
+
+
 # Admin one-offs above, run by the web container's job consumer.
 ADMIN_JOBS = {
     name: globals()[f"_{name}_impl"]
@@ -733,7 +773,7 @@ ADMIN_JOBS = {
         "diagnose_stubs", "remediate_bucket1", "rescore_stale", "stamp_applied_at",
         "correct_erroneous_applied_at", "stamp_careers_url", "change_pipeline_stage",
         "bulk_close_listings", "backfill_decline_outcomes", "backfill_legacy_research",
-        "seed_hunt_targets_remote",
+        "seed_hunt_targets_remote", "reclassify_triage_declines",
     )
 }
 

@@ -46,7 +46,7 @@ As of September 24, 2026, from the production database:
 - 109 target companies scanned for new roles every day.
 - 370 roles found.
 - 44 cut by the rules alone. 197 scored in full.
-- 47 scored 8 or higher.
+- 47 scored 8 or higher. Of the 115 roles the scanner found on its own, only 7 did. Most high scores were roles I picked by hand.
 - 19 applications sent, each built from its evidence.
 
 A strong role gets an application kit: the angle to lead with, the evidence, tailored resume bullets and a draft cover letter. Interview prep draws on the same evidence.

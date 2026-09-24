@@ -123,6 +123,7 @@ def update_job_stage(job_id: int, new_stage: str) -> dict:
 
     Returns one of:
       {"status": "invalid_stage"}
+      {"status": "needs_reason"}   (decline-type stages go through the dialog)
       {"status": "not_found"}
       {"status": "ok", "job": dict, "promoted": bool, "stage_label": str}
     """
@@ -130,6 +131,11 @@ def update_job_stage(job_id: int, new_stage: str) -> dict:
 
     if new_stage not in STAGES:
         return {"status": "invalid_stage"}
+    # Declines, closures and duplicates need a reason on record; this quick
+    # dropdown has no reason field, so those go through the job page's dialog.
+    from app.pipeline.tracker import REASON_REQUIRED_STAGES
+    if new_stage in REASON_REQUIRED_STAGES:
+        return {"status": "needs_reason"}
 
     with get_db() as conn:
         # Update job status and auto_rejected fields

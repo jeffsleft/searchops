@@ -85,3 +85,11 @@ def test_update_job_stage_persists_and_flags_promotion():
             (job_id,),
         ).fetchone()
     assert hist["to_stage"] == "outreach"
+
+
+def test_update_job_stage_refuses_stages_that_need_a_reason():
+    job_id = _insert_job(company="Acme", job_title="RevOps", pipeline_stage="discovered")
+    for stage in ("i_declined", "they_declined", "job_listing_closed", "duplicate"):
+        assert update_job_stage(job_id, stage) == {"status": "needs_reason"}
+    with get_db() as conn:
+        assert conn.execute("SELECT pipeline_stage FROM jobs WHERE id=?", (job_id,)).fetchone()[0] == "discovered"

@@ -42,11 +42,14 @@
 
       <div>
         <div class="dim" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px;">Scoring system</div>
-        <p style="font-size:13px;line-height:1.7;margin:0 0 8px;">Scores are 0–10. Two layers:</p>
+        <p style="font-size:13px;line-height:1.7;margin:0 0 8px;">Scores are 0–10, built in four steps:</p>
         <ul style="font-size:13px;line-height:1.9;margin:0;padding-left:20px;">
-          <li><strong>Deterministic layer</strong> — hard rules: dealbreakers (comp floor, geography, sector blacklist), weighted criteria (greenfield scope, tech stack, company stage). Runs first; auto-rejects before touching the LLM.</li>
-          <li><strong>LLM adjustment</strong> — Gemini reads the full JD and adjusts ±2 points based on qualitative signals not captured by the rules.</li>
+          <li><strong>Rules first</strong> — a blocked sector or pay below your floor scores 0. No AI runs.</li>
+          <li><strong>Evidence</strong> — each job requirement is matched to a named accomplishment from your inventory. The biggest factor (−4 to +4).</li>
+          <li><strong>Judgment</strong> — the AI weighs the shape of the role: leadership seat, reporting line, build or maintain (±1.5).</li>
+          <li><strong>Signals</strong> — quick checks for remote, pricing model, greenfield and tech stack, capped at +2.5.</li>
         </ul>
+        <p class="dim" style="font-size:12px;line-height:1.6;margin:8px 0 0;">No role scores above 7 unless it meets all five must-haves: pay, a real leadership seat, an acceptable sector, a build mandate and strong evidence. Full method under Methodology.</p>
         <div style="margin-top:12px;">
           <a href="/settings/rubric" class="btn btn-sm btn-ghost" style="text-decoration:none;">View Detailed Scoring Rubric →</a>
         </div>

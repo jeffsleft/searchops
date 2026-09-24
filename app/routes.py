@@ -388,14 +388,15 @@ async def score_job_post(request: Request):
     result = score_new_job_from_input(form.get("url", ""), form.get("jd_text", ""))
 
     if result["status"] == "missing_input":
-        return HTMLResponse('<div class="text-red-400 text-sm">Provide a URL or paste JD text.</div>')
+        return HTMLResponse('<div class="text-red-400 text-sm">Provide a URL or paste JD text.</div>', headers=SAVE_FAILED)
     if result["status"] == "duplicate":
         safe_company = _html.escape(result["company"])
-        return HTMLResponse(f'<div class="dim" style="font-size:13px;">Already scored — <a href="/job/{result["job_id"]}">{safe_company}</a></div>')
+        return HTMLResponse(f'<div class="dim" style="font-size:13px;">Already scored — <a href="/job/{result["job_id"]}">{safe_company}</a></div>',
+                            headers={"X-Save-Status": "noop", "X-Save-Message": "Already%20scored.%20Nothing%20changed."})
     if result["status"] == "fetch_failed":
-        return HTMLResponse('<div class="text-red-400 text-sm">Could not fetch that URL. Paste the JD text instead.</div>')
+        return HTMLResponse('<div class="text-red-400 text-sm">Could not fetch that URL. Paste the JD text instead.</div>', headers=SAVE_FAILED)
     if result["status"] == "insufficient":
-        return HTMLResponse('<div class="text-red-400 text-sm">Fetched content was too thin to score (likely a bot-blocked or cached placeholder page). Paste the JD text instead.</div>')
+        return HTMLResponse('<div class="text-red-400 text-sm">Fetched content was too thin to score (likely a bot-blocked or cached placeholder page). Paste the JD text instead.</div>', headers=SAVE_FAILED)
 
     score_record = result["score_record"]
     tier = classify_score(score_record.get("final_score", 0))
@@ -615,7 +616,7 @@ async def job_cover_letter_generate(request: Request):
         logging.error("cover letter generation failed for job %s: %s", job_id, e)
         return HTMLResponse(
             f'<div style="color:var(--tier-pass);font-size:13px;">❌ Error: {_html.escape(str(e)[:120])}</div>'
-        )
+        , headers=SAVE_FAILED)
     return HTMLResponse(_cover_letter_fragment(job_id, cl))
 
 
@@ -771,17 +772,17 @@ async def job_generate_brief(request: Request):
     with get_db() as conn:
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if not row:
-        return HTMLResponse('<div style="color:var(--tier-pass);font-size:13px;">❌ Job not found.</div>')
+        return HTMLResponse('<div style="color:var(--tier-pass);font-size:13px;">❌ Job not found.</div>', headers=SAVE_FAILED)
     try:
         from app.pipeline.strategy_brief import get_or_create_brief
         brief = get_or_create_brief(job_id)
         content = brief.get("content", "") if brief else ""
         if not content:
-            return HTMLResponse('<div style="color:var(--tier-pass);font-size:13px;">❌ Brief generation returned empty — check research data.</div>')
+            return HTMLResponse('<div style="color:var(--tier-pass);font-size:13px;">❌ Brief generation returned empty — check research data.</div>', headers=SAVE_FAILED)
         return HTMLResponse(_render_brief_html(content))
     except Exception as e:
         logging.error("generate_brief failed for job %s: %s", job_id, e)
-        return HTMLResponse(f'<div style="color:var(--tier-pass);font-size:13px;">❌ Error: {_html.escape(str(e)[:120])}</div>')
+        return HTMLResponse(f'<div style="color:var(--tier-pass);font-size:13px;">❌ Error: {_html.escape(str(e)[:120])}</div>', headers=SAVE_FAILED)
 
 
 async def job_trigger_research(request: Request):
@@ -821,6 +822,22 @@ async def job_drawer(request: Request):
         for fid in job.get("flags_list", []) if fid in FLAGS
     ]
     return HTMLResponse(jinja.get_template("components/job_drawer.html").render(job=job, flags_fired=flags_fired))
+
+
+# Write routes that fail but still answer 200 (so htmx swaps the inline error
+# into the page) mark the response; base.html then shows "Not saved" instead of
+# its default "Saved" toast.
+SAVE_FAILED = {"X-Save-Status": "failed"}
+
+
+def save_failed(reason: str) -> dict:
+    """SAVE_FAILED plus the reason, for buttons that don't show the response body
+    (hx-swap="none"). URL-encoded: header values must be Latin-1."""
+    from urllib.parse import quote
+    return {**SAVE_FAILED, "X-Save-Message": quote(reason)}
+# A rejected note must not replace #job-notes-list with the (empty) main body;
+# only the out-of-band status line updates.
+NOTE_NOT_SAVED = {**SAVE_FAILED, "HX-Reswap": "none"}
 
 
 async def job_update_stage(request: Request):
@@ -872,12 +889,12 @@ async def job_save_notes(request: Request):
         return HTMLResponse(
             f'<span style="color:var(--tier-pass);font-size:11px;" '
             f'hx-swap-oob="true" id="notes-save-indicator">{_html.escape(msg)}</span>'
-        )
+        , headers=NOTE_NOT_SAVED)
     if result["status"] == "empty":
         return HTMLResponse(
             '<span style="color:var(--tier-pass);font-size:11px;" '
             'hx-swap-oob="true" id="notes-save-indicator">Nothing to save</span>'
-        )
+        , headers=NOTE_NOT_SAVED)
 
     list_html = jinja.get_template("components/job_notes_list.html").render(
         notes=get_recent_notes(job_id, limit=5)
@@ -995,7 +1012,7 @@ async def company_trigger_research(request: Request):
     with get_db() as conn:
         co = conn.execute("SELECT * FROM companies WHERE id = ?", (co_id,)).fetchone()
     if not co:
-        return HTMLResponse('<div class="dim" style="padding:24px;">Company not found.</div>')
+        return HTMLResponse('<div class="dim" style="padding:24px;">Company not found.</div>', headers=SAVE_FAILED)
     # Background runner, not asyncio.create_task: routes run under offload(), whose
     # per-request event loop cancels any task still pending when the response returns.
     started = request.app.state.background.submit(
@@ -1058,11 +1075,11 @@ async def company_promote(request: Request):
     job_title = form.get("job_title", "").strip()
     url = form.get("url", "").strip()
     if not job_title:
-        return HTMLResponse('<span style="color:var(--tier-skip);font-size:12px;">Job title required.</span>')
+        return HTMLResponse('<span style="color:var(--tier-skip);font-size:12px;">Job title required.</span>', headers=SAVE_FAILED)
     with get_db() as conn:
         co = conn.execute("SELECT * FROM companies WHERE id = ?", (co_id,)).fetchone()
         if not co:
-            return HTMLResponse('<span style="color:var(--tier-skip);font-size:12px;">Company not found.</span>')
+            return HTMLResponse('<span style="color:var(--tier-skip);font-size:12px;">Company not found.</span>', headers=SAVE_FAILED)
         conn.execute(
             """INSERT INTO jobs (company, company_id, job_title, url, date_found, pipeline_stage, sector, status)
                VALUES (?, ?, ?, ?, ?, 'identified', ?, 'active')""",
@@ -1712,7 +1729,7 @@ _SYNC_POLLING_FRAGMENT = (
 
 
 async def manual_sync(request: Request):
-    return HTMLResponse('<span style="color:var(--tier-pass);">⚠️ Google Sheets sync removed. Add jobs via the Score a Job form.</span>')
+    return HTMLResponse('<span style="color:var(--tier-pass);">⚠️ Google Sheets sync removed. Add jobs via the Score a Job form.</span>', headers=SAVE_FAILED)
 
 
 async def api_sync_status(request: Request):
@@ -1752,7 +1769,7 @@ async def api_sync_status(request: Request):
 
 
 async def fix_sheet_headers(request: Request):
-    return HTMLResponse("Google Sheets removed.")
+    return HTMLResponse("Google Sheets removed.", headers=SAVE_FAILED)
 
 
 async def backfill_question_themes(request: Request):
@@ -1942,10 +1959,12 @@ async def job_promote_from_discovery(request: Request):
     job_id = int(request.path_params["job_id"])
     result = promote_job_from_discovery(job_id)
     if result["status"] == "not_found":
-        return HTMLResponse('<div class="text-red-400 text-sm">Job not found</div>')
+        return HTMLResponse('<div class="text-red-400 text-sm">Job not found</div>',
+                            headers=save_failed("Job not found."))
     if result["status"] == "stage_error":
         safe_err = _html.escape(result["error"])
-        return HTMLResponse(f'<div class="text-red-400 text-sm">{safe_err}</div>')
+        return HTMLResponse(f'<div class="text-red-400 text-sm">{safe_err}</div>',
+                            headers=save_failed(result["error"]))
     return RedirectResponse(url=f"/job/{job_id}", status_code=302)
 
 
@@ -1957,7 +1976,8 @@ async def job_dismiss_from_discovery(request: Request):
     result = advance_stage(job_id, 'i_declined', decline_reason='dismissed_from_discovery')
     if not result["ok"]:
         safe_err = _html.escape(result["error"])
-        return HTMLResponse(f'<div class="text-red-400 text-sm">{safe_err}</div>')
+        return HTMLResponse(f'<div class="text-red-400 text-sm">{safe_err}</div>',
+                            headers=save_failed(result["error"]))
 
     return RedirectResponse(url="/discovered", status_code=302)
 
@@ -1971,7 +1991,7 @@ async def job_stage_update(request: Request):
     if result["status"] == "invalid_stage":
         return HTMLResponse('<div class="dim" style="padding:24px;">Invalid stage.</div>', status_code=400)
     if result["status"] == "not_found":
-        return HTMLResponse('<div class="dim" style="padding:24px;">Job not found.</div>')
+        return HTMLResponse('<div class="dim" style="padding:24px;">Job not found.</div>', headers=SAVE_FAILED)
 
     job = _enrich_job(result["job"])
     fit_bullets = json.loads(job.get("match_bullets_json") or "[]")
@@ -2000,15 +2020,15 @@ async def job_fetch_and_score(request: Request):
     result = fetch_and_score_stub(job_id)
 
     if result["status"] == "not_found":
-        return HTMLResponse('<div class="dim" style="padding:24px;">Job not found.</div>')
+        return HTMLResponse('<div class="dim" style="padding:24px;">Job not found.</div>', headers=SAVE_FAILED)
     if result["status"] == "no_url":
-        return HTMLResponse('<div class="dim" style="padding:24px;">No URL stored for this job — cannot fetch.</div>')
+        return HTMLResponse('<div class="dim" style="padding:24px;">No URL stored for this job — cannot fetch.</div>', headers=SAVE_FAILED)
     if result["status"] == "linkedin_blocked":
         return HTMLResponse(
             '<div style="padding:12px;font-size:13px;color:var(--tier-pass);">'
             '❌ LinkedIn blocks automated fetching. Use the "Paste JD text" form below.'
             '</div>'
-        )
+        , headers=SAVE_FAILED)
     if result["status"] == "error":
         return HTMLResponse(
             f'<div style="padding:20px;font-size:13px;color:var(--tier-pass);">'
@@ -2016,7 +2036,7 @@ async def job_fetch_and_score(request: Request):
             f'Try pasting the JD text into '
             f'<a href="/" style="text-decoration:underline;">Dashboard → Score a Job</a>.'
             f'</div>'
-        )
+        , headers=SAVE_FAILED)
 
     fs = result.get("score")
     score_display = f" — score: {fs:.1f}" if fs else ""
@@ -2035,14 +2055,14 @@ async def job_paste_and_score(request: Request):
     jd_text = (form.get("jd_text") or "").strip()
 
     if not jd_text:
-        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ No JD text provided.</div>')
+        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ No JD text provided.</div>', headers=SAVE_FAILED)
     if len(jd_text) < 100:
-        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ JD text too short — paste the full job description.</div>')
+        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ JD text too short — paste the full job description.</div>', headers=SAVE_FAILED)
 
     with get_db() as conn:
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if not row:
-        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ Job not found.</div>')
+        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ Job not found.</div>', headers=SAVE_FAILED)
 
     result = score_job_from_text_and_persist(job_id, jd_text, transition_stage=True)
 
@@ -2052,7 +2072,7 @@ async def job_paste_and_score(request: Request):
             f'<div style="padding:12px;font-size:13px;color:var(--tier-pass);">'
             f'❌ Scoring error: {_html.escape(error_msg)}'
             f'</div>'
-        )
+        , headers=SAVE_FAILED)
 
     fs = result.get("score")
     score_display = f" — score: {fs:.1f}" if fs else ""
@@ -2071,12 +2091,12 @@ async def job_rescore(request: Request):
     with get_db() as conn:
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
     if not row:
-        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ Job not found.</div>')
+        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ Job not found.</div>', headers=SAVE_FAILED)
 
     job = dict(row)
     jd_text = (job.get("jd_text") or "").strip()
     if len(jd_text) < 100:
-        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ No JD text in DB — paste the JD first.</div>')
+        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ No JD text in DB — paste the JD first.</div>', headers=SAVE_FAILED)
 
     result = score_job_from_text_and_persist(job_id, jd_text, transition_stage=False)
 
@@ -2086,7 +2106,7 @@ async def job_rescore(request: Request):
             f'<div style="padding:12px;font-size:13px;color:var(--tier-pass);">'
             f'❌ Scoring error: {_html.escape(error_msg)}'
             f'</div>'
-        )
+        , headers=SAVE_FAILED)
 
     fs = result.get("score")
     score_display = f" — score: {fs:.1f}" if fs else ""
@@ -2161,13 +2181,13 @@ async def linkedin_add(request: Request):
     skip_score = (form.get("action") or "").strip() == "declined"
 
     if not url:
-        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ URL is required.</div>')
+        return HTMLResponse('<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ URL is required.</div>', headers=SAVE_FAILED)
 
     try:
         from app.security.url_guard import validate_url
         url = validate_url(url)
     except ValueError as e:
-        return HTMLResponse(f'<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ Invalid URL: {_html.escape(str(e))}</div>')
+        return HTMLResponse(f'<div style="padding:12px;font-size:13px;color:var(--tier-pass);">❌ Invalid URL: {_html.escape(str(e))}</div>', headers=SAVE_FAILED)
 
     result = handle_job_add_with_optional_scoring(url, job_title, company, skip_score)
     return _render_job_add_result(result)
@@ -2192,7 +2212,7 @@ async def admin_retry_stubs(request: Request):
         return HTMLResponse('<span style="font-size:13px;">✅ Retried stubs. <a href="/discovered" style="text-decoration:underline;">Check Discovered →</a></span>')
     except Exception as e:
         logging.error("admin_retry_stubs error: %s", e)
-        return HTMLResponse(f'<span style="color:var(--tier-pass);font-size:13px;">❌ Retry failed: {_html.escape(str(e))}</span>')
+        return HTMLResponse(f'<span style="color:var(--tier-pass);font-size:13px;">❌ Retry failed: {_html.escape(str(e))}</span>', headers=SAVE_FAILED)
 
 
 async def admin_import_tier_a(request: Request):
@@ -2204,11 +2224,11 @@ async def admin_import_tier_a(request: Request):
     if result["status"] == "fetch_error":
         return HTMLResponse(
             f'<span style="color:var(--tier-skip);font-size:13px;">Sheet fetch failed: {_html.escape(result["error"])}</span>'
-        )
+        , headers=SAVE_FAILED)
     if result["status"] == "db_error":
         return HTMLResponse(
             f'<span style="color:var(--tier-skip);font-size:13px;">DB error: {_html.escape(result["error"])}</span>'
-        )
+        , headers=SAVE_FAILED)
 
     return HTMLResponse(
         f'<span style="font-size:13px;color:var(--text);">'
@@ -2330,9 +2350,13 @@ async def targets_toggle(request: Request):
     co_id = int(request.path_params["co_id"])
     with get_db() as conn:
         current = conn.execute("SELECT hunt_enabled FROM companies WHERE id = ?", (co_id,)).fetchone()
-        if current:
-            new_val = 0 if current['hunt_enabled'] else 1
-            conn.execute("UPDATE companies SET hunt_enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_val, co_id))
+        if not current:
+            return HTMLResponse("Company not found.", status_code=404)
+        new_val = 0 if current['hunt_enabled'] else 1
+        conn.execute("UPDATE companies SET hunt_enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_val, co_id))
+    if request.headers.get("HX-Request"):
+        return HTMLResponse(jinja.get_template("components/_monitor_toggle.html").render(
+            target_id=co_id, hunt_enabled=new_val))
     return RedirectResponse(url="/targets", status_code=302)
 
 
@@ -2373,11 +2397,11 @@ async def targets_scan_now(request: Request):
     result = await asyncio.to_thread(scan_target_company, co_id)
 
     if result["status"] == "not_found":
-        return HTMLResponse('<div class="dim" style="font-size:12px;">Company not found.</div>')
+        return HTMLResponse('<div class="dim" style="font-size:12px;">Company not found.</div>', headers=SAVE_FAILED)
     if result["status"] == "error":
         return HTMLResponse(
             f'<div style="color:var(--tier-pass);font-size:12px;">Scan error: {_html.escape(result["error"][:120])}</div>'
-        )
+        , headers=SAVE_FAILED)
     return _render_scan_status(co_id, result["scan"])
 
 

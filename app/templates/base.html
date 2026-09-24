@@ -183,11 +183,51 @@
       var label = el && el.dataset && el.dataset.htmxBeforeLabel;
       if (label) { el.textContent = label; el.disabled = true; }
     });
+    // Save feedback for every htmx write (POST/PATCH/PUT/DELETE). The server's
+    // answer decides the message, never the click: "Saved" on success, a red
+    // "Not saved" with the reason otherwise. An element opts out of the success
+    // toast with data-save-toast="off" when it already shows its own.
+    function saveOutcome(evt) {
+      var xhr = evt.detail.xhr;
+      if (!xhr || xhr.status === 0) return { ok: false, why: 'No connection.' };
+      // An expired session redirects to the login page, which answers 200.
+      var url = xhr.responseURL || '';
+      if (url.indexOf('/login') !== -1 && location.pathname.indexOf('/login') === -1) {
+        return { ok: false, why: 'Your session expired. Reload the page and sign in.' };
+      }
+      if (!evt.detail.successful) return { ok: false, why: 'Server error ' + xhr.status + '.' };
+      // Routes that fail with 200 (so the inline error still swaps in) say so
+      // here, with the reason when the page won't show the body.
+      var status = xhr.getResponseHeader('X-Save-Status');
+      var reason = xhr.getResponseHeader('X-Save-Message');
+      reason = reason ? decodeURIComponent(reason) : '';
+      if (status === 'failed') return { ok: false, why: reason || 'See the message on the page.' };
+      if (status === 'noop') return { ok: true, msg: reason || 'Nothing changed.' };
+      return { ok: true };
+    }
+    function isWrite(evt) {
+      var verb = evt.detail.requestConfig && evt.detail.requestConfig.verb;
+      return verb && verb.toLowerCase() !== 'get';
+    }
     document.body.addEventListener('htmx:afterRequest', function(evt) {
       document.getElementById('htmx-indicator').style.display = 'none';
-      // data-htmx-after dispatcher — CSP-safe replacement for hx-on::after-request
       var el = evt.target;
       var action = el && el.dataset && el.dataset.htmxAfter;
+      if (isWrite(evt)) {
+        var out = saveOutcome(evt);
+        if (!out.ok) {
+          window.showToast && window.showToast('Not saved. ' + out.why, 'error');
+          // Undo data-htmx-before-label so the button can be tried again.
+          if (el && el.dataset && el.dataset.htmxBeforeLabel) el.disabled = false;
+          // Close the scoring pop-up, but never reload or reset a form over a failed save.
+          if (action === 'dismiss-scoring') window.dismissScoringToast && window.dismissScoringToast();
+          return;
+        }
+        if (action !== 'reload' && !(el.dataset && el.dataset.saveToast === 'off')) {
+          window.showToast && window.showToast(out.msg || 'Saved');
+        }
+      }
+      // data-htmx-after dispatcher — CSP-safe replacement for hx-on::after-request
       if (!action) return;
       if (action === 'reload') {
         setTimeout(function() { location.reload(); }, 300);
@@ -295,6 +335,28 @@
       });
 
       // showToast — lightweight bottom-right toast used by stage changes and kanban moves.
+      // saveRequest — the one way page scripts write via fetch(). Resolves with the
+      // parsed JSON body (or {} for a non-JSON success); rejects with an Error whose
+      // message says why, ready for showToast(..., 'error'). fetch() alone resolves
+      // on any HTTP status, and an expired session answers with the login page
+      // (a redirect to a 200), which is how saves used to fail silently.
+      window.saveRequest = function(url, method, body) {
+        return fetch(url, {
+          method: method || 'POST', body: body, credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        }).then(function(r) {
+          if (r.redirected || r.status === 401) {
+            throw new Error('Your session expired. Reload the page and sign in.');
+          }
+          return r.text().then(function(text) {
+            var data = {};
+            try { data = JSON.parse(text); } catch (_) {}
+            if (!r.ok || data.ok === false) throw new Error(data.error || ('Server error ' + r.status + '.'));
+            return data;
+          });
+        }, function() { throw new Error('No connection.'); });
+      };
+
       // Pass kind='error' for failures: red border, stays up longer.
       window.showToast = function(msg, kind) {
         var isError = kind === 'error';

@@ -232,21 +232,7 @@
       fd.append('to_stage', stage);
       if (reason) fd.append('decline_reason', reason);
       if (notes)  fd.append('notes', notes);
-      return fetch('/job/' + jobId + '/stage', {method:'POST', body:fd, credentials:'same-origin', headers:{"X-Requested-With":"XMLHttpRequest"}})
-        .then(checkSaved, function() { throw new Error('Network error.'); });
-    }
-
-    // A save only counts when the server answers {"ok": true}. fetch() resolves on
-    // any HTTP status, and an expired session follows a redirect to the login page
-    // (200 HTML) — both used to be reported as "Moved".
-    function checkSaved(r) {
-      if (r.redirected || r.status === 401) {
-        throw new Error('Your session expired. Reload the page and sign in.');
-      }
-      return r.json().catch(function() { return {}; }).then(function(body) {
-        if (!r.ok || !body.ok) throw new Error(body.error || ('Server error ' + r.status + '.'));
-        return body;
-      });
+      return window.saveRequest('/job/' + jobId + '/stage', 'POST', fd);
     }
 
     function labelOf(stage) { return STAGE_LABELS[stage] || stage; }

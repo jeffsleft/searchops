@@ -1,0 +1,7 @@
+{# Pause / resume discovery scanning for one hunt target. The route answers with
+   this same fragment, so the label flips only once the server has saved it. #}
+<form hx-post="/targets/{{ target_id }}/toggle" hx-target="this" hx-swap="outerHTML" style="display:inline;">
+  <button type="submit" class="btn btn-sm btn-ghost">
+    {% if hunt_enabled %}Pause{% else %}Enable Monitoring{% endif %}
+  </button>
+</form>

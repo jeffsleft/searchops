@@ -157,11 +157,7 @@
                 data-htmx-before-label="Scanning…">
           Scan now
         </button>
-        <form hx-post="/targets/{{ target.id }}/toggle" hx-swap="none" style="display:inline;">
-          <button type="submit" class="btn btn-sm btn-ghost">
-            {% if target.hunt_enabled %}Pause{% else %}Enable Monitoring{% endif %}
-          </button>
-        </form>
+        {% with target_id=target.id, hunt_enabled=target.hunt_enabled %}{% include "components/_monitor_toggle.html" %}{% endwith %}
         {% else %}
         <div class="dim" style="font-size:12px;">Add a careers URL to enable ATS scanning.</div>
         {% endif %}

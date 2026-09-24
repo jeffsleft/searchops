@@ -68,13 +68,18 @@
         if (!newLabel) { location.reload(); return; }
         const fd = new FormData();
         fd.append('label', newLabel);
-        fetch('/prep/sessions/' + sid, { method: 'PATCH', body: fd, headers: {'X-Requested-With': 'XMLHttpRequest'} })
+        window.saveRequest('/prep/sessions/' + sid, 'PATCH', fd)
           .then(() => {
             const span = document.createElement('span');
             span.className = 'prep-session-label';
             span.style.cursor = 'pointer';
             span.textContent = newLabel;
             inp.replaceWith(span);
+            window.showToast && window.showToast('Saved');
+          })
+          .catch((err) => {
+            window.showToast && window.showToast('Not saved. ' + err.message, 'error');
+            inp.focus();
           });
       });
       input.addEventListener('keydown', function(e) {

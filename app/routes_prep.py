@@ -211,13 +211,7 @@ async def session_update(request: Request):
     if not label:
         return HTMLResponse("Label cannot be empty", status_code=400)
 
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE interview_sessions SET label = ?, updated_at = ? WHERE id = ?",
-            (label, datetime.now(timezone.utc).isoformat(), session_id),
-        )
-
-    return HTMLResponse("")
+    return _save_session_fields(session_id, {"label": label})
 
 
 async def session_delete(request: Request):
@@ -285,91 +279,59 @@ async def sessions_reorder(request: Request):
 
 # ===== Session content fields =====
 
+def _save_session_fields(session_id: int, fields: dict) -> HTMLResponse:
+    """Autosave write for the prep cards. Column names come from the callers
+    below, never from the request. A missing session is a 404, so the page
+    shows "Not saved" instead of silently dropping what was typed."""
+    if not fields:
+        return HTMLResponse("")
+    fields = {**fields, "updated_at": datetime.now(timezone.utc).isoformat()}
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    with get_db() as conn:
+        cur = conn.execute(
+            f"UPDATE interview_sessions SET {set_clause} WHERE id = ?",
+            [*fields.values(), session_id],
+        )
+    if cur.rowcount == 0:
+        return HTMLResponse("Interview session not found.", status_code=404)
+    return HTMLResponse("")
+
+
 async def session_set_hook(request: Request):
     """PATCH /prep/sessions/{session_id}/hook — Update opening_hook."""
-    session_id = int(request.path_params['session_id'])
     form = await request.form()
-    value = form.get('value', '')
-
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE interview_sessions SET opening_hook = ?, updated_at = ? WHERE id = ?",
-            (value, datetime.now(timezone.utc).isoformat(), session_id),
-        )
-
-    return HTMLResponse("")
+    return _save_session_fields(int(request.path_params['session_id']),
+                                {"opening_hook": form.get('value', '')})
 
 
 async def session_set_schedule(request: Request):
     """PATCH /prep/sessions/{session_id}/schedule — Update schedule fields (partial)."""
-    session_id = int(request.path_params['session_id'])
     form = await request.form()
-
-    updates = {}
-    if 'date' in form:
-        updates['schedule_date'] = form.get('date', '')
-    if 'time' in form:
-        updates['schedule_time'] = form.get('time', '')
-    if 'tz' in form:
-        updates['schedule_tz'] = form.get('tz', '')
-    if 'mode' in form:
-        updates['schedule_mode'] = form.get('mode', '')
-    if 'link' in form:
-        updates['schedule_link'] = form.get('link', '')
-
-    if updates:
-        updates['updated_at'] = datetime.now(timezone.utc).isoformat()
-        set_clause = ', '.join([f"{k} = ?" for k in updates.keys()])
-        values = list(updates.values()) + [session_id]
-        with get_db() as conn:
-            conn.execute(f"UPDATE interview_sessions SET {set_clause} WHERE id = ?", values)
-
-    return HTMLResponse("")
+    columns = {'date': 'schedule_date', 'time': 'schedule_time', 'tz': 'schedule_tz',
+               'mode': 'schedule_mode', 'link': 'schedule_link'}
+    fields = {col: form.get(key, '') for key, col in columns.items() if key in form}
+    return _save_session_fields(int(request.path_params['session_id']), fields)
 
 
 async def session_set_interviewers(request: Request):
     """PATCH /prep/sessions/{session_id}/interviewers — Update interviewers_notes."""
-    session_id = int(request.path_params['session_id'])
     form = await request.form()
-    value = form.get('value', '')
-
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE interview_sessions SET interviewers_notes = ?, updated_at = ? WHERE id = ?",
-            (value, datetime.now(timezone.utc).isoformat(), session_id),
-        )
-
-    return HTMLResponse("")
+    return _save_session_fields(int(request.path_params['session_id']),
+                                {"interviewers_notes": form.get('value', '')})
 
 
 async def session_set_scratchpad(request: Request):
     """PATCH /prep/sessions/{session_id}/scratchpad — Update scratchpad."""
-    session_id = int(request.path_params['session_id'])
     form = await request.form()
-    value = form.get('value', '')
-
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE interview_sessions SET scratchpad = ?, updated_at = ? WHERE id = ?",
-            (value, datetime.now(timezone.utc).isoformat(), session_id),
-        )
-
-    return HTMLResponse("")
+    return _save_session_fields(int(request.path_params['session_id']),
+                                {"scratchpad": form.get('value', '')})
 
 
 async def session_set_transcript(request: Request):
     """PATCH /prep/sessions/{session_id}/transcript — Update transcript."""
-    session_id = int(request.path_params['session_id'])
     form = await request.form()
-    value = form.get('value', '')
-
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE interview_sessions SET transcript = ?, updated_at = ? WHERE id = ?",
-            (value, datetime.now(timezone.utc).isoformat(), session_id),
-        )
-
-    return HTMLResponse("")
+    return _save_session_fields(int(request.path_params['session_id']),
+                                {"transcript": form.get('value', '')})
 
 
 # ===== Questions to ask =====

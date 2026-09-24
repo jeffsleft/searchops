@@ -672,7 +672,7 @@
     originalStage = newStage;
     stageSelect.classList.add('stage-changed-flash');
     setTimeout(function() { stageSelect.classList.remove('stage-changed-flash'); }, 600);
-    window.showToast && window.showToast('Moved to ' + stageLabel);
+    window.showToast && window.showToast('Saved: moved to ' + stageLabel);
   }
 
   stageSelect.addEventListener('change', function() {
@@ -680,13 +680,12 @@
     if (TERMINAL_STAGES.indexOf(chosen) === -1) {
       var fd = new FormData();
       fd.append('to_stage', chosen);
-      fetch('/job/{{ job.id }}/stage', {method:'POST', body:fd, headers:{"X-Requested-With":"XMLHttpRequest"}})
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.ok) applyStageChange(data.stage, data.stage_label);
-          else { stageSelect.value = originalStage; window.showToast && window.showToast('Error: ' + (data.error || 'Save failed')); }
-        })
-        .catch(function() { stageSelect.value = originalStage; });
+      window.saveRequest('/job/{{ job.id }}/stage', 'POST', fd)
+        .then(function(data) { applyStageChange(data.stage, data.stage_label); })
+        .catch(function(err) {
+          stageSelect.value = originalStage;
+          window.showToast && window.showToast('Not saved. ' + err.message, 'error');
+        });
     } else {
       pendingStage = chosen;
       stageSelect.value = originalStage;
@@ -722,16 +721,15 @@
     fd.append('notes', notesField.value);
     submitBtn.disabled = true;
     submitBtn.textContent = 'Saving…';
-    fetch('/job/{{ job.id }}/stage', {method:'POST', body:fd, headers:{"X-Requested-With":"XMLHttpRequest"}})
-      .then(function(r) { return r.json(); })
+    window.saveRequest('/job/{{ job.id }}/stage', 'POST', fd)
       .then(function(data) {
         dialog.close();
         submitBtn.disabled = false;
         submitBtn.textContent = 'Confirm';
-        if (data.ok) applyStageChange(data.stage, data.stage_label);
+        applyStageChange(data.stage, data.stage_label);
       })
-      .catch(function() {
-        errorBox.textContent = 'Save failed — please try again.';
+      .catch(function(err) {
+        errorBox.textContent = 'Not saved. ' + err.message;
         errorBox.style.display = 'block';
         submitBtn.disabled = false;
         submitBtn.textContent = 'Confirm';

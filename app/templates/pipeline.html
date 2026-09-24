@@ -163,7 +163,8 @@
 </div>{# end #pipeline-content #}
 
 <style>
-  .kanban-col-body.drop-target { background: color-mix(in oklch, var(--accent) 8%, transparent); outline: 1px dashed var(--accent); outline-offset: -4px; }
+  .kanban-col.drop-target { outline: 1px dashed var(--accent); outline-offset: -4px; }
+  .kcard.saving { opacity: 0.55; pointer-events: none; }
   .kcard[draggable="true"] { cursor: grab; }
   .kcard.dragging { opacity: 0.4; cursor: grabbing; }
 </style>
@@ -231,7 +232,46 @@
       fd.append('to_stage', stage);
       if (reason) fd.append('decline_reason', reason);
       if (notes)  fd.append('notes', notes);
-      return fetch('/job/' + jobId + '/stage', {method:'POST', body:fd, credentials:'same-origin', headers:{"X-Requested-With":"XMLHttpRequest"}});
+      return fetch('/job/' + jobId + '/stage', {method:'POST', body:fd, credentials:'same-origin', headers:{"X-Requested-With":"XMLHttpRequest"}})
+        .then(checkSaved, function() { throw new Error('Network error.'); });
+    }
+
+    // A save only counts when the server answers {"ok": true}. fetch() resolves on
+    // any HTTP status, and an expired session follows a redirect to the login page
+    // (200 HTML) — both used to be reported as "Moved".
+    function checkSaved(r) {
+      if (r.redirected || r.status === 401) {
+        throw new Error('Your session expired. Reload the page and sign in.');
+      }
+      return r.json().catch(function() { return {}; }).then(function(body) {
+        if (!r.ok || !body.ok) throw new Error(body.error || ('Server error ' + r.status + '.'));
+        return body;
+      });
+    }
+
+    function labelOf(stage) { return STAGE_LABELS[stage] || stage; }
+
+    // Non-terminal move from either the card dropdown or a drag: move the card now,
+    // dim it while saving, then confirm or put it back with the reason.
+    function moveAndSave(card, jobId, newStage, prevStage, sel) {
+      if (!moveCardOptimistic(card, newStage)) return;
+      if (sel) sel.value = newStage;
+      card.classList.add('saving');
+      card.setAttribute('draggable', 'false');
+      postStage(jobId, newStage, '', '')
+        .then(function() {
+          window.showToast && window.showToast('Saved: moved to ' + labelOf(newStage));
+        })
+        .catch(function(err) {
+          moveCardOptimistic(card, prevStage);
+          if (sel) sel.value = prevStage;
+          window.showToast && window.showToast(
+            'Not saved. ' + err.message + ' Card returned to ' + labelOf(prevStage) + '.', 'error');
+        })
+        .then(function() {
+          card.classList.remove('saving');
+          card.setAttribute('draggable', 'true');
+        });
     }
 
     // Move a card to a new column immediately, update column counts, update card metadata.
@@ -302,11 +342,11 @@
           dialog.close();
           // Terminal stage: remove from board immediately.
           if (card) removeCard(card);
-          window.showToast && window.showToast('Moved to ' + (STAGE_LABELS[toastStage] || toastStage));
+          window.showToast && window.showToast('Saved: moved to ' + labelOf(toastStage));
           pendingJobId = pendingStage = pendingSelect = pendingCard = null;
         })
-        .catch(function() {
-          errorBox.textContent = 'Save failed — please try again.';
+        .catch(function(err) {
+          errorBox.textContent = 'Not saved. ' + err.message;
           errorBox.style.display = 'block';
           submitBtn.disabled = false;
           submitBtn.textContent = 'Confirm';
@@ -329,22 +369,7 @@
           var card = sel.closest('.kcard');
           var prevStage = sel.dataset.currentStage;
           if (TERMINAL_STAGES.indexOf(chosen) === -1) {
-            // Optimistic: move card to new column right away.
-            moveCardOptimistic(card, chosen);
-            postStage(jobId, chosen, '', '')
-              .then(function(r) {
-                if (r.ok || r.redirected) {
-                  window.showToast && window.showToast('Moved to ' + (STAGE_LABELS[chosen] || chosen));
-                } else {
-                  moveCardOptimistic(card, prevStage);
-                  sel.value = prevStage;
-                }
-              })
-              .catch(function() {
-                // Revert on network/server error.
-                moveCardOptimistic(card, prevStage);
-                sel.value = prevStage;
-              });
+            moveAndSave(card, jobId, chosen, prevStage, sel);
           } else {
             sel.value = prevStage;
             openDeclineDialog(jobId, chosen, sel, card);
@@ -366,7 +391,7 @@
         });
         card.addEventListener('dragend', function() {
           card.classList.remove('dragging');
-          document.querySelectorAll('.kanban-col-body.drop-target').forEach(function(c) { c.classList.remove('drop-target'); });
+          document.querySelectorAll('.kanban-col.drop-target').forEach(function(c) { c.classList.remove('drop-target'); });
           dragId = null; dragSrcCol = null; dragCardEl = null;
         });
         card.addEventListener('click', function(e) {
@@ -377,7 +402,11 @@
         card.style.cursor = 'pointer';
       });
 
-      root.querySelectorAll('.kanban-col-body').forEach(function(col) {
+      // The whole column (header included) is the drop zone. Only the body used to
+      // be, so a drop on the column title silently did nothing.
+      root.querySelectorAll('.kanban-col').forEach(function(col) {
+        var body = col.querySelector('.kanban-col-body');
+        if (!body) return;
         col.addEventListener('dragover', function(e) {
           if (!dragId) return;
           e.preventDefault();
@@ -385,31 +414,21 @@
           col.classList.add('drop-target');
         });
         col.addEventListener('dragleave', function(e) {
-          if (e.target === col) col.classList.remove('drop-target');
+          if (!col.contains(e.relatedTarget)) col.classList.remove('drop-target');
         });
         col.addEventListener('drop', function(e) {
           if (!dragId) return;
           e.preventDefault();
-          var newStage = col.dataset.stage;
+          var newStage = body.dataset.stage;
           col.classList.remove('drop-target');
           if (newStage === dragSrcCol) return;
           var jobId = dragId;
           var card  = dragCardEl;
           var prev  = dragSrcCol;
+          if (!card) return;
           if (TERMINAL_STAGES.indexOf(newStage) === -1) {
-            // Optimistic: card is already in the drop target visually (browser moved it).
-            // Just update metadata and save.
-            if (card) { card.dataset.stage = newStage; var s = card.querySelector('.kanban-stage-select'); if (s) { s.value = newStage; s.dataset.currentStage = newStage; } }
-            updateColCounts();
-            postStage(jobId, newStage, '', '')
-              .then(function(r) {
-                if (r.ok || r.redirected) {
-                  window.showToast && window.showToast('Moved to ' + (STAGE_LABELS[newStage] || newStage));
-                } else {
-                  if (card) moveCardOptimistic(card, prev);
-                }
-              })
-              .catch(function() { if (card) moveCardOptimistic(card, prev); });
+            // Browsers do not move the dragged element on drop; move it ourselves.
+            moveAndSave(card, jobId, newStage, prev, card.querySelector('.kanban-stage-select'));
           } else {
             openDeclineDialog(jobId, newStage, null, card);
           }

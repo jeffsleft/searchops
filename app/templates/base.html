@@ -295,7 +295,9 @@
       });
 
       // showToast — lightweight bottom-right toast used by stage changes and kanban moves.
-      window.showToast = function(msg) {
+      // Pass kind='error' for failures: red border, stays up longer.
+      window.showToast = function(msg, kind) {
+        var isError = kind === 'error';
         var t = document.getElementById('stage-toast');
         if (!t) {
           t = document.createElement('div');
@@ -309,6 +311,8 @@
           document.body.appendChild(t);
         }
         t.textContent = msg;
+        t.setAttribute('role', isError ? 'alert' : 'status');
+        t.style.borderColor = isError ? 'var(--tier-pass)' : 'var(--accent)';
         requestAnimationFrame(function() {
           t.style.transform = 'translateY(0)';
           t.style.opacity = '1';
@@ -317,7 +321,7 @@
         t._hideTimer = setTimeout(function() {
           t.style.transform = 'translateY(8px)';
           t.style.opacity = '0';
-        }, 2200);
+        }, isError ? 6000 : 2200);
       };
 
       window.dismissScoringToast = function() {

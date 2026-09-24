@@ -65,6 +65,11 @@ else:
 
 recruiting_secrets = modal.Secret.from_name("recruiting-secrets")
 anthropic_secret = modal.Secret.from_name("anthropic-key")
+# Separate secret, not folded into recruiting-secrets (`modal secret create`
+# has no additive "add one key" mode) — keeps the Claude-Desktop notes token
+# independently revocable from APP_PASSWORD. Only web() needs it; crons never
+# serve /api/notes/.
+notes_api_secret = modal.Secret.from_name("notes-api-token")
 
 
 # Scheduler runs at midnight, 6am, noon, 6pm UTC.
@@ -519,6 +524,57 @@ def change_pipeline_stage(job_id: int, to_stage: str, decline_reason: str = "", 
     print(f"[change_pipeline_stage] id={job_id} committed: {result}")
 
 
+# Batched sibling of change_pipeline_stage for stale-listing cleanup (2026-09-20): one
+# container, one volume.commit(), so a bulk close can't hit the rapid-container-churn
+# last-writer-wins clobber (Session 47/51). Only touches jobs still in a pre-application
+# stage, so a job that moved on since the liveness check is skipped, never auto-closed.
+# Invoke via the DEPLOYED function (modal.Function.from_name), dry_run first — never
+# `modal run`. Verify with a fresh `modal volume get`, not another container.
+@app.function(
+    image=image,
+    secrets=[recruiting_secrets],
+    volumes={"/data": volume},
+    timeout=300,
+)
+def bulk_close_listings(job_ids: list, decline_reason: str = "Listing removed", dry_run: bool = True):
+    init_db()
+    from app.pipeline.tracker import advance_stage
+    from app.models import get_db
+
+    closable_from = ("discovered", "identified")
+    with get_db() as conn:
+        rows = {
+            r["id"]: r for r in conn.execute(
+                f"SELECT id, company, job_title, pipeline_stage FROM jobs WHERE id IN ({','.join('?' * len(job_ids))})",
+                job_ids,
+            ).fetchall()
+        }
+
+    actions, closed = [], 0
+    for job_id in job_ids:
+        row = rows.get(job_id)
+        if not row:
+            actions.append(f"id={job_id} SKIP not found")
+        elif row["pipeline_stage"] not in closable_from:
+            actions.append(f"id={job_id} '{row['company']}' SKIP stage={row['pipeline_stage']} (not pre-application)")
+        elif dry_run:
+            actions.append(f"id={job_id} '{row['company']}' | {row['job_title']} WOULD CLOSE from {row['pipeline_stage']}")
+        else:
+            result = advance_stage(job_id, "job_listing_closed", notes="bulk stale-listing sweep", decline_reason=decline_reason)
+            if result["ok"]:
+                closed += 1
+                actions.append(f"id={job_id} '{row['company']}' CLOSED from {row['pipeline_stage']}")
+            else:
+                actions.append(f"id={job_id} '{row['company']}' FAILED: {result['error']}")
+
+    if not dry_run and closed:
+        volume.commit()
+    for a in actions:
+        print(f"[bulk_close_listings] {a}")
+    print(f"[bulk_close_listings] Done: {closed} closed of {len(job_ids)} (dry_run={dry_run}).")
+    return {"dry_run": dry_run, "closed": closed, "actions": actions}
+
+
 # One-off backfill (W1-B, 2026-07-14 plan): 5 declined applications sent their
 # outcome-logging before record_stage_change auto-logged (or via a path that bypassed
 # it), so they never produced an application_outcomes row and KR2 undercounts. This
@@ -880,7 +936,7 @@ def progress_snapshot_cron():
 
 @app.function(
     image=image,
-    secrets=[recruiting_secrets, anthropic_secret],
+    secrets=[recruiting_secrets, anthropic_secret, notes_api_secret],
     volumes={"/data": volume},
     timeout=600,
 )

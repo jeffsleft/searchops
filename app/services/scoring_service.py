@@ -143,6 +143,24 @@ def score_job_from_text_and_persist(job_id: int, jd_text: str, url: str = "", tr
 
     try:
         score_record = score_job(jd_text[:30000])
+
+        # score_job() returns {"jd_insufficient": True} (no final_score key) when the
+        # JD content is too thin to score — persist_score_record_to_job() does a bare
+        # score_record.get("final_score") with no default, so passing this dict through
+        # silently writes NULL to jobs.final_score while this function still reports
+        # status="success". That's how several jobs quietly ended up "scored" with no
+        # score at all (found 2026-09-16, see memory/lessons_learned.md) — the fetch
+        # succeeded, but the content was too short for score_job()'s own 300-char floor,
+        # and nothing downstream ever surfaced that as a failure. Other call sites
+        # (app/jobs/fetch.py stub-retry, app/routes.py) already guard on this flag;
+        # this was the one path that didn't.
+        if score_record.get("jd_insufficient"):
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "error": "JD content too thin to score (parsed text below the minimum length).",
+            }
+
         persist_score_record_to_job(job_id, score_record, jd_text, transition_stage=transition_stage)
 
         # Check if high-score alert needed

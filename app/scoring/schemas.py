@@ -59,14 +59,19 @@ class ScoringResult(BaseModel):
 # --- Layer 2: Match to Candidate ---
 
 class Evidence(BaseModel):
-    jd_requirement: str
-    matched_accomplishment: str
-    strength: str
+    jd_requirement: str = ""
+    matched_accomplishment: str = ""
+    # The LLM occasionally omits this field on an evidence row. A required field with
+    # no default fails the whole MatchResult (all evidence for the job, not just this
+    # row) at once — score_match() has a fallback for that, but it discards Pydantic's
+    # per-item validation entirely rather than keeping the good rows. Defaulting here
+    # means one row's missing field no longer takes out the rest of the response.
+    strength: str = "Moderate"
 
 class Mismatch(BaseModel):
-    jd_requirement: str
-    gap: str
-    severity: str
+    jd_requirement: str = ""
+    gap: str = ""
+    severity: str = "Medium"
 
 class MatchResult(BaseModel):
     match_score: float = Field(0.0, ge=-4.0, le=4.0)

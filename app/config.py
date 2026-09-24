@@ -64,6 +64,12 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 JINA_API_KEY = os.environ.get("JINA_API_KEY", "")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+# Separate token for the /api/notes/ bearer-auth prefix (Claude Desktop MCP
+# server). Deliberately not APP_PASSWORD: notes access should be revocable
+# independently of the main app password. Lives in its own Modal Secret
+# (notes-api-token) since `modal secret create` has no additive "add one key"
+# mode — see anthropic-key for the same reasoning.
+NOTES_API_TOKEN = os.environ.get("NOTES_API_TOKEN", "")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "/data/recruiting.db")
 FIRECRAWL_API_KEY = os.environ.get("FIRECRAWL_API_KEY", "")
 

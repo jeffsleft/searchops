@@ -21,6 +21,7 @@ import tempfile
 
 os.environ.setdefault("SESSION_SECRET", "0" * 64)
 os.environ.setdefault("APP_PASSWORD", "test-password")
+os.environ.setdefault("NOTES_API_TOKEN", "test-notes-token")
 os.environ.setdefault("GEMINI_API_KEY", "test-key")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 os.environ.setdefault("DATABASE_PATH", tempfile.NamedTemporaryFile(suffix=".db", delete=False).name)

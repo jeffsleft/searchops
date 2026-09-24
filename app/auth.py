@@ -30,13 +30,17 @@ _serializer = URLSafeTimedSerializer(SECRET_KEY)
 
 PUBLIC_PATHS = {"/login", "/favicon.ico"}
 
-# Paths callable by non-browser clients (e.g. the interview-scorecard skill
-# running in Claude Desktop/Cowork) via `Authorization: Bearer <APP_PASSWORD>`
-# instead of a session cookie. Kept to a narrow prefix, not app-wide, to limit
-# blast radius — reuses the existing APP_PASSWORD secret rather than minting a
-# new one (Modal's `secret create` has no additive "add one key" mode, so
-# introducing a fresh secret risks clobbering recruiting-secrets' other keys).
-BEARER_AUTH_PREFIXES = ("/api/sync/",)
+# Paths callable by non-browser clients via `Authorization: Bearer <token>`
+# instead of a session cookie, mapped to the config attribute holding each
+# prefix's expected token. Kept to narrow prefixes, not app-wide, to limit
+# blast radius. Each prefix gets its own token rather than sharing one — the
+# notes MCP integration (/api/notes/) is a token Jeff wants independently
+# revocable from APP_PASSWORD, so it lives in its own Modal Secret
+# (notes-api-token) instead of reusing recruiting-secrets' APP_PASSWORD.
+BEARER_AUTH_PREFIXES = {
+    "/api/sync/": "APP_PASSWORD",
+    "/api/notes/": "NOTES_API_TOKEN",
+}
 
 
 def create_session_token() -> str:
@@ -56,12 +60,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in PUBLIC_PATHS or request.url.path.startswith("/static"):
             return await call_next(request)
 
-        if request.url.path.startswith(BEARER_AUTH_PREFIXES):
-            from app.config import APP_PASSWORD
+        bearer_prefix = next(
+            (p for p in BEARER_AUTH_PREFIXES if request.url.path.startswith(p)), None
+        )
+        if bearer_prefix:
+            import app.config as _config
+            expected = getattr(_config, BEARER_AUTH_PREFIXES[bearer_prefix], "")
             auth_header = request.headers.get("authorization", "")
-            if auth_header.startswith("Bearer ") and APP_PASSWORD:
+            if auth_header.startswith("Bearer ") and expected:
                 presented = auth_header[len("Bearer "):]
-                if _secrets.compare_digest(presented, APP_PASSWORD):
+                if _secrets.compare_digest(presented, expected):
                     return await call_next(request)
             # Bearer auth was attempted (or path requires it) but failed —
             # don't fall through to a redirect; a non-browser client can't

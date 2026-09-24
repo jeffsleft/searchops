@@ -30,6 +30,18 @@ def detect_ats(careers_url: str) -> tuple[str, str]:
     if ash_match:
         return 'ashby', unquote(ash_match.group(1))
 
+    # Workday: {tenant}.wd{N}.myworkdayjobs.com/{site}, optionally with a
+    # locale segment (e.g. /en-US/{site}). Handle packs tenant, wd number,
+    # and site together since fetch_workday_jobs() needs all three to build
+    # the API host and none are recoverable from just one.
+    wd_match = re.search(
+        r'([a-z0-9_-]+)\.wd(\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[a-z]{2}/)?([^/?#]+)',
+        url,
+    )
+    if wd_match:
+        tenant, wd_num, site = wd_match.groups()
+        return 'workday', f"{tenant}|{wd_num}|{unquote(site)}"
+
     return 'generic', ''
 
 
@@ -163,6 +175,70 @@ def fetch_ashby_jobs(handle: str) -> list[dict]:
         return []
 
 
+def fetch_workday_jobs(handle: str) -> list[dict]:
+    """Fetch jobs from a Workday public CXS API.
+
+    No API key or JS rendering needed — {tenant}.wd{N}.myworkdayjobs.com
+    exposes a plain JSON search endpoint plus a per-posting detail endpoint
+    for full JD text, same two-call shape as Ashby. Paginated; capped at
+    WORKDAY_MAX_JOBS so one very large tenant (some post 200+ openings)
+    can't blow out a scan run.
+    """
+    WORKDAY_MAX_JOBS = 200
+    PAGE_SIZE = 50
+    try:
+        tenant, wd_num, site = handle.split('|', 2)
+    except ValueError:
+        logger.error(f"Workday fetch failed: malformed handle '{handle}'")
+        return []
+
+    base = f"https://{tenant}.wd{wd_num}.myworkdayjobs.com/wday/cxs/{tenant}/{site}"
+    public_base = f"https://{tenant}.wd{wd_num}.myworkdayjobs.com/{site}"
+    jobs = []
+    try:
+        offset = 0
+        total = None
+        while offset < WORKDAY_MAX_JOBS and (total is None or offset < total):
+            list_url = f"{base}/jobs"
+            validate_url(list_url)
+            resp = httpx.post(
+                list_url,
+                json={"appliedFacets": {}, "limit": PAGE_SIZE, "offset": offset, "searchText": ""},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            total = data.get('total', 0)
+            postings = data.get('jobPostings', []) or []
+            if not postings:
+                break
+            for j in postings:
+                external_path = j.get('externalPath', '')
+                desc = ''
+                try:
+                    time.sleep(0.2)
+                    detail_url = f"{base}{external_path}"
+                    validate_url(detail_url)
+                    d_resp = httpx.get(detail_url, timeout=15)
+                    d_resp.raise_for_status()
+                    posting = d_resp.json().get('jobPostingInfo', {}) or {}
+                    desc = posting.get('jobDescription', '') or ''
+                except Exception as e:
+                    logger.warning(f"Workday description fetch failed for {handle}{external_path}: {e}")
+                jobs.append({
+                    'title': j.get('title', ''),
+                    'url': f"{public_base}{external_path}",
+                    'description': desc,
+                    'posted_at': j.get('postedOn', ''),
+                    'location': j.get('locationsText', ''),
+                })
+            offset += PAGE_SIZE
+        return jobs
+    except Exception as e:
+        logger.error(f"Workday fetch failed for {handle}: {e}")
+        return jobs
+
+
 def fetch_generic_jobs(careers_url: str) -> list[dict]:
     """
     Fallback scraper for companies without a known ATS.
@@ -227,6 +303,8 @@ def fetch_jobs_for_company(ats_type: str, ats_handle: str, careers_url: str) -> 
         return fetch_lever_jobs(ats_handle)
     elif ats_type == 'ashby':
         return fetch_ashby_jobs(ats_handle)
+    elif ats_type == 'workday':
+        return fetch_workday_jobs(ats_handle)
     elif ats_type == 'generic' and careers_url:
         return fetch_generic_jobs(careers_url)
     else:

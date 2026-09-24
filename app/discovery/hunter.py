@@ -20,7 +20,10 @@ CONFIG_PATH = Path(__file__).parent / "hunt_targets.yaml"
 
 # Non-Tier-A companies are only re-scanned if last_scanned is older than this.
 # Tier A is exempt (scanned every run). See run_discovery_scan().
-NON_TIER_A_RESCAN_DAYS = 3
+# Loosened 3 -> 1 (2026-08-21, "widen the hunt") now that the scan timeout
+# is 2700s (was 900s, PR raising it merged 8/14) and PropTech/Construction/
+# Logistics targets added 8/13 need same-day coverage, not a 3-day lag.
+NON_TIER_A_RESCAN_DAYS = 1
 
 # Minimum JD length to attempt a full score (mirrors score_job's own guard).
 _MIN_JD_FOR_SCORE = 300

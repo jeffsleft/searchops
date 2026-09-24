@@ -5,6 +5,7 @@ Owns job detail queries, flag processing, question aggregation, and enrichment.
 Returns a dict ready for template rendering.
 """
 from app.models import get_db
+from app.services.job_actions import get_recent_notes
 
 
 FLAGS = {
@@ -68,4 +69,5 @@ def build_job_detail_data(job_id: int, _enrich_job_fn) -> dict | None:
         'questions_answered': questions_answered,
         'flags_fired': flags_fired,
         'tech_stack': tech_stack,
+        'recent_notes': get_recent_notes(job_id, limit=5),
     }

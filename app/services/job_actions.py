@@ -2,12 +2,16 @@
 Job-action business logic extracted from routes.py.
 
 These functions own the "do the work" half of job-related handlers: scoring a
-brand-new job from input, fetching+scoring a stub, and persisting a pipeline
-stage change. Handlers parse the request, call one of these, then map the
-returned result dict to HTML. Keeping the logic here means a fix lands once and
-every caller gets it (outcome_charter KR1).
+brand-new job from input, fetching+scoring a stub, persisting a pipeline stage
+change, and reading/writing job notes. Handlers parse the request, call one of
+these, then map the returned result dict to HTML or JSON. Keeping the logic
+here means a fix lands once and every caller gets it (outcome_charter KR1) —
+add_job_note() in particular is the single writer for job_notes, called by
+both the web "My notes" box and the Claude-Desktop MCP server, so a note never
+gets written through a second, divergent path.
 """
 
+import difflib
 import logging
 
 from app.config import HIGH_SCORE_THRESHOLD
@@ -20,6 +24,8 @@ from app.services.scoring_service import (
     score_job_from_url_and_persist, score_job_from_text_and_persist,
 )
 
+MAX_NOTE_LENGTH = 5000
+
 
 def score_new_job_from_input(url: str, jd_text: str) -> dict:
     """Score a brand-new job from a URL and/or pasted JD text (Dashboard "Score a Job").
@@ -31,6 +37,7 @@ def score_new_job_from_input(url: str, jd_text: str) -> dict:
       {"status": "missing_input"}
       {"status": "duplicate", "job_id": int, "company": str}
       {"status": "fetch_failed"}
+      {"status": "insufficient"}
       {"status": "scored", "score_record": dict}
     """
     url = (url or "").strip()
@@ -55,6 +62,14 @@ def score_new_job_from_input(url: str, jd_text: str) -> dict:
             return {"status": "fetch_failed"}
 
     score_record = score_job(jd_text)
+
+    # Same jd_insufficient guard as score_job_from_text_and_persist (scoring_service.py)
+    # and the stub-retry loop (fetch.py) — without it, thin/blocked content (e.g. a
+    # bot-detection placeholder page) gets silently saved as a real job with
+    # company="Unknown" and no title instead of surfacing as a failure.
+    if score_record.get("jd_insufficient"):
+        return {"status": "insufficient"}
+
     if url:
         score_record["_url"] = url
         job_id = save_job_to_db(url, score_record, jd_text=jd_text)
@@ -136,6 +151,110 @@ def update_job_stage(job_id: int, new_stage: str) -> dict:
         "promoted": promoted,
         "stage_label": STAGES[new_stage]["label"],
     }
+
+
+def add_job_note(job_id: int, text: str, source: str = "web") -> dict:
+    """Append one note to job_notes. The single writer for job notes — both the
+    web "My notes" box (job_save_notes) and the Claude-Desktop MCP add_note
+    tool call this, never SQL of their own (see module docstring).
+
+    Mirrors the note's text into jobs.notes (legacy single-value column) so the
+    dashboard/pipeline 📝 preview keeps showing the latest note without needing
+    its own job_notes-aware query.
+
+    Returns one of:
+      {"status": "not_found"}
+      {"status": "empty"}
+      {"status": "too_long", "max_length": int}
+      {"status": "ok"}
+    """
+    text = (text or "").strip()
+    if not text:
+        return {"status": "empty"}
+    if len(text) > MAX_NOTE_LENGTH:
+        return {"status": "too_long", "max_length": MAX_NOTE_LENGTH}
+
+    with get_db() as conn:
+        job = conn.execute("SELECT id FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        if not job:
+            return {"status": "not_found"}
+        conn.execute(
+            "INSERT INTO job_notes (job_id, text, source) VALUES (?, ?, ?)",
+            (job_id, text, source),
+        )
+        conn.execute(
+            "UPDATE jobs SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (text, job_id),
+        )
+    return {"status": "ok"}
+
+
+def get_recent_notes(job_id: int, limit: int = 5) -> list[dict]:
+    """Most recent notes for a job, newest first.
+
+    limit is clamped to [1, 50] — SQLite treats a non-positive LIMIT as
+    "unlimited", not zero, so an unclamped caller-supplied limit (this is
+    reachable from the /api/notes/ query param) could return a job's entire
+    note history instead of a bounded page.
+    """
+    limit = max(1, min(int(limit), 50))
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, text, source, created_at FROM job_notes "
+            "WHERE job_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+            (job_id, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def find_jobs(query: str, limit: int = 5) -> list[dict]:
+    """Fuzzy match on company + job_title (stdlib difflib — no fuzzy-match
+    dependency for a search over a few hundred rows). Read-only; never writes.
+
+    Returns candidates ordered best-match-first:
+      [{"job_id", "company", "title", "status", "updated_at"}, ...]
+    """
+    query = (query or "").strip()
+    if not query:
+        return []
+    q = query.lower()
+
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, company, job_title, status, updated_at FROM jobs"
+        ).fetchall()
+
+    scored = []
+    for row in rows:
+        company = (row["company"] or "").lower()
+        title = (row["job_title"] or "").lower()
+        if q in company or q in title:
+            score = 0.99  # substring hit outranks any fuzzy-only ratio
+        else:
+            # Ratio against each field separately, not the concatenated
+            # "company title" string — matching against the full haystack let
+            # short unrelated queries pick up enough scattered single-character
+            # overlap (shared letters/spaces) to clear a low cutoff. Per-field
+            # ratio plus a stricter cutoff keeps real near-misses (typos) while
+            # rejecting queries that share no real substring with either field.
+            score = max(
+                difflib.SequenceMatcher(None, q, company).ratio(),
+                difflib.SequenceMatcher(None, q, title).ratio(),
+            )
+        if score >= 0.6:
+            scored.append((score, row))
+
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [
+        {
+            "job_id": row["id"],
+            "company": row["company"],
+            "title": row["job_title"],
+            "status": row["status"],
+            "updated_at": row["updated_at"],
+        }
+        for _, row in scored[:limit]
+    ]
 
 
 def promote_job_from_discovery(job_id: int) -> dict:

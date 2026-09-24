@@ -86,6 +86,22 @@ CREATE TABLE IF NOT EXISTS pipeline_history (
     changed_by TEXT DEFAULT 'jeff'
 );
 
+-- Job notes: append-only note history per job. Canonical write target for both
+-- the web "My notes" box and the Claude-Desktop MCP add_note tool — both go
+-- through app.services.job_actions.add_job_note() so there is exactly one
+-- writer (see the score_history two-writer incident, commit 7fea91c, for why
+-- that matters). jobs.notes is mirrored to the latest note's text on every
+-- insert so the existing dashboard/pipeline 📝 preview keeps working without
+-- template changes; it is otherwise legacy and not written to directly.
+CREATE TABLE IF NOT EXISTS job_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL REFERENCES jobs(id),
+    text TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'web',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_job_notes_job ON job_notes(job_id, created_at);
+
 -- Contacts: people at each company
 CREATE TABLE IF NOT EXISTS contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -433,7 +449,22 @@ CREATE TABLE IF NOT EXISTS progress_snapshots (
 def get_db():
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    # DELETE (SQLite's default rollback journal), not WAL: WAL keeps a persistent
+    # -wal/-shm side-car pair alongside the main .db file, and on a Modal Volume
+    # (a network-backed FUSE mount, not local disk) those side-car files give every
+    # single connection — even a read-only SELECT — a write footprint. Modal Volumes
+    # are only eventually consistent with last-writer-wins semantics across
+    # concurrent/rapid container mounts, so that extra footprint made it possible for
+    # a later container's stale mount to silently clobber an earlier container's
+    # already-committed write on exit. Confirmed empirically 2026-09-16 (see
+    # memory/lessons_learned.md): 5 pipeline-stage writes were silently lost this way.
+    # DELETE mode's journal file is transient (created and deleted within a single
+    # transaction), so idle/read-only connections leave no lingering file for a
+    # later mount to race against. Trade-off: DELETE takes a stricter lock during
+    # commit than WAL did (a writer briefly blocks readers), so busy_timeout below
+    # makes SQLite retry instead of immediately raising "database is locked".
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     try:
         yield conn
@@ -532,6 +563,20 @@ def init_db():
             "  SELECT c.id FROM companies c WHERE c.name = jobs.company"
             ") WHERE company_id IS NULL "
             "  AND EXISTS (SELECT 1 FROM companies c WHERE c.name = jobs.company)"
+        )
+        # Backfill legacy jobs.notes into job_notes (source='legacy') so recent_notes()
+        # has something to show for notes written before this table existed. Guarded
+        # by NOT EXISTS so it only inserts once per job — safe to re-run every deploy.
+        # created_at is backfill time, not the original note date (unknowable from a
+        # single overwritten column) — an honest "no date" would be better, but the
+        # column is NOT NULL DEFAULT CURRENT_TIMESTAMP and this is a one-time cosmetic
+        # gap, not a scoring-integrity one (contrast the score_history backfill, which
+        # was deliberately skipped for that reason — see commit 7fea91c).
+        _run_migration(
+            "INSERT INTO job_notes (job_id, text, source) "
+            "SELECT id, notes, 'legacy' FROM jobs "
+            "WHERE notes IS NOT NULL AND TRIM(notes) != '' "
+            "  AND NOT EXISTS (SELECT 1 FROM job_notes jn WHERE jn.job_id = jobs.id AND jn.source = 'legacy')"
         )
 
 

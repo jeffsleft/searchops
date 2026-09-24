@@ -91,6 +91,7 @@ def _fetch_jd_text(url: str) -> str | None:
                 jina_headers = {
                     "Authorization": f"Bearer {JINA_API_KEY}",
                     "X-Return-Format": "markdown",
+                    "X-No-Cache": "true",
                 }
                 with requests.get(jina_url, headers=jina_headers, timeout=20, stream=True) as resp:
                     resp.raise_for_status()

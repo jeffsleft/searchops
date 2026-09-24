@@ -1,0 +1,15 @@
+# SearchOps notes MCP adapter — Mac-local, stdio. Mirrors voice-engine's
+# adapters/requirements.txt pinning rationale.
+#
+# Pinned to the v1 line deliberately. mcp 2.x redesigned the low-level server
+# API; mcp.server.fastmcp.FastMCP, which server.py uses, is the v1 surface.
+# Re-test before moving to 2.x.
+mcp>=1.28,<2
+
+# HTTP client for calling the deployed /api/notes/ routes. Matches the version
+# already pinned in the main app's requirements.txt.
+httpx==0.28.1
+
+# Test runner — not imported by the server at runtime, but the install step
+# should verify the build with pytest before wiring into Claude Desktop.
+pytest>=8.0

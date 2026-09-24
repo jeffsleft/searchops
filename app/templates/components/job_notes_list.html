@@ -1,0 +1,12 @@
+{% if notes %}
+<ul id="job-notes-list" style="list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;">
+  {% for n in notes %}
+  <li style="font-size:12px;line-height:1.55;padding:8px 10px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);">
+    <div style="color:var(--text-dim);font-size:10.5px;margin-bottom:3px;">{{ n.created_at[:16] }} &middot; {{ n.source }}</div>
+    <div style="white-space:pre-wrap;">{{ n.text }}</div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div id="job-notes-list" style="font-size:11px;color:var(--text-dim);margin-top:10px;">No notes yet.</div>
+{% endif %}

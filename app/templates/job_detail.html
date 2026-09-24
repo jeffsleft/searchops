@@ -124,14 +124,20 @@
     </div>
     <div class="card-body">
       <form hx-post="/job/{{ job.id }}/notes"
-            hx-trigger="change, keyup changed delay:1200ms"
-            hx-swap="none">
+            hx-target="#job-notes-list"
+            hx-swap="outerHTML"
+            data-htmx-after="reset-form"
+            style="display:flex;flex-direction:column;gap:8px;">
         <textarea name="notes"
-                  placeholder="Notes to self — angle to lead with, prep to do, concerns, anything from a call…"
-                  style="width:100%;box-sizing:border-box;min-height:100px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);font-size:13px;line-height:1.65;padding:10px 12px;resize:vertical;font-family:inherit;"
-                  onblur="this.form.dispatchEvent(new Event('change'))"
-        >{{ job.notes or '' }}</textarea>
+                  placeholder="Add a note — angle to lead with, prep to do, concerns, anything from a call…"
+                  style="width:100%;box-sizing:border-box;min-height:80px;background:var(--bg-sunk);border:1px solid var(--border);border-radius:var(--radius);color:var(--fg);font-size:13px;line-height:1.65;padding:10px 12px;resize:vertical;font-family:inherit;"
+        ></textarea>
+        <button type="submit"
+                style="align-self:flex-start;font-size:12px;background:var(--accent);color:#fff;border:none;padding:6px 14px;border-radius:var(--radius);cursor:pointer;">
+          Add note
+        </button>
       </form>
+      {% include "components/job_notes_list.html" %}
     </div>
   </div>
 

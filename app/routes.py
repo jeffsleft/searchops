@@ -36,7 +36,7 @@ from app.services.scoring_service import (
 )
 from app.services.job_actions import (
     score_new_job_from_input, fetch_and_score_stub, update_job_stage,
-    promote_job_from_discovery,
+    promote_job_from_discovery, add_job_note, get_recent_notes, find_jobs,
 )
 from app.services.company_actions import (
     import_tier_a_companies, research_companies_batch, scan_target_company,
@@ -393,6 +393,8 @@ async def score_job_post(request: Request):
         return HTMLResponse(f'<div class="dim" style="font-size:13px;">Already scored — <a href="/job/{result["job_id"]}">{safe_company}</a></div>')
     if result["status"] == "fetch_failed":
         return HTMLResponse('<div class="text-red-400 text-sm">Could not fetch that URL. Paste the JD text instead.</div>')
+    if result["status"] == "insufficient":
+        return HTMLResponse('<div class="text-red-400 text-sm">Fetched content was too thin to score (likely a bot-blocked or cached placeholder page). Paste the JD text instead.</div>')
 
     score_record = result["score_record"]
     tier = classify_score(score_record.get("final_score", 0))
@@ -438,6 +440,7 @@ async def job_detail(request: Request):
         questions_answered=data['questions_answered'],
         flags_fired=data['flags_fired'],
         tech_stack=data['tech_stack'],
+        notes=data['recent_notes'],
         all_stages=STAGES,
         i_declined_reasons=I_DECLINED_REASONS,
         they_declined_reasons=THEY_DECLINED_REASONS,
@@ -858,10 +861,28 @@ async def job_toggle_ethics(request: Request):
 async def job_save_notes(request: Request):
     job_id = int(request.path_params["job_id"])
     form = await request.form()
-    notes = form.get("notes", "").strip()
-    with get_db() as conn:
-        conn.execute("UPDATE jobs SET notes = ? WHERE id = ?", (notes, job_id))
+    text = (form.get("notes") or "").strip()
+    result = add_job_note(job_id, text, source="web")
+
+    if result["status"] == "not_found":
+        return HTMLResponse("Job not found", status_code=404)
+    if result["status"] == "too_long":
+        msg = f"Note too long (max {result['max_length']} chars)"
+        return HTMLResponse(
+            f'<span style="color:var(--tier-pass);font-size:11px;" '
+            f'hx-swap-oob="true" id="notes-save-indicator">{_html.escape(msg)}</span>'
+        )
+    if result["status"] == "empty":
+        return HTMLResponse(
+            '<span style="color:var(--tier-pass);font-size:11px;" '
+            'hx-swap-oob="true" id="notes-save-indicator">Nothing to save</span>'
+        )
+
+    list_html = jinja.get_template("components/job_notes_list.html").render(
+        notes=get_recent_notes(job_id, limit=5)
+    )
     return HTMLResponse(
+        list_html +
         '<span style="color:var(--accent);font-size:11px;" '
         'hx-swap-oob="true" id="notes-save-indicator">Saved</span>'
     )
@@ -2771,6 +2792,76 @@ async def api_sync_interview_session(request: Request):
 
 
 # ---------------------------------------------------------------------------
+# Notes API (Claude Desktop MCP server)
+# ---------------------------------------------------------------------------
+#
+# Bearer-authed under /api/notes/ (app/auth.py BEARER_AUTH_PREFIXES) against
+# NOTES_API_TOKEN — a separate token from APP_PASSWORD so it's revocable
+# independently. POSTs also need X-Requested-With: XMLHttpRequest to clear
+# CSRFValidationMiddleware (GETs are exempt from that check by method).
+#
+# All three handlers are thin wrappers over app.services.job_actions — the
+# same functions job_save_notes() (web UI) calls — so there is exactly one
+# writer for job_notes regardless of which client is calling.
+
+async def api_notes_search(request: Request):
+    """GET /api/notes/jobs/search?q=<query>
+
+    Fuzzy match on company + job_title. Read-only — never writes. Returns
+    candidates for the caller (the MCP find_target tool) to disambiguate
+    before calling api_notes_add with a specific job_id.
+    """
+    query = request.query_params.get("q", "")
+    matches = find_jobs(query, limit=5)
+    return JSONResponse({"status": "ok", "matches": matches})
+
+
+async def api_notes_add(request: Request):
+    """POST /api/notes/jobs/{job_id}/notes
+
+    JSON payload: {"text": "string (required)", "source": "string (optional, default 'claude-desktop')"}
+
+    Requires an exact job_id — this endpoint never does its own fuzzy
+    matching. Ambiguity is resolved client-side by calling api_notes_search
+    first; a target that's still ambiguous or unknown should never reach here.
+    """
+    job_id = int(request.path_params["job_id"])
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "Invalid JSON"}, status_code=400)
+
+    text = (data.get("text") or "").strip()
+    source = (data.get("source") or "claude-desktop").strip()
+
+    result = add_job_note(job_id, text, source=source)
+    if result["status"] == "not_found":
+        return JSONResponse({"status": "error", "message": "Job not found"}, status_code=404)
+    if result["status"] == "empty":
+        return JSONResponse({"status": "error", "message": "text is required"}, status_code=400)
+    if result["status"] == "too_long":
+        return JSONResponse(
+            {"status": "error", "message": f"text exceeds {result['max_length']} chars"},
+            status_code=400,
+        )
+    return JSONResponse({"status": "success"})
+
+
+async def api_notes_recent(request: Request):
+    """GET /api/notes/jobs/{job_id}/notes?limit=5 — read-back for the MCP recent_notes tool."""
+    job_id = int(request.path_params["job_id"])
+    try:
+        limit = min(int(request.query_params.get("limit", 5)), 50)
+    except ValueError:
+        limit = 5
+    with get_db() as conn:
+        job = conn.execute("SELECT id FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not job:
+        return JSONResponse({"status": "error", "message": "Job not found"}, status_code=404)
+    return JSONResponse({"status": "ok", "notes": get_recent_notes(job_id, limit=limit)})
+
+
+# ---------------------------------------------------------------------------
 # App factory
 # ---------------------------------------------------------------------------
 
@@ -2908,6 +2999,9 @@ def create_app(batch_research_fn=None, commit_fn=None) -> Starlette:
         Route("/targets/{co_id:int}/research", targets_research,     methods=["POST"]),
         Route("/api/discovery/scan",          api_discovery_scan,    methods=["POST"]),
         Route("/api/sync/interview-session",  api_sync_interview_session, methods=["POST"]),
+        Route("/api/notes/jobs/search",       api_notes_search,       methods=["GET"]),
+        Route("/api/notes/jobs/{job_id:int}/notes", api_notes_add,    methods=["POST"]),
+        Route("/api/notes/jobs/{job_id:int}/notes", api_notes_recent, methods=["GET"]),
         Route("/api/task-status",             api_task_status,        methods=["GET"]),
         Route("/api/sync-status",             api_sync_status,        methods=["GET"]),
         Route("/settings/calibration",        settings_calibration,   methods=["GET"]),

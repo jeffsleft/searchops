@@ -127,8 +127,6 @@ def update_job_stage(job_id: int, new_stage: str) -> dict:
       {"status": "not_found"}
       {"status": "ok", "job": dict, "promoted": bool, "stage_label": str}
     """
-    from app.services.pipeline_service import record_stage_change
-
     if new_stage not in STAGES:
         return {"status": "invalid_stage"}
     # Declines, closures and duplicates need a reason on record; this quick
@@ -137,18 +135,18 @@ def update_job_stage(job_id: int, new_stage: str) -> dict:
     if new_stage in REASON_REQUIRED_STAGES:
         return {"status": "needs_reason"}
 
+    # Same writer as the kanban and the job page: advance_stage validates, then
+    # record_stage_change writes pipeline_stage + history. (jobs.status, which this
+    # path alone used to set, is a legacy column nothing reads.)
+    result = advance_stage(job_id, new_stage)
+    if not result["ok"]:
+        if "not found" in result["error"].lower():
+            return {"status": "not_found"}
+        return {"status": "invalid_stage", "error": result["error"]}
     with get_db() as conn:
-        # Update job status and auto_rejected fields
-        conn.execute(
-            "UPDATE jobs SET status=?, auto_rejected=0, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            (STAGES[new_stage]["label"], job_id),
-        )
-        # Route pipeline_stage change through the single sanctioned writer
-        record_stage_change(conn, job_id, new_stage, note=None, changed_by="jeff")
+        # Moving a job by hand overrides an earlier auto-reject.
+        conn.execute("UPDATE jobs SET auto_rejected = 0 WHERE id = ?", (job_id,))
         row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-
-    if not row:
-        return {"status": "not_found"}
 
     promoted = new_stage not in ("discovered", "identified")
     return {

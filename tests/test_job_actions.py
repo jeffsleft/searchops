@@ -93,3 +93,9 @@ def test_update_job_stage_refuses_stages_that_need_a_reason():
         assert update_job_stage(job_id, stage) == {"status": "needs_reason"}
     with get_db() as conn:
         assert conn.execute("SELECT pipeline_stage FROM jobs WHERE id=?", (job_id,)).fetchone()[0] == "discovered"
+
+
+def test_update_job_stage_on_missing_job_writes_nothing():
+    assert update_job_stage(999999, "outreach") == {"status": "not_found"}
+    with get_db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM pipeline_history WHERE job_id = 999999").fetchone()[0] == 0

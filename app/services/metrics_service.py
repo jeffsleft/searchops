@@ -158,8 +158,14 @@ def system_health(window_days: int = 7) -> dict:
       "req_count": int, "error_count": int, "error_rate": float,
       "p50_ms": int|None, "p95_ms": int|None,
       "crons": [{"task_type": str, "last_ok": str|None}],
-      "recent_errors": [{"ts": str, "route_template": str, "exc_type": str, "message": str}]
+      "recent_errors": [{"ts": str, "route_template": str, "exc_type": str, "message": str}],
+      "scoring": {"unscored_new": int, "unscored_no_jd": int, "last_scored_at": str|None}
     }
+
+    `scoring` is the tripwire for scoring failing quietly (Gemini out of credits,
+    JD fetch failing): roles the scan found in the last 3 days that still have no
+    score. Some are legitimately deferred past the per-scan AI cap, so a small
+    number is normal; a count that keeps growing is not.
     """
     cutoff = f"-{int(window_days)} days"
     with get_db() as conn:
@@ -186,6 +192,15 @@ def system_health(window_days: int = 7) -> dict:
         recent = conn.execute(
             "SELECT ts, route_template, exc_type, message FROM error_events ORDER BY id DESC LIMIT 10"
         ).fetchall()
+        unscored = conn.execute(
+            "SELECT COUNT(*) AS n, "
+            "       SUM(LENGTH(COALESCE(jd_text, '')) < 300) AS no_jd "
+            "FROM jobs WHERE discovery_source IN ('hunter', 'search_dork') "
+            "  AND auto_rejected = 0 AND final_score IS NULL "
+            "  AND pipeline_stage IN ('discovered', 'identified') "
+            "  AND date_found >= strftime('%Y-%m-%dT%H:%M:%S', 'now', '-3 days')"
+        ).fetchone()
+        last_scored = conn.execute("SELECT MAX(scored_at) FROM score_history").fetchone()[0]
 
     return {
         "window_days": window_days,
@@ -196,6 +211,11 @@ def system_health(window_days: int = 7) -> dict:
         "p95_ms": _percentile(durations, 95),
         "crons": [{"task_type": c["task_type"], "last_ok": c["last_ok"]} for c in crons],
         "recent_errors": [dict(r) for r in recent],
+        "scoring": {
+            "unscored_new": unscored["n"] or 0,
+            "unscored_no_jd": unscored["no_jd"] or 0,
+            "last_scored_at": last_scored,
+        },
     }
 
 

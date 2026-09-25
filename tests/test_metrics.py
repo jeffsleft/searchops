@@ -169,3 +169,17 @@ def test_integrity_flags_history_gap():
 def test_prune_observability_runs_clean():
     from app.models import prune_observability_tables
     prune_observability_tables(180)  # must not raise
+
+
+def test_scoring_health_counts_recent_unscored_discoveries():
+    from app.models import get_db
+    from app.services.metrics_service import system_health
+    with get_db() as conn:
+        base = system_health()["scoring"]["unscored_new"]
+        conn.execute("INSERT INTO jobs (company, job_title, pipeline_stage, discovery_source, date_found) "
+                     "VALUES ('Acme', 'RevOps', 'discovered', 'hunter', strftime('%Y-%m-%dT%H:%M:%S','now'))")
+        conn.execute("INSERT INTO jobs (company, job_title, pipeline_stage, discovery_source, date_found, final_score) "
+                     "VALUES ('Acme', 'Scored', 'discovered', 'hunter', strftime('%Y-%m-%dT%H:%M:%S','now'), 7.0)")
+    s = system_health()["scoring"]
+    assert s["unscored_new"] == base + 1
+    assert s["unscored_no_jd"] >= 1

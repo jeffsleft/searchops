@@ -83,6 +83,17 @@
   <div class="card">
     <div class="card-head"><h3>System</h3><span class="spacer"></span><span class="dim mono" style="font-size:10.5px;">last {{ system.window_days }} days</span></div>
     <div class="card-body">
+      <div class="subhead">Scoring<span class="hint">roles the scan found in the last 3 days</span></div>
+      {%- set sc = system.scoring -%}
+      <div class="oplist">
+        <div class="op-row">
+          <span class="op-dot {{ 'never' if sc.unscored_new else '' }}"></span>
+          <span class="op-name" {% if sc.unscored_new %}style="color:var(--rust);"{% endif %}>
+            {% if sc.unscored_new %}{{ sc.unscored_new }} new role{{ 's' if sc.unscored_new != 1 }} still unscored{% if sc.unscored_no_jd %} ({{ sc.unscored_no_jd }} with no job text){% endif %}{% else %}Every new role is scored{% endif %}
+          </span>
+          <span class="op-time {{ 'never' if not sc.last_scored_at }}">last score {{ (sc.last_scored_at[:16]) if sc.last_scored_at else 'never' }}</span>
+        </div>
+      </div>
       <div class="subhead">Background jobs<span class="hint">last success</span></div>
       {% if system.crons %}
       <div class="oplist">

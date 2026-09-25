@@ -94,29 +94,18 @@ def test_fetch_workday_jobs_degrades_gracefully_on_detail_failure(monkeypatch):
 
 
 def test_fetch_workday_jobs_paginates_until_total_reached(monkeypatch):
-    """Two pages of 50 (PAGE_SIZE) should be fetched for a 60-posting board."""
-    page_1 = {
-        "total": 60,
-        "jobPostings": [
-            {"title": f"Role {i}", "externalPath": f"/job/Remote/Role-{i}_JR{i}",
-             "locationsText": "Remote", "postedOn": "Posted Today"}
-            for i in range(50)
-        ],
-    }
-    page_2 = {
-        "total": 60,
-        "jobPostings": [
-            {"title": f"Role {i}", "externalPath": f"/job/Remote/Role-{i}_JR{i}",
-             "locationsText": "Remote", "postedOn": "Posted Today"}
-            for i in range(50, 60)
-        ],
-    }
-    calls = {"n": 0}
+    """A 45-posting board takes three pages. Workday rejects list pages over 20
+    with a 400 (2026-09-25), so the client must never ask for more."""
+    postings = [{"title": f"Role {i}", "externalPath": f"/job/Remote/Role-{i}_JR{i}",
+                 "locationsText": "Remote", "postedOn": "Posted Today"} for i in range(45)]
+    limits = []
 
     def _post(url, json=None, timeout=None):
-        calls["n"] += 1
-        body = page_1 if calls["n"] == 1 else page_2
-        return httpx.Response(200, json=body, request=httpx.Request("POST", url))
+        limits.append(json["limit"])
+        if json["limit"] > 20:
+            return httpx.Response(400, json={}, request=httpx.Request("POST", url))
+        page = postings[json["offset"]:json["offset"] + json["limit"]]
+        return httpx.Response(200, json={"total": 45, "jobPostings": page}, request=httpx.Request("POST", url))
 
     def _get(url, timeout=None):
         return httpx.Response(200, json={"jobPostingInfo": {"jobDescription": "x"}},
@@ -128,8 +117,31 @@ def test_fetch_workday_jobs_paginates_until_total_reached(monkeypatch):
 
     jobs = fetch_workday_jobs("genesys|1|Genesys")
 
-    assert calls["n"] == 2
-    assert len(jobs) == 60
+    assert limits == [20, 20, 20]
+    assert len(jobs) == 45
+
+
+def test_fetch_workday_jobs_with_want_fetches_details_only_for_matches(monkeypatch):
+    postings = [{"title": t, "externalPath": f"/job/{n}"} for n, t in
+                enumerate(["Director, Revenue Operations", "Software Engineer", "Nurse"])]
+    details = []
+
+    def _post(url, json=None, timeout=None):
+        return httpx.Response(200, json={"total": 3, "jobPostings": postings[json["offset"]:json["offset"] + 20]},
+                              request=httpx.Request("POST", url))
+
+    def _get(url, timeout=None):
+        details.append(url)
+        return httpx.Response(200, json={"jobPostingInfo": {"jobDescription": "Own RevOps"}},
+                              request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "post", _post)
+    monkeypatch.setattr(httpx, "get", _get)
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+
+    jobs = fetch_workday_jobs("acme|1|External", want=lambda t: "operations" in t.lower())
+    assert [j["title"] for j in jobs] == ["Director, Revenue Operations"]
+    assert len(details) == 1
 
 
 def test_fetch_workday_jobs_malformed_handle_returns_empty():

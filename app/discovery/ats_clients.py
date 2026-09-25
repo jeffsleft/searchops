@@ -315,17 +315,21 @@ def fetch_teamtailor_jobs(site_root: str) -> list[dict]:
         return []
 
 
-def fetch_workday_jobs(handle: str) -> list[dict]:
+def fetch_workday_jobs(handle: str, want: Callable[[str], bool] | None = None) -> list[dict]:
     """Fetch jobs from a Workday public CXS API.
 
     No API key or JS rendering needed — {tenant}.wd{N}.myworkdayjobs.com
     exposes a plain JSON search endpoint plus a per-posting detail endpoint
-    for full JD text, same two-call shape as Ashby. Paginated; capped at
-    WORKDAY_MAX_JOBS so one very large tenant (some post 200+ openings)
-    can't blow out a scan run.
+    for full JD text, same two-call shape as Ashby. Paginated.
+
+    Workday rejects list pages larger than 20 with a 400 (verified 2026-09-25;
+    the old page size of 50 silently zeroed every Workday company). With `want`,
+    every title is listed (cheap) and descriptions are fetched only for matches,
+    so large tenants (Salesforce, Palo Alto: ~1,500 postings) are covered. Without
+    `want`, the first WORKDAY_MAX_JOBS postings come back with descriptions.
     """
-    WORKDAY_MAX_JOBS = 200
-    PAGE_SIZE = 50
+    WORKDAY_MAX_JOBS = 200 if want is None else 2000
+    PAGE_SIZE = 20
     try:
         tenant, wd_num, site = handle.split('|', 2)
     except ValueError:
@@ -353,6 +357,8 @@ def fetch_workday_jobs(handle: str) -> list[dict]:
             if not postings:
                 break
             for j in postings:
+                if want is not None and not want(j.get('title', '')):
+                    continue
                 external_path = j.get('externalPath', '')
                 desc = ''
                 try:
@@ -453,7 +459,7 @@ def fetch_jobs_for_company(ats_type: str, ats_handle: str, careers_url: str,
     elif ats_type == 'ashby':
         return fetch_ashby_jobs(ats_handle)
     elif ats_type == 'workday':
-        return fetch_workday_jobs(ats_handle)
+        return fetch_workday_jobs(ats_handle, want)
     elif ats_type == 'generic' and careers_url:
         return fetch_generic_jobs(careers_url, want)
     else:

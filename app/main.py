@@ -766,6 +766,61 @@ def _reclassify_triage_declines_impl(dry_run: bool = True):
     return {"dry_run": dry_run, "matched": len(targets), "moved": 0 if dry_run else len(targets)}
 
 
+# One-off (2026-09-25): until the scan kept the job board's own description,
+# discovered roles on JS-rendered boards were saved with no JD and never scored.
+# Re-reads each affected company's feed once, fills jd_text by matching the job
+# URL, and scores through the canonical path (same per-run LLM cap as a scan).
+# Invoke: `modal run app/admin.py::backfill_missing_jds` (dry run), then `--no-dry-run`.
+def _backfill_missing_jds_impl(dry_run: bool = True):
+    from collections import defaultdict
+    from app.config import DISCOVERY_FULL_SCORE_CAP, load_profile
+    from app.discovery.ats_clients import fetch_ashby_description, fetch_jobs_for_company, html_to_text
+    import time
+    from app.discovery.hunter import _LLM_CALL_PACING_SECONDS, _MIN_JD_FOR_SCORE, _auto_score_discovery
+    from app.models import get_db
+
+    with get_db() as conn:
+        rows = conn.execute(
+            # Every unscored discovered role, not only the ones missing a JD: a role
+            # whose JD was saved but whose scoring hit a rate limit gets retried too.
+            """SELECT j.id, j.url, j.company, j.jd_text, c.ats_type, c.ats_handle, c.careers_url
+               FROM jobs j JOIN companies c ON c.id = j.company_id
+               WHERE j.pipeline_stage = 'discovered' AND j.final_score IS NULL
+                 AND j.auto_rejected = 0"""
+        ).fetchall()
+    by_company = defaultdict(list)
+    for r in rows:
+        by_company[(r["company"], r["ats_type"], r["ats_handle"], r["careers_url"])].append(r)
+
+    profile, budget, results = load_profile(), {"remaining": DISCOVERY_FULL_SCORE_CAP}, []
+    for (company, ats_type, handle, careers_url), jobs in by_company.items():
+        need = [r for r in jobs if len(r["jd_text"] or "") < _MIN_JD_FOR_SCORE]
+        if not need:
+            feed = {}
+        elif ats_type == "ashby":
+            # Ashby fetches details one posting at a time; read only the ones needed
+            # (OpenAI's board has hundreds), paced like fetch_ashby_jobs to avoid 429s.
+            feed = {}
+            for r in need:
+                time.sleep(0.3)
+                feed[r["url"]] = html_to_text(fetch_ashby_description(handle, r["url"].rstrip("/").rsplit("/", 1)[-1]))
+        else:
+            feed = {j["url"]: html_to_text(j.get("description", ""))
+                    for j in fetch_jobs_for_company(ats_type, handle, careers_url)}
+        for r in jobs:
+            text = r["jd_text"] if len(r["jd_text"] or "") >= _MIN_JD_FOR_SCORE else feed.get(r["url"], "")
+            status = "no_feed_text" if len(text) < _MIN_JD_FOR_SCORE else "would_score"
+            if status == "would_score" and not dry_run:
+                with get_db() as conn:
+                    conn.execute("UPDATE jobs SET jd_text = ? WHERE id = ?", (text, r["id"]))
+                status = _auto_score_discovery(r["id"], r["url"], profile, budget, feed_text=text)
+                time.sleep(_LLM_CALL_PACING_SECONDS)  # free-tier pacing, same as the scan
+            results.append(f"id={r['id']} {company}: {status} ({len(text)} chars)")
+            print(f"[backfill_jd] id={r['id']} {company}: {status} ({len(text)} chars)")
+    print(f"[backfill_jd] {len(rows)} role(s) missing a JD (dry_run={dry_run})")
+    return {"dry_run": dry_run, "results": results}
+
+
 # Admin one-offs above, run by the web container's job consumer.
 ADMIN_JOBS = {
     name: globals()[f"_{name}_impl"]
@@ -773,7 +828,7 @@ ADMIN_JOBS = {
         "diagnose_stubs", "remediate_bucket1", "rescore_stale", "stamp_applied_at",
         "correct_erroneous_applied_at", "stamp_careers_url", "change_pipeline_stage",
         "bulk_close_listings", "backfill_decline_outcomes", "backfill_legacy_research",
-        "seed_hunt_targets_remote", "reclassify_triage_declines",
+        "seed_hunt_targets_remote", "reclassify_triage_declines", "backfill_missing_jds",
     )
 }
 

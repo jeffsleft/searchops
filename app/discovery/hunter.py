@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from app.models import get_db
-from app.discovery.ats_clients import fetch_jobs_for_company
+from app.discovery.ats_clients import fetch_jobs_for_company, html_to_text
 from app.discovery.matcher import passes_title_filter, generate_fit_analysis
 from app.providers import get_provider
 from app.security.url_guard import validate_url
@@ -34,7 +34,7 @@ _MIN_JD_FOR_SCORE = 300
 _LLM_CALL_PACING_SECONDS = 5
 
 
-def _auto_score_discovery(job_id: int, url: str, profile: dict, budget: dict) -> str:
+def _auto_score_discovery(job_id: int, url: str, profile: dict, budget: dict, feed_text: str = "") -> str:
     """Score a freshly discovered role through the canonical scoring path.
 
     The watchdog loop: discover → fetch JD → 4-layer score → Slack ≥8 alert, zero manual
@@ -48,20 +48,25 @@ def _auto_score_discovery(job_id: int, url: str, profile: dict, budget: dict) ->
     UPDATE here (Session 47's promote bug dropped evidence/mismatches/bullets/hooks).
 
     `budget` is a mutable dict {'remaining': int} shared across one scan run.
+    `feed_text` is the description the job board's API already returned. When it's
+    long enough, score from it: re-fetching the posting page fails on JS-rendered
+    boards (MongoDB, OpenAI, VTS on 2026-09-24 were left unscored with no JD).
     Returns a short status string for logging/stats.
     """
     from app.jobs.fetch import _fetch_jd_text, is_linkedin_job_url
     from app.scoring.engine import check_auto_reject
     from app.services.scoring_service import score_job_from_text_and_persist
 
-    if not url or is_linkedin_job_url(url):
+    if len(feed_text.strip()) >= _MIN_JD_FOR_SCORE:
+        jd_text = feed_text
+    elif not url or is_linkedin_job_url(url):
         return "skip_unfetchable"  # LinkedIn blocks automated fetching
-
-    try:
-        jd_text = _fetch_jd_text(url)
-    except Exception as e:
-        logger.warning("auto-score JD fetch failed for job %s: %s", job_id, e)
-        return "fetch_error"
+    else:
+        try:
+            jd_text = _fetch_jd_text(url)
+        except Exception as e:
+            logger.warning("auto-score JD fetch failed for job %s: %s", job_id, e)
+            return "fetch_error"
     if not jd_text or len(jd_text.strip()) < _MIN_JD_FOR_SCORE:
         return "no_jd"  # leave discovered/unscored; a manual paste can score it later
 
@@ -205,22 +210,27 @@ def run_discovery_scan() -> dict:
             if existing:
                 continue
 
+            # Keep the job board's own description: it's the JD. It used to be
+            # dropped here, leaving jd_text empty and forcing a page re-fetch.
+            feed_text = html_to_text(job.get('description', ''))
+
             # Generate fit analysis
-            fit = generate_fit_analysis(title, job.get('description', ''), company_name)
+            fit = generate_fit_analysis(title, feed_text, company_name)
 
             # Insert as discovered
             now = datetime.now(timezone.utc).isoformat()
             with get_db() as db:
                 db.execute("""
                     INSERT INTO jobs (
-                        company_id, company, job_title, url, pipeline_stage, discovery_source,
+                        company_id, company, job_title, url, jd_text, pipeline_stage, discovery_source,
                         fit_bullets, lightweight_score, date_found, date_added
-                    ) VALUES (?, ?, ?, ?, 'discovered', 'hunter', ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, 'discovered', 'hunter', ?, ?, ?, ?)
                 """, (
                     company_id,
                     company_name,
                     title,
                     url,
+                    feed_text or None,
                     json.dumps(fit.get('fit_bullets', [])),
                     fit.get('preliminary_score', 5.0),
                     now,
@@ -235,7 +245,7 @@ def run_discovery_scan() -> dict:
 
             # W1-A: auto-score through the canonical path (fires the ≥8 Slack alert).
             try:
-                if _auto_score_discovery(new_job_id, url, profile, score_budget) == "success":
+                if _auto_score_discovery(new_job_id, url, profile, score_budget, feed_text) == "success":
                     stats['auto_scored'] += 1
             except Exception as e:
                 logger.warning("auto-score failed for job %s (%s): %s", new_job_id, company_name, e)

@@ -125,6 +125,11 @@ def reclassify_triage_declines(dry_run: bool = True):
     return _relay("reclassify_triage_declines", {"dry_run": dry_run}, timeout=300)
 
 
+@admin.function(image=image, timeout=1020)
+def backfill_missing_jds(dry_run: bool = True):
+    return _relay("backfill_missing_jds", {"dry_run": dry_run}, timeout=900)
+
+
 @admin.function(image=image, timeout=420)
 def progress_snapshot_cron():
     return _relay("progress_snapshot", {}, timeout=300)

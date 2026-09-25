@@ -8,6 +8,17 @@ from app.security.url_guard import validate_url
 
 logger = logging.getLogger(__name__)
 
+def html_to_text(markup: str) -> str:
+    """Plain text from job-feed HTML. Greenhouse sends entity-escaped HTML
+    (&lt;p&gt;), Ashby and Lever send raw HTML; both come out as readable text."""
+    if not markup:
+        return ""
+    import html as _html
+    from bs4 import BeautifulSoup
+    text = BeautifulSoup(_html.unescape(markup), "html.parser").get_text(" ", strip=True)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def detect_ats(careers_url: str) -> tuple[str, str]:
     """Detect ATS type and handle from careers URL. Returns (ats_type, ats_handle)."""
     url = careers_url.lower()
@@ -76,17 +87,23 @@ def fetch_lever_jobs(handle: str) -> list[dict]:
         resp = httpx.get(url, timeout=15)
         resp.raise_for_status()
         data = resp.json()
+        if not isinstance(data, list):
+            logger.warning(f"Lever returned no job list for {handle}: {str(data)[:120]}")
+            return []
         jobs = []
         for j in data:
-            # Lever description is nested
-            desc_parts = []
-            for section in j.get('descriptionBody', {}).get('body', []):
-                if isinstance(section, dict) and section.get('text'):
-                    desc_parts.append(section['text'])
+            # Use Lever's plain-text fields. descriptionBody is a nested object on
+            # some boards and a plain string on others (Tinybird, 2026-09-24), and
+            # the nested read crashed the whole board.
+            desc_parts = [j.get('descriptionPlain') or '']
+            for lst in j.get('lists') or []:
+                if isinstance(lst, dict):
+                    desc_parts.append(f"{lst.get('text', '')}: {html_to_text(lst.get('content', ''))}")
+            desc_parts.append(j.get('additionalPlain') or '')
             jobs.append({
                 'title': j.get('text', ''),
                 'url': j.get('hostedUrl', ''),
-                'description': ' '.join(desc_parts),
+                'description': '\n'.join(p for p in desc_parts if p.strip()),
                 'posted_at': '',
                 'location': j.get('categories', {}).get('location', ''),
             })
@@ -138,7 +155,13 @@ def fetch_ashby_jobs(handle: str) -> list[dict]:
         }, timeout=15)
         resp.raise_for_status()
         data = resp.json()
-        postings = data.get('data', {}).get('jobBoard', {}).get('jobPostings', []) or []
+        board = (data.get('data') or {}).get('jobBoard')
+        if board is None:
+            # Ashby answers 200 with jobBoard: null for an unknown board name, and
+            # the old chained .get() crashed on it (Lindy, 2026-09-24).
+            logger.warning(f"No Ashby job board named {handle!r}; check the company's careers_url")
+            return []
+        postings = board.get('jobPostings') or []
         jobs = []
         for j in postings:
             posting_id = j.get('id', '')
@@ -173,6 +196,29 @@ def fetch_ashby_jobs(handle: str) -> list[dict]:
     except Exception as e:
         logger.error(f"Ashby fetch failed for {handle}: {e}")
         return []
+
+
+def fetch_ashby_description(handle: str, posting_id: str) -> str:
+    """One Ashby posting's description HTML, without reading the whole board."""
+    url = "https://jobs.ashbyhq.com/api/non-user-graphql"
+    query = """
+    query ApiJobPosting($organizationHostedJobsPageName: String!, $jobPostingId: String!) {
+      jobPosting(organizationHostedJobsPageName: $organizationHostedJobsPageName,
+                 jobPostingId: $jobPostingId) { descriptionHtml }
+    }
+    """
+    try:
+        validate_url(url)
+        resp = httpx.post(url, json={
+            'operationName': 'ApiJobPosting', 'query': query,
+            'variables': {'organizationHostedJobsPageName': handle, 'jobPostingId': posting_id},
+        }, timeout=15)
+        resp.raise_for_status()
+        posting = (resp.json().get('data') or {}).get('jobPosting') or {}
+        return posting.get('descriptionHtml') or ''
+    except Exception as e:
+        logger.warning(f"Ashby description fetch failed for {handle}/{posting_id}: {e}")
+        return ''
 
 
 def fetch_workday_jobs(handle: str) -> list[dict]:

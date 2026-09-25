@@ -192,3 +192,30 @@ def test_linkedin_url_skipped(temp_db, monkeypatch):
     assert status == "skip_unfetchable"
     assert budget["remaining"] == 5
     assert calls["alerts"] == 0
+
+
+def test_feed_description_is_scored_without_refetching_the_page(temp_db, monkeypatch):
+    """The job board's API already returned the JD. Score from it: re-fetching the
+    posting page fails on JS-rendered boards and left roles unscored (2026-09-24)."""
+    from app.discovery.hunter import _auto_score_discovery
+
+    with get_db() as conn:
+        job_id = _insert_discovered(conn)
+    _wire(monkeypatch, final_score=6.0)
+    fetched = []
+    monkeypatch.setattr("app.jobs.fetch._fetch_jd_text", lambda url: fetched.append(url) or "")
+    status = _auto_score_discovery(job_id, "https://boards.greenhouse.io/acme/jobs/1", {},
+                                   {"remaining": 10}, feed_text=_JD)
+    assert status == "success"
+    assert fetched == [], "a long enough feed description must not trigger a page re-fetch"
+
+
+def test_thin_feed_description_falls_back_to_fetching(temp_db, monkeypatch):
+    from app.discovery.hunter import _auto_score_discovery
+
+    with get_db() as conn:
+        job_id = _insert_discovered(conn)
+    _wire(monkeypatch, final_score=6.0)
+    status = _auto_score_discovery(job_id, "https://boards.greenhouse.io/acme/jobs/1", {},
+                                   {"remaining": 10}, feed_text="Apply now.")
+    assert status == "success"  # _wire's _fetch_jd_text supplied the JD

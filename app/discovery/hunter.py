@@ -176,7 +176,9 @@ def run_discovery_scan() -> dict:
         try:
             if careers_url:
                 validate_url(careers_url)
-            raw_jobs = fetch_jobs_for_company(ats_type, ats_handle, careers_url)
+            raw_jobs = fetch_jobs_for_company(
+                ats_type, ats_handle, careers_url,
+                want=lambda t: passes_title_filter(t, config.get('title_filters')))
         except Exception as e:
             logger.error(f"Scan failed for {company_name}: {e}")
             stats['errors'] += 1

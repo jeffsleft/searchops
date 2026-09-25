@@ -82,7 +82,8 @@ def do_scan_company(company: dict) -> None:
     careers_url = company['careers_url'] or ''
 
     try:
-        raw_jobs = fetch_jobs_for_company(ats_type, ats_handle, careers_url)
+        raw_jobs = fetch_jobs_for_company(ats_type, ats_handle, careers_url,
+                                          want=lambda t: passes_title_filter(t, _get_title_filters()))
 
         for job in raw_jobs:
             title = job.get('title', '')

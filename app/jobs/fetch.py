@@ -17,6 +17,15 @@ def extract_provisional_company(url: str) -> str:
     """Best-effort company name from ATS URL slug or LinkedIn URL path."""
     from app.discovery.ats_clients import detect_ats
     ats_type, ats_handle = detect_ats(url)
+    if ats_type == "teamtailor":
+        # The handle is the site root; take the company from the host:
+        # acme.teamtailor.com -> Acme, careers.lindy.ai -> Lindy.
+        from urllib.parse import urlparse
+        labels = (urlparse(ats_handle).hostname or "").split(".")
+        name = labels[0] if "teamtailor" in labels else (labels[-2] if len(labels) >= 2 else "")
+        return name.replace("-", " ").title()
+    if ats_type == "workday" and ats_handle:
+        return ats_handle.split("|")[0].replace("-", " ").title()
     if ats_type != "generic" and ats_handle:
         return ats_handle.replace("-", " ").title()
     import re

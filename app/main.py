@@ -473,9 +473,14 @@ def _stamp_careers_url_impl(company_name: str, careers_url: str, dry_run: bool =
         if dry_run:
             return
 
+        # Re-detect the job board too: setting only careers_url left Clay and PostHog
+        # with Ashby URLs but ats_type 'generic', so the scan scraped them as web pages.
+        from app.discovery.ats_clients import detect_ats
+        ats_type, ats_handle = detect_ats(careers_url)
         conn.execute(
-            "UPDATE companies SET careers_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (careers_url, row["id"]),
+            "UPDATE companies SET careers_url = ?, ats_type = ?, ats_handle = ?, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (careers_url, ats_type, ats_handle, row["id"]),
         )
 
     print(f"[stamp_careers_url] '{company_name}' committed.")
@@ -783,7 +788,7 @@ def _backfill_missing_jds_impl(dry_run: bool = True):
         rows = conn.execute(
             # Every unscored discovered role, not only the ones missing a JD: a role
             # whose JD was saved but whose scoring hit a rate limit gets retried too.
-            """SELECT j.id, j.url, j.company, j.jd_text, c.ats_type, c.ats_handle, c.careers_url
+            """SELECT j.id, j.url, j.company, j.job_title, j.jd_text, c.ats_type, c.ats_handle, c.careers_url
                FROM jobs j JOIN companies c ON c.id = j.company_id
                WHERE j.pipeline_stage = 'discovered' AND j.final_score IS NULL
                  AND j.auto_rejected = 0"""
@@ -805,8 +810,12 @@ def _backfill_missing_jds_impl(dry_run: bool = True):
                 time.sleep(0.3)
                 feed[r["url"]] = html_to_text(fetch_ashby_description(handle, r["url"].rstrip("/").rsplit("/", 1)[-1]))
         else:
+            # Ask only for the titles we need, so per-posting boards (SmartRecruiters)
+            # return their descriptions without reading the whole board.
+            titles = {r["job_title"] for r in need}
             feed = {j["url"]: html_to_text(j.get("description", ""))
-                    for j in fetch_jobs_for_company(ats_type, handle, careers_url)}
+                    for j in fetch_jobs_for_company(ats_type, handle, careers_url,
+                                                    want=lambda t: t in titles)}
         for r in jobs:
             text = r["jd_text"] if len(r["jd_text"] or "") >= _MIN_JD_FOR_SCORE else feed.get(r["url"], "")
             status = "no_feed_text" if len(text) < _MIN_JD_FOR_SCORE else "would_score"
@@ -821,6 +830,59 @@ def _backfill_missing_jds_impl(dry_run: bool = True):
     return {"dry_run": dry_run, "results": results}
 
 
+# Point a watched company at the right job board (careers_url + detected ATS),
+# or pause/resume scanning it. Shows old -> new; dry run by default.
+# Invoke: `modal run app/admin.py::set_watched_company --company-name "ServiceNow"
+#          --careers-url https://jobs.smartrecruiters.com/ServiceNow --no-dry-run`
+def _set_watched_company_impl(company_name: str, careers_url: str = "", hunt_enabled: bool | None = None,
+                              dry_run: bool = True):
+    from app.discovery.ats_clients import detect_ats
+    from app.models import get_db
+
+    with get_db() as conn:
+        row = conn.execute("SELECT id, careers_url, ats_type, ats_handle, hunt_enabled FROM companies "
+                           "WHERE name = ?", (company_name,)).fetchone()
+        if not row:
+            print(f"[set_watched_company] no company named {company_name!r}")
+            return {"found": False}
+        url = careers_url or row["careers_url"]
+        ats_type, ats_handle = detect_ats(url) if url else (row["ats_type"], row["ats_handle"])
+        # Leave scanning as it is unless the caller asked to change it.
+        hunt = row["hunt_enabled"] if hunt_enabled is None else int(hunt_enabled)
+        print(f"[set_watched_company] {company_name}: "
+              f"{row['careers_url']} [{row['ats_type']}:{row['ats_handle']}] hunt={row['hunt_enabled']} -> "
+              f"{url} [{ats_type}:{ats_handle}] hunt={hunt} (dry_run={dry_run})")
+        if not dry_run:
+            conn.execute(
+                "UPDATE companies SET careers_url = ?, ats_type = ?, ats_handle = ?, hunt_enabled = ?, "
+                "scan_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (url, ats_type, ats_handle, hunt, row["id"]))
+    return {"found": True, "careers_url": url, "ats_type": ats_type, "hunt_enabled": bool(hunt)}
+
+
+# Re-derive ats_type/ats_handle from careers_url for every watched company, fixing
+# rows where they drifted apart (the old stamp_careers_url updated only the URL).
+# Invoke: `modal run app/admin.py::redetect_ats` (dry run), then `--no-dry-run`.
+def _redetect_ats_impl(dry_run: bool = True):
+    from app.discovery.ats_clients import detect_ats
+    from app.models import get_db
+
+    changed = []
+    with get_db() as conn:
+        rows = conn.execute("SELECT id, name, careers_url, ats_type, ats_handle FROM companies "
+                            "WHERE hunt_enabled = 1 AND careers_url IS NOT NULL AND careers_url != ''").fetchall()
+        for r in rows:
+            ats_type, ats_handle = detect_ats(r["careers_url"])
+            if (ats_type, ats_handle) != (r["ats_type"], r["ats_handle"] or ""):
+                changed.append(r["name"])
+                print(f"[redetect_ats] {r['name']}: [{r['ats_type']}:{r['ats_handle']}] -> [{ats_type}:{ats_handle}]")
+                if not dry_run:
+                    conn.execute("UPDATE companies SET ats_type = ?, ats_handle = ?, updated_at = CURRENT_TIMESTAMP "
+                                 "WHERE id = ?", (ats_type, ats_handle, r["id"]))
+    print(f"[redetect_ats] {len(changed)} of {len(rows)} watched companies out of step (dry_run={dry_run})")
+    return {"dry_run": dry_run, "changed": changed}
+
+
 # Admin one-offs above, run by the web container's job consumer.
 ADMIN_JOBS = {
     name: globals()[f"_{name}_impl"]
@@ -828,7 +890,7 @@ ADMIN_JOBS = {
         "diagnose_stubs", "remediate_bucket1", "rescore_stale", "stamp_applied_at",
         "correct_erroneous_applied_at", "stamp_careers_url", "change_pipeline_stage",
         "bulk_close_listings", "backfill_decline_outcomes", "backfill_legacy_research",
-        "seed_hunt_targets_remote", "reclassify_triage_declines", "backfill_missing_jds",
+        "seed_hunt_targets_remote", "reclassify_triage_declines", "backfill_missing_jds", "set_watched_company", "redetect_ats",
     )
 }
 

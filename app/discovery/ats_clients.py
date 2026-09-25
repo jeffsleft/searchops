@@ -3,6 +3,7 @@ import re
 import time
 import logging
 import httpx
+from typing import Callable
 from urllib.parse import quote, unquote
 from app.security.url_guard import validate_url
 
@@ -52,6 +53,20 @@ def detect_ats(careers_url: str) -> tuple[str, str]:
     if wd_match:
         tenant, wd_num, site = wd_match.groups()
         return 'workday', f"{tenant}|{wd_num}|{unquote(site)}"
+
+    # Teamtailor: career sites often sit on the company's own domain (Lindy:
+    # careers.lindy.ai), so store the site's /jobs.rss feed URL as careers_url.
+    # The handle is the site root, which fetch_teamtailor_jobs reads the feed from.
+    tt_match = re.search(r'^(https?://[^/]+)/jobs\.rss', careers_url.strip(), re.I) \
+        or re.search(r'^(https?://[a-z0-9-]+\.teamtailor\.com)', careers_url.strip(), re.I)
+    if tt_match:
+        return 'teamtailor', tt_match.group(1)
+
+    # SmartRecruiters: jobs.smartrecruiters.com/{company} (ServiceNow, 2026-09-25).
+    # The public API is case-insensitive on the company identifier.
+    sr_match = re.search(r'(?:jobs|careers)\.smartrecruiters\.com/([a-z0-9_-]+)', url)
+    if sr_match:
+        return 'smartrecruiters', sr_match.group(1)
 
     return 'generic', ''
 
@@ -221,6 +236,85 @@ def fetch_ashby_description(handle: str, posting_id: str) -> str:
         return ''
 
 
+def fetch_smartrecruiters_jobs(handle: str, want: Callable[[str], bool] | None = None,
+                               max_postings: int = 1000) -> list[dict]:
+    """Fetch jobs from the SmartRecruiters public API.
+
+    The list endpoint pages 100 at a time and carries titles only; each description
+    is a separate detail call. Big boards (ServiceNow has ~700 postings) would take
+    minutes, so when `want` is given only matching titles are returned, with their
+    descriptions. Without `want`, every title comes back with no description.
+    """
+    base = f"https://api.smartrecruiters.com/v1/companies/{quote(handle)}/postings"
+    jobs: list[dict] = []
+    try:
+        validate_url(base)
+        offset = 0
+        while offset < max_postings:
+            resp = httpx.get(base, params={"limit": 100, "offset": offset}, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            page = data.get("content") or []
+            for p in page:
+                title = p.get("name", "")
+                if want is not None and not want(title):
+                    continue
+                desc = ""
+                if want is not None:
+                    try:
+                        time.sleep(0.3)  # be polite to the detail endpoint
+                        d = httpx.get(f"{base}/{p['id']}", timeout=15)
+                        d.raise_for_status()
+                        sections = ((d.json().get("jobAd") or {}).get("sections") or {})
+                        desc = "\n".join(
+                            f"{(s or {}).get('title', '')}\n{(s or {}).get('text', '')}"
+                            for s in sections.values() if isinstance(s, dict)
+                        )
+                    except Exception as e:
+                        logger.warning(f"SmartRecruiters description fetch failed for {handle}/{p.get('id')}: {e}")
+                loc = p.get("location") or {}
+                jobs.append({
+                    "title": title,
+                    "url": f"https://jobs.smartrecruiters.com/{handle}/{p['id']}",
+                    "description": desc,
+                    "posted_at": p.get("releasedDate", ""),
+                    "location": ", ".join(x for x in (loc.get("city"), loc.get("country")) if x)
+                                + (" (remote)" if loc.get("remote") else ""),
+                })
+            offset += len(page)
+            if not page or offset >= (data.get("totalFound") or 0):
+                break
+        return jobs
+    except Exception as e:
+        logger.error(f"SmartRecruiters fetch failed for {handle}: {e}")
+        return jobs
+
+
+def fetch_teamtailor_jobs(site_root: str) -> list[dict]:
+    """Fetch jobs from a Teamtailor career site's public RSS feed ({site}/jobs.rss),
+    which carries every open role with its full description."""
+    import xml.etree.ElementTree as ET
+    url = f"{site_root.rstrip('/')}/jobs.rss"
+    try:
+        validate_url(url)
+        resp = httpx.get(url, timeout=15, follow_redirects=True)
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+        jobs = []
+        for item in root.iter("item"):
+            jobs.append({
+                "title": (item.findtext("title") or "").strip(),
+                "url": (item.findtext("link") or "").strip(),
+                "description": item.findtext("description") or "",
+                "posted_at": item.findtext("pubDate") or "",
+                "location": "",
+            })
+        return jobs
+    except Exception as e:
+        logger.error(f"Teamtailor fetch failed for {site_root}: {e}")
+        return []
+
+
 def fetch_workday_jobs(handle: str) -> list[dict]:
     """Fetch jobs from a Workday public CXS API.
 
@@ -285,7 +379,7 @@ def fetch_workday_jobs(handle: str) -> list[dict]:
         return jobs
 
 
-def fetch_generic_jobs(careers_url: str) -> list[dict]:
+def fetch_generic_jobs(careers_url: str, want: Callable[[str], bool] | None = None) -> list[dict]:
     """
     Fallback scraper for companies without a known ATS.
     Looks for links containing 'job', 'position', 'open-role' etc.
@@ -301,7 +395,7 @@ def fetch_generic_jobs(careers_url: str) -> list[dict]:
         # Check if we were redirected to a known ATS
         ats_type, ats_handle = detect_ats(str(resp.url))
         if ats_type != 'generic':
-            return fetch_jobs_for_company(ats_type, ats_handle, str(resp.url))
+            return fetch_jobs_for_company(ats_type, ats_handle, str(resp.url), want=want)
 
         soup = BeautifulSoup(resp.text, "html.parser")
         jobs = []
@@ -341,8 +435,17 @@ def fetch_generic_jobs(careers_url: str) -> list[dict]:
         return []
 
 
-def fetch_jobs_for_company(ats_type: str, ats_handle: str, careers_url: str) -> list[dict]:
-    """Dispatch to correct ATS client. Returns list of job dicts."""
+def fetch_jobs_for_company(ats_type: str, ats_handle: str, careers_url: str,
+                           want: Callable[[str], bool] | None = None) -> list[dict]:
+    """Dispatch to correct ATS client. Returns list of job dicts.
+
+    `want(title)` lets a client with per-posting detail calls skip descriptions for
+    titles the caller will drop anyway. Only SmartRecruiters uses it today.
+    """
+    if ats_type == 'smartrecruiters':
+        return fetch_smartrecruiters_jobs(ats_handle, want)
+    if ats_type == 'teamtailor':
+        return fetch_teamtailor_jobs(ats_handle)
     if ats_type == 'greenhouse':
         return fetch_greenhouse_jobs(ats_handle)
     elif ats_type == 'lever':
@@ -352,7 +455,7 @@ def fetch_jobs_for_company(ats_type: str, ats_handle: str, careers_url: str) -> 
     elif ats_type == 'workday':
         return fetch_workday_jobs(ats_handle)
     elif ats_type == 'generic' and careers_url:
-        return fetch_generic_jobs(careers_url)
+        return fetch_generic_jobs(careers_url, want)
     else:
         logger.warning(f"No ATS client for type '{ats_type}' and no URL provided")
         return []

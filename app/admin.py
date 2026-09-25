@@ -130,6 +130,18 @@ def backfill_missing_jds(dry_run: bool = True):
     return _relay("backfill_missing_jds", {"dry_run": dry_run}, timeout=900)
 
 
+@admin.function(image=image, timeout=240)
+def set_watched_company(company_name: str, careers_url: str = "", hunt_enabled: bool | None = None,
+                        dry_run: bool = True):
+    return _relay("set_watched_company", {"company_name": company_name, "careers_url": careers_url,
+                                          "hunt_enabled": hunt_enabled, "dry_run": dry_run}, timeout=120)
+
+
+@admin.function(image=image, timeout=240)
+def redetect_ats(dry_run: bool = True):
+    return _relay("redetect_ats", {"dry_run": dry_run}, timeout=120)
+
+
 @admin.function(image=image, timeout=420)
 def progress_snapshot_cron():
     return _relay("progress_snapshot", {}, timeout=300)

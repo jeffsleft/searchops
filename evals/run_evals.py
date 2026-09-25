@@ -31,7 +31,7 @@ os.environ["DATABASE_PATH"] = tempfile.mkstemp(suffix=".db")[1]
 
 import yaml  # noqa: E402
 
-JUDGE_MODEL = os.getenv("EVALS_JUDGE_MODEL", "gemini-2.5-flash")
+JUDGE_MODEL = os.getenv("EVALS_JUDGE_MODEL", "gemini-flash-lite-latest")
 
 
 def _load():

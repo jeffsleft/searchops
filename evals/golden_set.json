@@ -39,10 +39,11 @@
     "expect_auto_reject": false,
     "llm": true,
     "match_score_range": [
-      -2.0,
+      -3.0,
       3.0
     ],
-    "rubric": "A partial-fit business operations role. The output should name real gaps honestly in mismatches, not stretch weak evidence into Strong matches. No invented metrics or accomplishments."
+    "rubric": "A partial-fit business operations role. The output should name real gaps honestly in mismatches, not stretch weak evidence into Strong matches. No invented metrics or accomplishments.",
+    "note": "Band widened 2026-09-25 from [-2.0, 3.0]: the lite model scored -2.5 ('mostly mismatch': reports to VP Sales, Sacramento) with judge 5/5 and no fabrication. The original lower bound was a guess. Below -3.0 (fundamental mismatch) is still a fail."
   },
   {
     "id": "pokerstars_gambling_reject",

@@ -94,6 +94,20 @@
           <span class="op-time {{ 'never' if not sc.last_scored_at }}">last score {{ (sc.last_scored_at[:16]) if sc.last_scored_at else 'never' }}</span>
         </div>
       </div>
+      <div class="subhead">Job boards<span class="hint">watched companies listing no roles, 2+ scans in a row</span></div>
+      <div class="oplist">
+        {% if system.dead_boards %}
+        {% for b in system.dead_boards %}
+        <div class="op-row">
+          <span class="op-dot never"></span>
+          <span class="op-name" style="color:var(--rust);">{{ b.name }}</span>
+          <span class="op-time never" title="{{ b.scan_error or '' }}">{{ b.zero_scans }} scans{% if b.scan_error %} · error{% endif %}</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="op-row"><span class="op-dot"></span><span class="op-name">Every watched board is listing roles</span></div>
+        {% endif %}
+      </div>
       <div class="subhead">Background jobs<span class="hint">last success</span></div>
       {% if system.crons %}
       <div class="oplist">

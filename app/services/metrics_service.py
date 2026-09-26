@@ -159,8 +159,13 @@ def system_health(window_days: int = 7) -> dict:
       "p50_ms": int|None, "p95_ms": int|None,
       "crons": [{"task_type": str, "last_ok": str|None}],
       "recent_errors": [{"ts": str, "route_template": str, "exc_type": str, "message": str}],
-      "scoring": {"unscored_new": int, "unscored_no_jd": int, "last_scored_at": str|None}
+      "scoring": {"unscored_new": int, "unscored_no_jd": int, "last_scored_at": str|None},
+      "dead_boards": [{"name": str, "zero_scans": int, "scan_error": str|None}]
     }
+
+    `dead_boards` flags watched companies whose job board listed no postings on 2+
+    scans in a row. A broken reader returns [] and looks exactly like "no openings"
+    (Workday's page-size change zeroed every Workday company, 2026-09-25).
 
     `scoring` is the tripwire for scoring failing quietly (Gemini out of credits,
     JD fetch failing): roles the scan found in the last 3 days that still have no
@@ -201,6 +206,10 @@ def system_health(window_days: int = 7) -> dict:
             "  AND date_found >= strftime('%Y-%m-%dT%H:%M:%S', 'now', '-3 days')"
         ).fetchone()
         last_scored = conn.execute("SELECT MAX(scored_at) FROM score_history").fetchone()[0]
+        dead_boards = conn.execute(
+            "SELECT name, zero_scans, scan_error FROM companies "
+            "WHERE hunt_enabled = 1 AND zero_scans >= 2 ORDER BY zero_scans DESC, name"
+        ).fetchall()
 
     return {
         "window_days": window_days,
@@ -216,6 +225,7 @@ def system_health(window_days: int = 7) -> dict:
             "unscored_no_jd": unscored["no_jd"] or 0,
             "last_scored_at": last_scored,
         },
+        "dead_boards": [dict(r) for r in dead_boards],
     }
 
 

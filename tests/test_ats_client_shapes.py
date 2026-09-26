@@ -80,3 +80,19 @@ def test_smartrecruiters_fetches_details_only_for_wanted_titles(monkeypatch):
     assert [j["title"] for j in jobs] == ["Director Sales Operations"]
     assert "Run deal desk" in jobs[0]["description"]
     assert sum(u.endswith("/1") for u in calls) == 1 and not any(u.endswith("/2") for u in calls)
+
+
+def test_listed_counts_the_whole_board_not_just_title_matches(monkeypatch):
+    def fake_get(url, params=None, timeout=None):
+        if url.endswith("/postings"):
+            return _Resp({"totalFound": 2, "content": [{"id": "1", "name": "Engineer", "location": {}},
+                                                       {"id": "2", "name": "Nurse", "location": {}}]})
+        return _Resp({})
+    monkeypatch.setattr(ats.httpx, "get", fake_get)
+    jobs = ats.fetch_jobs_for_company("smartrecruiters", "acme", "", want=lambda t: "operations" in t.lower())
+    assert list(jobs) == [] and jobs.listed == 2  # no matches, but the board works
+
+
+def test_a_failed_reader_lists_zero(monkeypatch):
+    monkeypatch.setattr(ats.httpx, "get", lambda *a, **k: _Resp({"ok": False}))
+    assert ats.fetch_jobs_for_company("lever", "gone", "").listed == 0

@@ -184,7 +184,8 @@ def run_discovery_scan() -> dict:
             stats['errors'] += 1
             with get_db() as db:
                 db.execute(
-                    "UPDATE companies SET scan_error=?, last_scanned=? WHERE id=?",
+                    "UPDATE companies SET scan_error=?, last_scanned=?, last_listed=0, "
+                    "zero_scans=COALESCE(zero_scans,0)+1 WHERE id=?",
                     (str(e), datetime.now(timezone.utc).isoformat(), company_id)
                 )
             continue
@@ -256,9 +257,11 @@ def run_discovery_scan() -> dict:
 
         # Update last_scanned
         with get_db() as db:
+            listed = getattr(raw_jobs, "listed", len(raw_jobs))
             db.execute(
-                "UPDATE companies SET last_scanned=?, scan_error=NULL WHERE id=?",
-                (datetime.now(timezone.utc).isoformat(), company_id)
+                "UPDATE companies SET last_scanned=?, scan_error=NULL, last_listed=?, "
+                "zero_scans=CASE WHEN ?=0 THEN COALESCE(zero_scans,0)+1 ELSE 0 END WHERE id=?",
+                (datetime.now(timezone.utc).isoformat(), listed, listed, company_id)
             )
 
         # Refresh the company's match summary (count + best score) after the scan.

@@ -105,7 +105,9 @@ def test_fetch_workday_jobs_paginates_until_total_reached(monkeypatch):
         if json["limit"] > 20:
             return httpx.Response(400, json={}, request=httpx.Request("POST", url))
         page = postings[json["offset"]:json["offset"] + json["limit"]]
-        return httpx.Response(200, json={"total": 45, "jobPostings": page}, request=httpx.Request("POST", url))
+        # Like real Workday: `total` only on the first page, 0 after.
+        total = 45 if json["offset"] == 0 else 0
+        return httpx.Response(200, json={"total": total, "jobPostings": page}, request=httpx.Request("POST", url))
 
     def _get(url, timeout=None):
         return httpx.Response(200, json={"jobPostingInfo": {"jobDescription": "x"}},
@@ -118,7 +120,7 @@ def test_fetch_workday_jobs_paginates_until_total_reached(monkeypatch):
     jobs = fetch_workday_jobs("genesys|1|Genesys")
 
     assert limits == [20, 20, 20]
-    assert len(jobs) == 45
+    assert len(jobs) == 45 and jobs.listed == 45
 
 
 def test_fetch_workday_jobs_with_want_fetches_details_only_for_matches(monkeypatch):
@@ -146,3 +148,18 @@ def test_fetch_workday_jobs_with_want_fetches_details_only_for_matches(monkeypat
 
 def test_fetch_workday_jobs_malformed_handle_returns_empty():
     assert fetch_workday_jobs("not-a-valid-handle") == []
+
+
+def test_missing_total_still_counts_postings_read(monkeypatch):
+    postings = [{"title": f"Role {i}", "externalPath": f"/job/{i}"} for i in range(25)]
+
+    def _post(url, json=None, timeout=None):
+        page = postings[json["offset"]:json["offset"] + 20]
+        return httpx.Response(200, json={"jobPostings": page}, request=httpx.Request("POST", url))  # no total
+
+    monkeypatch.setattr(httpx, "post", _post)
+    monkeypatch.setattr(httpx, "get", lambda url, timeout=None: httpx.Response(
+        200, json={"jobPostingInfo": {"jobDescription": "x"}}, request=httpx.Request("GET", url)))
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    jobs = fetch_workday_jobs("acme|1|External")
+    assert len(jobs) == 25 and jobs.listed == 25

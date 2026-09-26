@@ -183,3 +183,14 @@ def test_scoring_health_counts_recent_unscored_discoveries():
     s = system_health()["scoring"]
     assert s["unscored_new"] == base + 1
     assert s["unscored_no_jd"] >= 1
+
+
+def test_dead_boards_lists_companies_with_two_empty_scans_in_a_row():
+    from app.models import get_db
+    from app.services.metrics_service import system_health
+    with get_db() as conn:
+        conn.execute("DELETE FROM companies WHERE name IN ('DeadCo', 'QuietOnce')")
+        conn.execute("INSERT INTO companies (name, hunt_enabled, zero_scans, date_added) VALUES ('DeadCo', 1, 3, date('now'))")
+        conn.execute("INSERT INTO companies (name, hunt_enabled, zero_scans, date_added) VALUES ('QuietOnce', 1, 1, date('now'))")
+    names = [b["name"] for b in system_health()["dead_boards"]]
+    assert "DeadCo" in names and "QuietOnce" not in names

@@ -9,6 +9,16 @@ from app.security.url_guard import validate_url
 
 logger = logging.getLogger(__name__)
 
+class JobList(list):
+    """Jobs from one board, plus `listed`: how many postings the board listed
+    before any title filter. Zero listed means the board is broken or empty,
+    which a reader returning [] can't otherwise tell apart from "no matches"."""
+
+    def __init__(self, jobs=(), listed: int | None = None):
+        super().__init__(jobs)
+        self.listed = len(self) if listed is None else listed
+
+
 def html_to_text(markup: str) -> str:
     """Plain text from job-feed HTML. Greenhouse sends entity-escaped HTML
     (&lt;p&gt;), Ashby and Lever send raw HTML; both come out as readable text."""
@@ -246,7 +256,7 @@ def fetch_smartrecruiters_jobs(handle: str, want: Callable[[str], bool] | None =
     descriptions. Without `want`, every title comes back with no description.
     """
     base = f"https://api.smartrecruiters.com/v1/companies/{quote(handle)}/postings"
-    jobs: list[dict] = []
+    jobs = JobList()
     try:
         validate_url(base)
         offset = 0
@@ -282,6 +292,7 @@ def fetch_smartrecruiters_jobs(handle: str, want: Callable[[str], bool] | None =
                                 + (" (remote)" if loc.get("remote") else ""),
                 })
             offset += len(page)
+            jobs.listed = data.get("totalFound") or offset
             if not page or offset >= (data.get("totalFound") or 0):
                 break
         return jobs
@@ -338,11 +349,12 @@ def fetch_workday_jobs(handle: str, want: Callable[[str], bool] | None = None) -
 
     base = f"https://{tenant}.wd{wd_num}.myworkdayjobs.com/wday/cxs/{tenant}/{site}"
     public_base = f"https://{tenant}.wd{wd_num}.myworkdayjobs.com/{site}"
-    jobs = []
+    jobs = JobList()
     try:
         offset = 0
         total = None
-        while offset < WORKDAY_MAX_JOBS and (total is None or offset < total):
+        seen = 0
+        while offset < WORKDAY_MAX_JOBS and (not total or offset < total):
             list_url = f"{base}/jobs"
             validate_url(list_url)
             resp = httpx.post(
@@ -352,10 +364,17 @@ def fetch_workday_jobs(handle: str, want: Callable[[str], bool] | None = None) -
             )
             resp.raise_for_status()
             data = resp.json()
-            total = data.get('total', 0)
+            # Workday sends `total` on the first page only; later pages say 0.
+            # Reading it every page ended the loop after page two (40 postings).
+            if total is None:
+                total = data.get('total') or 0
+                jobs.listed = total
             postings = data.get('jobPostings', []) or []
             if not postings:
                 break
+            seen += len(postings)
+            # Never report fewer than were actually read (a missing total).
+            jobs.listed = max(jobs.listed, seen)
             for j in postings:
                 if want is not None and not want(j.get('title', '')):
                     continue
@@ -448,6 +467,11 @@ def fetch_jobs_for_company(ats_type: str, ats_handle: str, careers_url: str,
     `want(title)` lets a client with per-posting detail calls skip descriptions for
     titles the caller will drop anyway. Only SmartRecruiters uses it today.
     """
+    jobs = _dispatch(ats_type, ats_handle, careers_url, want)
+    return jobs if isinstance(jobs, JobList) else JobList(jobs)
+
+
+def _dispatch(ats_type, ats_handle, careers_url, want):
     if ats_type == 'smartrecruiters':
         return fetch_smartrecruiters_jobs(ats_handle, want)
     if ats_type == 'teamtailor':

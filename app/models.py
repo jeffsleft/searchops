@@ -553,6 +553,10 @@ def init_db():
         _run_migration("ALTER TABLE companies ADD COLUMN match_count INTEGER DEFAULT 0")
         _run_migration("ALTER TABLE companies ADD COLUMN match_best_score REAL")
         _run_migration("ALTER TABLE companies ADD COLUMN matches_refreshed_at TEXT")
+        # Board health: postings the job board listed on the last scan, and how many
+        # scans in a row it listed none (Health page flags >= 2).
+        _run_migration("ALTER TABLE companies ADD COLUMN last_listed INTEGER")
+        _run_migration("ALTER TABLE companies ADD COLUMN zero_scans INTEGER DEFAULT 0")
         # Divergence detection, rebuilt on the per-session model (was on the
         # retired flat questions table's asked_to/status columns)
         _run_migration("ALTER TABLE session_questions_to_ask ADD COLUMN divergence_flag INTEGER DEFAULT 0")

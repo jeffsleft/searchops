@@ -460,6 +460,85 @@ def fetch_generic_jobs(careers_url: str, want: Callable[[str], bool] | None = No
         return []
 
 
+def list_job_urls(ats_type: str, handle: str) -> set[str] | None:
+    """Every open job URL on a board, in the same form the scan stores, without
+    fetching descriptions. Returns None when the board type isn't supported or the
+    listing fails or comes back empty: callers must treat None as "unknown", never
+    as "every listing closed"."""
+    urls: set[str] = set()
+    try:
+        if ats_type == "greenhouse":
+            r = httpx.get(f"https://boards-api.greenhouse.io/v1/boards/{handle}/jobs", timeout=15)
+            r.raise_for_status()
+            urls = {j.get("absolute_url", "") for j in r.json().get("jobs", [])}
+        elif ats_type == "lever":
+            r = httpx.get(f"https://api.lever.co/v0/postings/{handle}?mode=json", timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            urls = {j.get("hostedUrl", "") for j in data} if isinstance(data, list) else set()
+        elif ats_type == "ashby":
+            q = ("query A($o: String!) { jobBoard: jobBoardWithTeams(organizationHostedJobsPageName: $o) "
+                 "{ jobPostings { id } } }")
+            r = httpx.post("https://jobs.ashbyhq.com/api/non-user-graphql",
+                           json={"operationName": "A", "query": q, "variables": {"o": handle}}, timeout=15)
+            r.raise_for_status()
+            board = (r.json().get("data") or {}).get("jobBoard") or {}
+            urls = {f"https://jobs.ashbyhq.com/{quote(handle)}/{p['id']}" for p in board.get("jobPostings") or []}
+        elif ats_type == "teamtailor":
+            urls = {j["url"] for j in fetch_teamtailor_jobs(handle)}
+        elif ats_type in ("workday", "smartrecruiters"):
+            urls = _list_urls_paged(ats_type, handle)  # paged listing, no detail calls
+        else:
+            return None
+    except Exception as e:
+        logger.warning(f"list_job_urls failed for {ats_type}:{handle}: {e}")
+        return None
+    urls.discard("")
+    return urls or None
+
+
+def _list_urls_paged(ats_type: str, handle: str) -> set[str]:
+    """Raises if the read is partial (page cap hit, or fewer postings than the
+    board's total): a partial list would make live roles look closed."""
+    urls: set[str] = set()
+    if ats_type == "smartrecruiters":
+        base = f"https://api.smartrecruiters.com/v1/companies/{quote(handle)}/postings"
+        offset = 0
+        while offset < 2000:
+            r = httpx.get(base, params={"limit": 100, "offset": offset}, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            page = data.get("content") or []
+            urls |= {f"https://jobs.smartrecruiters.com/{handle}/{p['id']}" for p in page}
+            offset += len(page)
+            if not page or offset >= (data.get("totalFound") or 0):
+                break
+        if offset < (data.get("totalFound") or 0):
+            raise RuntimeError(f"partial SmartRecruiters listing: {offset} of {data.get('totalFound')}")
+    elif ats_type == "workday":
+        tenant, wd_num, site = handle.split("|", 2)
+        base = f"https://{tenant}.wd{wd_num}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
+        public_base = f"https://{tenant}.wd{wd_num}.myworkdayjobs.com/{site}"
+        offset, total = 0, None
+        while offset < 2000:
+            r = httpx.post(base, json={"appliedFacets": {}, "limit": 20, "offset": offset, "searchText": ""},
+                           timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            if total is None:
+                total = data.get("total") or 0
+            page = data.get("jobPostings") or []
+            if not page:
+                break
+            urls |= {f"{public_base}{p.get('externalPath', '')}" for p in page}
+            offset += len(page)
+            if total and offset >= total:
+                break
+        if total and offset < total:
+            raise RuntimeError(f"partial Workday listing: {offset} of {total}")
+    return urls
+
+
 def fetch_jobs_for_company(ats_type: str, ats_handle: str, careers_url: str,
                            want: Callable[[str], bool] | None = None) -> list[dict]:
     """Dispatch to correct ATS client. Returns list of job dicts.

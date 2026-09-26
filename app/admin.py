@@ -142,6 +142,11 @@ def redetect_ats(dry_run: bool = True):
     return _relay("redetect_ats", {"dry_run": dry_run}, timeout=120)
 
 
+@admin.function(image=image, timeout=1020)
+def close_dead_listings(dry_run: bool = True):
+    return _relay("close_dead_listings", {"dry_run": dry_run}, timeout=900)
+
+
 @admin.function(image=image, timeout=420)
 def progress_snapshot_cron():
     return _relay("progress_snapshot", {}, timeout=300)

@@ -173,9 +173,11 @@ def _consume_jobs(runner):
 def scheduler():
     """Queue this tick's jobs for the web container.
 
-    - every tick: research up to 5 un-researched outreach targets
+    - every tick: research up to 5 un-researched outreach targets, and score up to
+      15 discovered roles the scan left unscored (it caps LLM scoring per run)
     - 00 UTC: prune observability tables
     - 06 UTC: discovery scan (sends its own score-aware Slack digest)
+    - 12 UTC: close discovered roles whose posting is gone from the job board
     - Monday 18 UTC (11am PDT / 10am PST): weekly Slack digest
     - Sunday 00 UTC: DB backup (folded in here: Modal caps the workspace at 5 crons)
     - 1st of month 00 UTC: progress snapshot (same cap)
@@ -184,10 +186,14 @@ def scheduler():
 
     now = datetime.now(timezone.utc)
     jobs = ["research"]
+    if now.hour != 6:  # at 06 the scan scores its own new roles; don't race it
+        jobs.append("score_backlog")
     if now.hour == 0:
         jobs.append("prune_observability")
     if now.hour == 6:
         jobs.append("discovery_scan")
+    if now.hour == 12:
+        jobs.append("close_dead_listings")
     if now.weekday() == 0 and now.hour == 18:
         jobs.append("weekly_digest")
     if now.weekday() == 6 and now.hour == 0:

@@ -96,3 +96,13 @@ def test_listed_counts_the_whole_board_not_just_title_matches(monkeypatch):
 def test_a_failed_reader_lists_zero(monkeypatch):
     monkeypatch.setattr(ats.httpx, "get", lambda *a, **k: _Resp({"ok": False}))
     assert ats.fetch_jobs_for_company("lever", "gone", "").listed == 0
+
+
+def test_a_partial_board_listing_is_unknown_not_empty(monkeypatch):
+    # Only the first page comes back; the board says it has 45. A partial list
+    # would make live roles look closed, so list_job_urls must return None.
+    def fake_post(url, json=None, timeout=None):
+        page = [{"externalPath": f"/job/{i}"} for i in range(20)] if json["offset"] == 0 else []
+        return _Resp({"total": 45 if json["offset"] == 0 else 0, "jobPostings": page})
+    monkeypatch.setattr(ats.httpx, "post", fake_post)
+    assert ats.list_job_urls("workday", "acme|1|External") is None

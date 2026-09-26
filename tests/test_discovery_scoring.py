@@ -219,3 +219,61 @@ def test_thin_feed_description_falls_back_to_fetching(temp_db, monkeypatch):
     status = _auto_score_discovery(job_id, "https://boards.greenhouse.io/acme/jobs/1", {},
                                    {"remaining": 10}, feed_text="Apply now.")
     assert status == "success"  # _wire's _fetch_jd_text supplied the JD
+
+
+def test_score_backlog_scores_newest_unscored_roles_up_to_the_limit(temp_db, monkeypatch):
+    """Roles past the scan's per-run cap were never scored; the backlog job
+    catches them up, newest first, within its own limit."""
+    from app.background_jobs import score_backlog
+
+    with get_db() as conn:
+        ids = []
+        for i in range(4):
+            ids.append(conn.execute(
+                "INSERT INTO jobs (company, job_title, url, jd_text, pipeline_stage, date_found) "
+                "VALUES ('Acme', ?, ?, ?, 'discovered', strftime('%Y-%m-%dT%H:%M:%S','now', ?))",
+                (f"Role {i}", f"https://boards.greenhouse.io/acme/jobs/{i}", _JD, f"-{i + 3} hours")).lastrowid)
+        old = conn.execute(
+            "INSERT INTO jobs (company, job_title, url, jd_text, pipeline_stage, date_found) "
+            "VALUES ('Acme', 'Old', 'https://boards.greenhouse.io/acme/jobs/old', ?, 'discovered', "
+            "strftime('%Y-%m-%dT%H:%M:%S','now','-30 days'))", (_JD,)).lastrowid
+    _wire(monkeypatch, final_score=6.0)
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    monkeypatch.setattr("app.config.load_profile", lambda: {})
+
+    counts = score_backlog(limit=2)
+
+    assert counts.get("success") == 2
+    with get_db() as conn:
+        scored = {r[0] for r in conn.execute("SELECT id FROM jobs WHERE final_score IS NOT NULL")}
+    assert scored == {ids[0], ids[1]}, "newest two first"
+    assert old not in scored, "roles older than 14 days are left alone"
+
+
+def test_score_backlog_gives_up_on_a_role_after_three_failures(temp_db, monkeypatch):
+    from app.background_jobs import score_backlog
+    with get_db() as conn:
+        job = conn.execute(
+            "INSERT INTO jobs (company, job_title, url, pipeline_stage, date_found) VALUES "
+            "('Acme', 'No JD', 'https://boards.greenhouse.io/acme/jobs/x', 'discovered', "
+            "strftime('%Y-%m-%dT%H:%M:%S','now','-5 hours'))").lastrowid
+    _wire(monkeypatch)
+    monkeypatch.setattr("app.jobs.fetch._fetch_jd_text", lambda url: "")  # never fetchable
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    monkeypatch.setattr("app.config.load_profile", lambda: {})
+    for _ in range(4):
+        score_backlog(limit=5)
+    with get_db() as conn:
+        assert conn.execute("SELECT score_attempts FROM jobs WHERE id=?", (job,)).fetchone()[0] == 3
+
+
+def test_score_backlog_leaves_roles_the_scan_just_found(temp_db, monkeypatch):
+    from app.background_jobs import score_backlog
+    with get_db() as conn:
+        conn.execute("INSERT INTO jobs (company, job_title, url, jd_text, pipeline_stage, date_found) VALUES "
+                     "('Acme', 'Fresh', 'https://boards.greenhouse.io/acme/jobs/f', ?, 'discovered', "
+                     "strftime('%Y-%m-%dT%H:%M:%S','now','-10 minutes'))", (_JD,))
+    _wire(monkeypatch)
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    monkeypatch.setattr("app.config.load_profile", lambda: {})
+    assert score_backlog(limit=5) == {}

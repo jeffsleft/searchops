@@ -70,10 +70,8 @@
         </a>
 
         <div class="nav-section">Review</div>
-        <a href="/vetting" class="nav-item" aria-current="{% if request.url.path == '/vetting' %}true{% endif %}">
-          <span class="nav-icon">🛡️</span>
-          <span>Ethics Vetting</span>
-        </a>
+        {# Ethics Vetting lives off the Pipeline header ("N need an ethics check"),
+           not the nav: it's a filter on the same jobs, not a separate list. #}
         <a href="/rejected" class="nav-item" aria-current="{% if request.url.path == '/rejected' %}true{% endif %}">
           <span class="nav-icon">✕</span>
           <span>Auto-rejected</span>

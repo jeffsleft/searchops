@@ -1120,9 +1120,14 @@ async def pipeline_view(request: Request):
 
     data = build_pipeline_view_data(selected_archetype, _enrich_job)
     stages = [(code, info["label"]) for code, info in STAGES.items()]
+    with get_db() as conn:  # same filter as the Vetting page
+        unvetted_count = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE ethics_vetted = 0 AND auto_rejected = 0 "
+            "AND final_score IS NOT NULL").fetchone()[0]
     return render(
         "pipeline.html",
         request=request,
+        unvetted_count=unvetted_count,
         stages=stages,
         jobs_by_stage=data['jobs_by_stage'],
         stale_items=data['stale_items'],

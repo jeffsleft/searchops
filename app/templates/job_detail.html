@@ -152,6 +152,7 @@
   <div class="card">
     <div class="card-head"><h3>Outcome</h3></div>
     <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+      <div class="dim" style="font-size:12px;line-height:1.5;">Logged automatically when you move an applied job's stage. Use this only for Ghosted, or to correct one.</div>
       <form hx-post="/job/{{ job.id }}/outcome"
             hx-target="#outcome-list"
             hx-swap="outerHTML"

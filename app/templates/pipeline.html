@@ -4,6 +4,9 @@
 {% block page_title %}Pipeline{% endblock %}
 
 {% block topbar_actions %}
+{% if unvetted_count %}
+<a href="/vetting" class="btn btn-sm btn-ghost" style="margin-right:8px;">{{ unvetted_count }} need an ethics check →</a>
+{% endif %}
 <div class="tgroup">
   <button aria-pressed="{{ 'true' if view != 'funnel' else 'false' }}"
           hx-get="/pipeline?view=kanban"

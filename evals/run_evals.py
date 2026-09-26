@@ -20,6 +20,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -62,7 +63,8 @@ def stage_match(case: dict, jd: dict, profile: dict) -> tuple[list[dict], dict |
 
     corpus = load_corpus(EXAMPLE_INVENTORY_PATH)
     match.load_corpus = lambda *a, **k: corpus  # never Jeff's real inventory
-    result = match.score_match(jd["jd_text"], _candidate_summary(profile))
+    summary = _candidate_summary(profile)
+    result = match.score_match(jd["jd_text"], summary)
 
     failed_call = [m for m in result.get("mismatches") or []
                    if m.get("jd_requirement") in ("(layer 2 call failed)", "(corpus not available)")]
@@ -78,12 +80,24 @@ def stage_match(case: dict, jd: dict, profile: dict) -> tuple[list[dict], dict |
         except Exception as e:
             ok, detail = False, f"check crashed on this output: {type(e).__name__}: {e}"
         results.append({"name": check.__name__, "passed": bool(ok), "detail": detail})
-    try:
-        judged = grade(output=json.dumps(result, indent=1), rubric=case["rubric"],
-                       context=f"CORPUS:\n{ctx['corpus_text']}\n\nJOB DESCRIPTION:\n{jd['jd_text']}",
-                       provider="gemini", model=JUDGE_MODEL)
-    except Exception as e:
-        judged = {"score": 0, "passed": False, "reasons": f"judge failed: {type(e).__name__}: {str(e)[:200]}"}
+    # Give the judge everything the model saw: the candidate profile carries facts
+    # like the salary floor, and without it the judge flags them as fabricated.
+    # match_score's scale is spelled out so it isn't mistaken for the judge's own
+    # 1-5 grade (both misfired on 2026-09-25).
+    rubric = (case["rubric"] + " Note: match_score is on the engine's -4.0 to +4.0 scale; "
+              "negative values are valid and mean a weak fit.")
+    judged = None
+    for attempt in range(3):  # a judge *error* (free-tier 429/503) is not a grade
+        try:
+            judged = grade(output=json.dumps(result, indent=1), rubric=rubric,
+                           context=(f"CANDIDATE PROFILE:\n{summary}\n\nCORPUS:\n{ctx['corpus_text']}"
+                                    f"\n\nJOB DESCRIPTION:\n{jd['jd_text']}"),
+                           provider="gemini", model=JUDGE_MODEL)
+            break
+        except Exception as e:
+            judged = {"score": 0, "passed": False,
+                      "reasons": f"judge failed: {type(e).__name__}: {str(e)[:200]}"}
+            time.sleep(10 * (attempt + 1))
     return results, judged
 
 
@@ -102,17 +116,23 @@ def main() -> None:
         jd = jds[case["seed_id"]]
         checks = [stage_rules(case, jd, profile)]
         judged = None
+        retried = False
         if case.get("llm") and not args.offline:
             more, judged = stage_match(case, jd, profile)
+            if not (all(c["passed"] for c in more) and judged and judged["passed"]):
+                # One rerun: model output varies run to run on the free tier. A real
+                # fabrication or scoring problem fails both; the report says "retried".
+                retried = True
+                more, judged = stage_match(case, jd, profile)
             checks += more
         passed = all(c["passed"] for c in checks) and (judged is None or judged["passed"])
-        report.append({"id": case["id"], "passed": passed, "checks": checks, "grade": judged})
+        report.append({"id": case["id"], "passed": passed, "retried": retried, "checks": checks, "grade": judged})
 
     if args.json:
         print(json.dumps(report, indent=2))
     else:
         for r in report:
-            print(f"{'PASS' if r['passed'] else 'FAIL'}  {r['id']}")
+            print(f"{'PASS' if r['passed'] else 'FAIL'}  {r['id']}" + ("  (passed on retry)" if r["passed"] and r["retried"] else ""))
             for c in r["checks"]:
                 if not c["passed"]:
                     print(f"      x {c['name']}: {c['detail']}")

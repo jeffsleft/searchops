@@ -15,7 +15,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 
 from app.background import BackgroundRunner, offload
+from app.config import is_demo
 from app.security.csp import csp_nonce, new_nonce
+from app.security.demo import DemoModeMiddleware
 from app.security.rate_limit import AIRateLimitMiddleware
 from app.auth import MAX_AGE as SESSION_MAX_AGE
 from app.auth import AuthMiddleware, SESSION_COOKIE, create_session_token, login_page, verify_session_token
@@ -243,7 +245,7 @@ jinja = Environment(
 )
 # The stage registry, so no template keeps its own copy of stage labels.
 jinja.globals.update(STAGES=STAGES, TERMINAL_STAGES=TERMINAL_STAGES, stage_label=stage_label,
-                     csp_nonce=csp_nonce)
+                     csp_nonce=csp_nonce, is_demo=is_demo)
 
 
 def render(template: str, **ctx) -> HTMLResponse:
@@ -338,6 +340,11 @@ def _record_login_failure(ip: str) -> None:
 def _clear_login_failures(ip: str) -> None:
     with get_db() as conn:
         conn.execute("DELETE FROM login_attempts WHERE ip = ?", (ip,))
+
+
+async def robots_txt(request: Request):
+    # Private tool and public demo alike: keep it out of search engines.
+    return Response("User-agent: *\nDisallow: /\n", media_type="text/plain")
 
 
 async def login_get(request: Request):
@@ -2753,6 +2760,7 @@ def create_app(commit_fn=None, background=None) -> Starlette:
     runs and tests get a fresh one that commits nowhere."""
     routes = [
         Route("/favicon.ico", favicon, methods=["GET"]),
+        Route("/robots.txt", robots_txt, methods=["GET"]),
         Route("/login",  login_get,  methods=["GET"]),
         Route("/login",  login_post, methods=["POST"]),
 
@@ -2902,6 +2910,7 @@ def create_app(commit_fn=None, background=None) -> Starlette:
         middleware=[
             Middleware(UsageTrackingMiddleware),
             Middleware(SecurityHeadersMiddleware),
+            Middleware(DemoModeMiddleware),
             Middleware(CSRFValidationMiddleware),
             Middleware(AuthMiddleware),
             Middleware(AIRateLimitMiddleware),

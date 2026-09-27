@@ -6,11 +6,22 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 
 
+# Public portfolio demo (app/demo_app.py). Read at call time via is_demo() so tests
+# can flip it. In demo mode: no login, read-only, no LLM calls, and only the
+# committed fictional example profile and corpus are ever loaded.
+DEMO_MODE = os.environ.get("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def is_demo() -> bool:
+    import app.config as _c
+    return bool(_c.DEMO_MODE)
+
+
 def _load_yaml_profile() -> dict:
     # candidate_profile.yaml is personal config, untracked from git and absent in a
     # fresh clone. Fall back to an empty profile so the app still boots; a real or
     # example profile (see WP-G) re-populates it.
-    profile_path = ROOT / "candidate_profile.yaml"
+    profile_path = ROOT / ("candidate_profile.example.yaml" if is_demo() else "candidate_profile.yaml")
     if not profile_path.exists():
         return {}
     with open(profile_path) as f:
@@ -18,7 +29,10 @@ def _load_yaml_profile() -> dict:
 
 
 def load_profile() -> dict:
-    """Load candidate profile. DB row takes precedence; seeds from YAML on first run."""
+    """Load candidate profile. DB row takes precedence; seeds from YAML on first run.
+    The demo always uses the fictional example file, never a stored row."""
+    if is_demo():
+        return _load_yaml_profile()
     try:
         from app.models import get_db
         with get_db() as conn:

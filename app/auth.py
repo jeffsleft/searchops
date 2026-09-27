@@ -28,7 +28,7 @@ MAX_AGE = 60 * 60 * 24 * 7  # 7 days: a stolen laptop or cookie stops working wi
 
 _serializer = URLSafeTimedSerializer(SECRET_KEY)
 
-PUBLIC_PATHS = {"/login", "/favicon.ico"}
+PUBLIC_PATHS = {"/login", "/favicon.ico", "/robots.txt"}
 
 # Paths callable by non-browser clients via `Authorization: Bearer <token>`
 # instead of a session cookie, mapped to the config attribute holding each
@@ -57,6 +57,9 @@ def verify_session_token(token: str) -> bool:
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        from app.config import is_demo
+        if is_demo():  # public portfolio demo: no login (DemoModeMiddleware blocks writes)
+            return await call_next(request)
         if request.url.path in PUBLIC_PATHS or request.url.path.startswith("/static"):
             return await call_next(request)
 

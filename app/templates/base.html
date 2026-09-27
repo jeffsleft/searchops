@@ -53,76 +53,102 @@
           <span class="nav-icon">📊</span>
           <span>Pipeline</span>
         </a>
+        {% if not is_demo() %}
         <a href="/prep" class="nav-item" aria-current="{% if request.url.path.startswith('/prep') %}true{% endif %}">
           <span class="nav-icon">📋</span>
           <span>Interview Prep</span>
         </a>
+        {% endif %}
 
         <div class="nav-section">Discovery</div>
         <a href="/discovered" class="nav-item" aria-current="{% if request.url.path == '/discovered' %}true{% endif %}">
           <span class="nav-icon">🔍</span>
           <span>Discovered</span>
         </a>
+        {% if not is_demo() %}
         <a href="/targets" class="nav-item" aria-current="{% if request.url.path == '/targets' %}true{% endif %}">
           <span class="nav-icon">🎪</span>
           <span>Watched Companies</span>
         </a>
+        {% endif %}
+        {% if not is_demo() %}
         <a href="/companies" class="nav-item" aria-current="{% if request.url.path == '/companies' %}true{% endif %}">
           <span class="nav-icon">🎯</span>
           <span>Outreach Targets</span>
         </a>
+        {% endif %}
 
-        <div class="nav-section">Review</div>
+        {% if not is_demo() %}<div class="nav-section">Review</div>{% endif %}
         {# Ethics Vetting lives off the Pipeline header ("N need an ethics check"),
            not the nav: it's a filter on the same jobs, not a separate list. #}
+        {% if not is_demo() %}
         <a href="/rejected" class="nav-item" aria-current="{% if request.url.path == '/rejected' %}true{% endif %}">
           <span class="nav-icon">✕</span>
           <span>Auto-rejected</span>
         </a>
+        {% endif %}
+        {% if not is_demo() %}
         <a href="/recruiters" class="nav-item" aria-current="{% if request.url.path == '/recruiters' %}true{% endif %}">
           <span class="nav-icon">👥</span>
           <span>Recruiters</span>
         </a>
+        {% endif %}
 
-        <div class="nav-section">Config</div>
+        <div class="nav-section">{% if is_demo() %}How it works{% else %}Config{% endif %}</div>
+        {% if not is_demo() %}
         <a href="/settings" class="nav-item" aria-current="{% if request.url.path == '/settings' %}true{% endif %}">
           <span class="nav-icon">⚙️</span>
           <span>Settings</span>
         </a>
+        {% endif %}
         <a href="/settings/methodology" class="nav-item" aria-current="{% if request.url.path == '/settings/methodology' %}true{% endif %}">
           <span class="nav-icon">📖</span>
           <span>Methodology</span>
         </a>
+        {% if not is_demo() %}
         <a href="/guide" class="nav-item" aria-current="{% if request.url.path == '/guide' %}true{% endif %}">
           <span class="nav-icon">📘</span>
           <span>User Guide</span>
         </a>
+        {% endif %}
+        {% if not is_demo() %}
         <a href="/admin/patterns" class="nav-item" aria-current="{% if request.url.path == '/admin/patterns' %}true{% endif %}">
           <span class="nav-icon">📈</span>
           <span>Patterns</span>
         </a>
+        {% endif %}
+        {% if not is_demo() %}
         <a href="/admin/rescore-all" class="nav-item" aria-current="{% if request.url.path == '/admin/rescore-all' %}true{% endif %}">
           <span class="nav-icon">🔄</span>
           <span>Bulk Rescore</span>
         </a>
+        {% endif %}
+        {% if not is_demo() %}
         <a href="/settings/calibration" class="nav-item" aria-current="{% if request.url.path == '/settings/calibration' %}true{% endif %}">
           <span class="nav-icon">🎯</span>
           <span>Calibration</span>
         </a>
+        {% endif %}
 
-        <div class="nav-section">Metrics</div>
+        {% if not is_demo() %}<div class="nav-section">Metrics</div>{% endif %}
+        {% if not is_demo() %}
         <a href="/settings/progress" class="nav-item" aria-current="{% if request.url.path == '/settings/progress' %}true{% endif %}">
           <span class="nav-icon">📉</span>
           <span>Progress</span>
         </a>
+        {% endif %}
+        {% if not is_demo() %}
         <a href="/settings/health" class="nav-item" aria-current="{% if request.url.path == '/settings/health' %}true{% endif %}">
           <span class="nav-icon">🩺</span>
           <span>Health</span>
         </a>
+        {% endif %}
+        {% if not is_demo() %}
         <a href="/settings/interviews" class="nav-item" aria-current="{% if request.url.path == '/settings/interviews' %}true{% endif %}">
           <span class="nav-icon">🎤</span>
           <span>Interviews</span>
         </a>
+        {% endif %}
       </nav>
 
       <div class="sidebar-foot">
@@ -143,7 +169,7 @@
     <div class="main">
       <div class="topbar">
         <div class="crumbs">
-          <span>Beaumont 2026</span>
+          <span>{% if is_demo() %}SearchOps demo{% else %}Beaumont 2026{% endif %}</span>
           <span class="sep">/</span>
           <strong>{% block page_title %}Dashboard{% endblock %}</strong>
         </div>
@@ -152,6 +178,13 @@
         </div>
       </div>
 
+      {% if is_demo() %}
+      <div class="demo-banner" role="note" style="padding:8px 20px;font-size:12.5px;background:color-mix(in oklch, var(--accent) 12%, var(--bg-elev));border-bottom:1px solid var(--border);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+        <strong>Demo:</strong>
+        <span>fictional candidate and roles, read-only. This is the tool Jeff Beaumont built to run his own job search.</span>
+        <a href="https://github.com/jeffsleft/searchops/blob/main/docs/case-study.md" style="color:var(--accent);">Read the case study →</a>
+      </div>
+      {% endif %}
       <div class="content">
         {% block content_wrap %}
         <div class="page">

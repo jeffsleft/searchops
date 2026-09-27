@@ -68,6 +68,9 @@ def get_provider() -> "LLMProvider":
     To change provider, set LLM_PROVIDER in your Modal Secret (recruiting-secrets)
     or local .env. BYO-key: set the matching API key env var for your chosen provider.
     """
+    from app.config import is_demo
+    if is_demo():  # the public demo shows precomputed results; strangers can't spend tokens
+        raise RuntimeError("AI calls are turned off in the demo.")
     import os
     provider_name = os.environ.get("LLM_PROVIDER", "gemini").lower().strip()
 

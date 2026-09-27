@@ -24,6 +24,8 @@ jinja_prep.globals['now'] = lambda: datetime.now(timezone.utc).strftime('%Y-%m-%
 jinja_prep.globals.update(STAGES=STAGES, TERMINAL_STAGES=TERMINAL_STAGES, stage_label=stage_label)
 from app.security.csp import csp_nonce as _csp_nonce  # noqa: E402
 jinja_prep.globals["csp_nonce"] = _csp_nonce
+from app.config import is_demo as _is_demo  # noqa: E402
+jinja_prep.globals["is_demo"] = _is_demo
 
 def render_prep(template: str, **ctx) -> HTMLResponse:
     """Render a prep template."""

@@ -68,6 +68,9 @@ def resolve_inventory_path() -> tuple[Path, bool]:
     Real inventory wins; the example is the fresh-clone fallback. `is_example` propagates to
     the UI so demo evidence is never mistaken for the real thing.
     """
+    from app.config import is_demo
+    if is_demo():  # the public demo only ever sees the fictional corpus
+        return EXAMPLE_INVENTORY_PATH, True
     if INVENTORY_PATH.exists():
         return INVENTORY_PATH, False
     if EXAMPLE_INVENTORY_PATH.exists():

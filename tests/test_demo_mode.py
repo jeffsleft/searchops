@@ -77,3 +77,32 @@ def test_demo_ignores_a_stored_profile_row(monkeypatch):
     monkeypatch.setattr(config, "DEMO_MODE", True)
     profile = config.load_profile()
     assert "Real Person" not in str(profile) and "Alex Rivera" in str(profile)
+
+
+def test_demo_seed_builds_the_fictional_pipeline(monkeypatch, tmp_path):
+    import app.models as models
+    db = str(tmp_path / "demo.db")
+    monkeypatch.setattr(config, "DATABASE_PATH", db)
+    monkeypatch.setattr(models, "DATABASE_PATH", db)
+    from app.demo_seed import seed_demo_db
+    assert seed_demo_db() == 11
+    assert seed_demo_db() == 0  # idempotent on restart
+    with models.get_db() as conn:
+        stages = dict(conn.execute("SELECT company, pipeline_stage FROM jobs").fetchall())
+        rejected = conn.execute("SELECT COUNT(*) FROM jobs WHERE auto_rejected = 1").fetchone()[0]
+    assert stages["Sentora"] == "hm_interview" and stages["Kettle & Co."] == "dismissed"
+    assert rejected == 2
+
+
+def test_demo_image_ships_no_personal_files():
+    import re
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "app" / "demo_app.py").read_text()
+    shipped = re.findall(r'add_local_(?:file|dir)\(\s*"([^"]+)"', src)
+    assert shipped, "expected the image to list what it ships"
+    for path in shipped:
+        assert path in ("app/static", "app/templates", "app/voice/constraints", "demo_data",
+                        "candidate_profile.example.yaml", "data/Accomplishments_Inventory.example.docx"), path
+    code = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith(("#", "-")))
+    for forbidden in ("volumes=", "Secret.from_name", "recruiting-secrets", "notes-api-token"):
+        assert forbidden not in code, forbidden

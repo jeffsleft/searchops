@@ -1,0 +1,134 @@
+[
+  {
+    "id": "seed_001",
+    "company": "Forgeline",
+    "job_title": "VP of GTM Operations",
+    "url": "https://example.com/forgeline-vp-gtm-ops",
+    "jd_text": "Forgeline is looking for a VP of GTM Operations to build and scale our revenue operations function. You will report to the CRO and lead a team of 8-12 people across RevOps, CS Ops, and Deal Desk. This is a greenfield opportunity \u2014 we're building the GTM operating system from scratch as we transition from PLG to enterprise sales. We use Salesforce, Gainsight, Slack, and Google Workspace. Our team is remote-first with quarterly in-person offsites. The ideal candidate has scaled GTM operations at a $100M+ ARR SaaS company and has experience with consumption-based pricing models. Compensation: $250,000-$320,000 OTE + equity. MacBook Pro provided. Series D, $425M raised.",
+    "expected_score_range": [
+      8.5,
+      10.0
+    ],
+    "expected_greenfield": "Yes",
+    "expected_flags": [
+      "greenfield",
+      "modern_tech",
+      "modern_pricing",
+      "target_sector",
+      "remote"
+    ],
+    "notes": "Dream job scenario. Hits almost every preference."
+  },
+  {
+    "id": "seed_002",
+    "company": "Acme Corp",
+    "job_title": "Director of Revenue Operations",
+    "url": "https://example.com/acme-dir-revops",
+    "jd_text": "Acme Corp is hiring a Director of Revenue Operations to optimize our existing sales and CS processes. You'll report to the CFO and manage a team of 3. Our primary focus is cleaning up Salesforce data hygiene, standardizing our reporting, and reducing manual work in our renewal process. We are a Series C healthcare technology company based in Boston with a hybrid work model (3 days in office required). We use Microsoft Teams, Windows, and HubSpot CRM. Compensation: $185,000-$215,000 base + 15% bonus. No equity at this time.",
+    "expected_score_range": [
+      1.0,
+      3.0
+    ],
+    "expected_greenfield": "No",
+    "expected_flags": [
+      "windows_penalty",
+      "process_upcycling",
+      "low_interest_sector"
+    ],
+    "notes": "Should score very low. Healthcare sector (hard no), Windows/Teams, reports to CFO, process cleanup only, no equity, in-office required. Tests multiple penalty stacking."
+  },
+  {
+    "id": "seed_003",
+    "company": "Sentora",
+    "job_title": "Head of GTM Strategy and Operations",
+    "url": "https://example.com/sentora-head-gtm",
+    "jd_text": "Sentora is looking for a Head of GTM Strategy and Operations to define and execute our go-to-market operating model. This is a newly created role \u2014 we are building this function from scratch \u2014 a true build from scratch greenfield mandate \u2014 reporting to the COO. You'll work cross-functionally with Sales, CS, and Product to build the systems and processes that scale our developer-focused security platform. We're a Series C company with $100M+ raised, 200 employees, and growing 80% YoY. Our pricing is transitioning from seat-based to consumption-based as we expand our platform capabilities. We offer fully remote work, competitive salary ($200k-$280k base), meaningful equity, and use Slack, Salesforce, and Mac across the company. The ideal candidate brings financial rigor to GTM operations \u2014 someone who can build board-ready reporting while also rolling up their sleeves on process design.",
+    "expected_score_range": [
+      8.0,
+      10.0
+    ],
+    "expected_greenfield": "Yes",
+    "expected_flags": [
+      "greenfield",
+      "modern_tech",
+      "target_sector",
+      "remote",
+      "modern_pricing"
+    ],
+    "notes": "Near-perfect fit. DevTools, greenfield, COO reporting line, pricing transition, remote, financial rigor emphasis. Note: founder_type requires research data, not detectable from JD text alone."
+  },
+  {
+    "id": "seed_004",
+    "company": "MidCo Analytics",
+    "job_title": "Director of Business Operations",
+    "url": "https://example.com/midco-dir-ops",
+    "jd_text": "MidCo Analytics is hiring a Director of Business Operations. You'll report to the VP of Sales and manage operational support for the sales team. Key responsibilities include pipeline reporting, territory management, and quota setting. We're a Series B analytics company with 150 employees. Hybrid role based in Sacramento, CA (2 days per week in office). Compensation: $185,000-$210,000 base. Standard benefits package. We use Salesforce, Slack, and Google Workspace on Macs.",
+    "expected_score_range": [
+      5.0,
+      7.0
+    ],
+    "expected_greenfield": "Partial",
+    "expected_flags": [
+      "modern_tech"
+    ],
+    "notes": "Mixed bag. Good tech stack, good location, but reports to VP Sales (not C-level), salary range is mid, no equity mentioned, scope is narrow (sales support only). Tests the 'Worth a Look' tier."
+  },
+  {
+    "id": "seed_005",
+    "company": "Highroller Gaming",
+    "job_title": "VP of Operations",
+    "url": "https://example.com/highroller-vp-ops",
+    "jd_text": "Highroller Gaming operates online poker and casino platforms across regulated markets. We're hiring a VP of Operations to run revenue operations, customer support operations, and payments operations for our player-facing business. You'll report to the COO, lead a team of 15, and own player lifetime-value models, bonus and promotions economics, fraud and responsible-gambling controls, and the weekly operating review. Experience in online gaming or sports betting is required. Remote with monthly travel to Malta. Base salary $220,000-$260,000 plus bonus.",
+    "expected_score_range": [
+      0.0,
+      0.0
+    ],
+    "expected_greenfield": "N/A",
+    "expected_flags": [
+      "auto_rejected"
+    ],
+    "notes": "Auto-reject test. Gambling sector. Should score 0 regardless of attractive compensation and remote work."
+  },
+  {
+    "id": "demo_006",
+    "company": "Tessellate",
+    "job_title": "Senior Director, Revenue Operations",
+    "url": "https://example.com/tessellate-rev-ops",
+    "jd_text": "Tessellate is a Series C collaboration platform for architecture and engineering firms, growing from $60M to $150M ARR. We're hiring a Senior Director of Revenue Operations to own the operating model across Sales, CS, and Marketing, reporting to the CFO with a dotted line to the CRO. You'll build the forecasting process from scratch, redesign territory and quota planning, stand up renewal and expansion analytics for a 40-person CS team, and lead a team of 6 across RevOps, Deal Desk, and systems. Our stack is Salesforce, Gainsight, Clari, and Snowflake. We need someone who has scaled RevOps through hypergrowth at a SaaS company, can translate finance into operating cadence, and is comfortable automating with AI. Remote in the US. Base salary $210,000-$245,000 plus bonus and equity."
+  },
+  {
+    "id": "demo_007",
+    "company": "Brightline Freight",
+    "job_title": "VP, GTM Strategy & Operations",
+    "url": "https://example.com/brightline-gtm",
+    "jd_text": "Brightline Freight builds logistics software for mid-market shippers. We just raised our Series B and are moving from founder-led sales to a repeatable GTM engine. The VP of GTM Strategy & Operations will design our go-to-market operating system: segmentation, pricing and packaging (we're moving to usage-based pricing), pipeline management, customer health scoring, and board-level reporting. You'll report to the CEO, hire a team of 4, and partner with Finance on planning. Experience building CS and Sales operations in a scaling SaaS company is required; logistics experience is a plus. Remote-first, with quarterly onsites in Chicago. Salary $230,000-$270,000 base plus equity."
+  },
+  {
+    "id": "demo_008",
+    "company": "Lumen Health Records",
+    "job_title": "Director of Sales Operations",
+    "url": "https://example.com/lumen-sales-ops",
+    "jd_text": "Lumen Health Records provides EHR software to hospital systems and health plans. We're hiring a Director of Sales Operations to manage CRM hygiene, commissions administration, and weekly forecast roll-ups for our enterprise sales team. You'll report to the VP of Sales and manage 2 analysts. Onsite 5 days a week in our Nashville office. Experience with clinical data, HIPAA, and hospital procurement cycles required. Base salary $165,000-$180,000."
+  },
+  {
+    "id": "demo_009",
+    "company": "Orbitwise",
+    "job_title": "Head of Customer Success Operations",
+    "url": "https://example.com/orbitwise-cs-ops",
+    "jd_text": "Orbitwise is an AI-native observability platform (Series C, 300 employees). We're looking for a Head of Customer Success Operations to build the systems behind a CS org that is scaling from 25 to 60 people. You'll own customer health scoring, renewal forecasting, capacity planning for CSMs, digital CS programs for the long tail, and the CS tech stack (Gainsight, Salesforce, Slack). You'll report to the Chief Customer Officer and lead a team of 3. We want someone who has built CS operations at a high-growth SaaS company, can run churn analysis by cohort and segment, and uses AI to automate the work. Remote (US). $190,000-$225,000 base plus equity."
+  },
+  {
+    "id": "demo_010",
+    "company": "Kettle & Co.",
+    "job_title": "Revenue Operations Analyst",
+    "url": "https://example.com/kettle-revops-analyst",
+    "jd_text": "Kettle & Co. is a direct-to-consumer beverage brand selling through our own site and three retail partners. We're hiring a Revenue Operations Analyst to maintain sales dashboards, clean and dedupe HubSpot records, prepare the weekly pipeline report for the Director of Sales, and support quarterly territory updates. You'll work with Marketing on lead routing and with Finance on monthly bookings reconciliation. 1-3 years of experience in sales or marketing operations; strong spreadsheet skills. Hybrid, 3 days a week in our Austin office. $75,000-$90,000 base."
+  },
+  {
+    "id": "demo_011",
+    "company": "Cadence Ledger",
+    "job_title": "Director, Finance & Revenue Operations",
+    "url": "https://example.com/cadence-fin-rev-ops",
+    "jd_text": "Cadence Ledger is a fintech company building accounts-payable automation for mid-market finance teams (Series B, $40M ARR). We're hiring a Director of Finance & Revenue Operations to bridge FP&A and GTM: build the bookings-to-revenue model, own quota and compensation plan design with Finance, create the metrics layer for the board (NRR, CAC payback, magic number), and implement our first CPQ. You'll report to the CFO and work daily with the CRO. A CPA or finance background plus hands-on RevOps experience at a SaaS company is ideal. Remote in the US. $200,000-$235,000 base, bonus, and equity."
+  }
+]

@@ -23,11 +23,11 @@
         <textarea name="jd_text" class="textarea" placeholder="Paste the full job description…" style="min-height:80px;"></textarea>
       </div>
       <button type="submit" class="btn btn-primary" style="align-self:flex-start;"
-              onclick="window.showScoringToast && window.showScoringToast()">Score Now</button>
+              data-call="showScoringToast">Score Now</button>
     </form>
   </div>
 </details>
-<script>
+<script nonce="{{ csp_nonce() }}">
   (function() {
     var details = document.getElementById('score-form-details');
     if (!details) return;
@@ -151,7 +151,7 @@
       </thead>
       <tbody>
         {% for job in high %}
-        <tr onclick="window.location.href='/job/{{ job.id }}'"
+        <tr data-href="/job/{{ job.id }}"
             class="{% if not job.ethics_vetted %}unethical{% endif %}"
             style="cursor:pointer;">
           <td>
@@ -202,7 +202,7 @@
             <span title="{{ job.notes[:80] }}" style="font-size:11px;margin-left:6px;opacity:0.7;cursor:default;">📝</span>
             {% endif %}
           </td>
-          <td onclick="event.stopPropagation()">
+          <td data-stop>
             <a href="/job/{{ job.id }}" class="actionbtn ghost" style="font-size:11px;min-height:26px;padding:3px 10px;">Open →</a>
           </td>
         </tr>

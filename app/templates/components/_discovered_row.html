@@ -6,7 +6,7 @@
     hx-get="/discovered/{{ j.id }}/detail"
     hx-target="#discovered-panel"
     hx-swap="innerHTML"
-    onclick="window.openDiscoveredPanel && window.openDiscoveredPanel(this)">
+    data-call="openDiscoveredPanel" data-call-with="self">
   <td>
     <div style="display:flex;align-items:center;gap:10px;">
       {{ logo(j.company, 'sm') }}

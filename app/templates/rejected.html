@@ -24,7 +24,7 @@
     </tr></thead>
     <tbody>
       {% for job in jobs %}
-      <tr class="row-hover" style="cursor:pointer;" onclick="window.location='/job/{{ job.id }}'">
+      <tr class="row-hover" style="cursor:pointer;" data-href="/job/{{ job.id }}">
         <td>
           <div style="display:flex;align-items:center;gap:10px;">
             <span class="logo-sq sm"

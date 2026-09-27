@@ -17,7 +17,7 @@
   {% elif target.careers_url %}
   <a href="{{ target.careers_url }}" target="_blank" rel="noopener" class="weblink">Careers ↗</a>
   {% endif %}
-  <button onclick="window.closeTargetsPanel && window.closeTargetsPanel()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
+  <button data-call="closeTargetsPanel" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
 </div>
 
 <div class="drawer-body prospect-body">

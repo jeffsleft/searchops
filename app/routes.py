@@ -15,6 +15,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pathlib import Path
 
 from app.background import BackgroundRunner, offload
+from app.security.csp import csp_nonce, new_nonce
 from app.security.rate_limit import AIRateLimitMiddleware
 from app.auth import MAX_AGE as SESSION_MAX_AGE
 from app.auth import AuthMiddleware, SESSION_COOKIE, create_session_token, login_page, verify_session_token
@@ -61,6 +62,7 @@ VALID_ARCHETYPES = {"GTM Ops", "CS Ops", "RevOps", "Finance Ops", "Strategy", "I
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        nonce = new_nonce()  # set before call_next so the handler's templates see it
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
@@ -68,7 +70,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            f"script-src 'self' 'nonce-{nonce}'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; "
@@ -240,7 +242,8 @@ jinja = Environment(
     autoescape=select_autoescape(["html"]),
 )
 # The stage registry, so no template keeps its own copy of stage labels.
-jinja.globals.update(STAGES=STAGES, TERMINAL_STAGES=TERMINAL_STAGES, stage_label=stage_label)
+jinja.globals.update(STAGES=STAGES, TERMINAL_STAGES=TERMINAL_STAGES, stage_label=stage_label,
+                     csp_nonce=csp_nonce)
 
 
 def render(template: str, **ctx) -> HTMLResponse:

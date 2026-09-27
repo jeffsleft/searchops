@@ -4,7 +4,7 @@
 
 {% block topbar_actions %}
 <button class="btn btn-sm btn-primary"
-        onclick="document.getElementById('add-recruiter-details').setAttribute('open','')">
+        data-details-open="#add-recruiter-details">
   + Add Recruiter
 </button>
 {% endblock %}
@@ -67,7 +67,7 @@
           hx-get="/recruiters/{{ r.id }}/detail"
           hx-target="#recruiters-panel"
           hx-swap="innerHTML"
-          onclick="window.openRecruitersPanel && window.openRecruitersPanel(this)">
+          data-call="openRecruitersPanel" data-call-with="self">
         <td>
           <div style="display:flex;align-items:center;gap:10px;">
             {{ logo(r.name, 'sm') }}
@@ -149,13 +149,13 @@
       <div style="display:flex;gap:8px;">
         <button type="submit" class="btn btn-primary">Add</button>
         <button type="button" class="btn btn-ghost"
-                onclick="document.getElementById('add-recruiter-details').removeAttribute('open')">Cancel</button>
+                data-details-close="#add-recruiter-details">Cancel</button>
       </div>
     </form>
   </div>
 </details>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   window.openRecruitersPanel = function(row) {
     document.querySelectorAll('#recruiters-split tr.row-selected').forEach(function(tr) { tr.classList.remove('row-selected'); });
     if (row) row.classList.add('row-selected');

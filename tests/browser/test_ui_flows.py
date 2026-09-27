@@ -143,3 +143,59 @@ def test_monitoring_toggle_flips_its_label(page, app_url):
     page.wait_for_function(f"() => document.querySelector('form[hx-post=\"/targets/1/toggle\"] button')"
                            f".innerText.trim() !== {before!r}")
     page.wait_for_selector("#stage-toast:has-text('Saved')")
+
+
+PAGES = ["/", "/pipeline", "/pipeline?view=funnel", "/discovered", "/targets", "/companies", "/recruiters",
+         "/vetting", "/rejected", "/prep", "/guide", "/settings", "/settings/health", "/settings/progress",
+         "/settings/methodology", "/job/1", "/job/1/kit"]
+
+
+def test_no_page_trips_the_content_security_policy(page, app_url):
+    """Scripts run only from /static or with the request's nonce, and inline
+    handlers aren't allowed. Any CSP violation on a page fails this test."""
+    url, _ = app_url
+    violations = []
+    page.on("console", lambda m: violations.append(f"{page.url}: {m.text}")
+            if "Content Security Policy" in m.text or "Refused to" in m.text else None)
+    for p in PAGES:
+        page.goto(f"{url}{p}")
+        page.wait_for_load_state("networkidle")
+    assert violations == []
+
+
+def test_declarative_actions_work_under_the_policy(page, app_url):
+    url, _ = app_url
+    page.goto(f"{url}/targets")
+    form = page.locator("#add-target-form")
+    before = form.evaluate("f => f.style.display")
+    page.locator('[data-toggle-display="#add-target-form"]').click()
+    assert form.evaluate("f => f.style.display") != before
+
+    page.goto(f"{url}/pipeline")
+    page.locator('.kcard[data-job-id="1"] [data-call="openJobDrawer"]').click()
+    page.wait_for_selector(".drawer-backdrop")
+    page.locator('.drawer [data-call="closeJobDrawer"]').first.click()
+    page.wait_for_selector(".drawer-backdrop", state="detached")
+
+
+def test_data_stop_keeps_a_row_click_from_firing(page, app_url):
+    """A control inside a clickable row must not also trigger the row
+    (companies/targets rows are <tr hx-get>; the guard sits on the cell)."""
+    url, _ = app_url
+    page.goto(f"{url}/pipeline")
+    page.evaluate("""() => {
+      const tr = document.createElement('div');
+      tr.id = 'row'; tr.dataset.href = '/guide';
+      tr.innerHTML = '<span data-stop><button id="inner" type="button">x</button></span>';
+      document.body.appendChild(tr);
+      htmx.trigger(tr, 'htmx:load', {elt: tr});  // what a real htmx swap fires
+    }""")
+    page.wait_for_function("() => document.querySelector('#row [data-stop]').__stopGuard === true")
+    page.click("#inner")
+    page.wait_for_timeout(300)
+    assert page.url.endswith("/pipeline"), "the row's link fired through a data-stop cell"
+
+
+def test_print_pages_load_the_actions_script(app_url):
+    for tpl in ("resume_print.html", "cover_letter_print.html"):
+        assert "/static/js/actions.js" in (ROOT / "app" / "templates" / tpl).read_text()

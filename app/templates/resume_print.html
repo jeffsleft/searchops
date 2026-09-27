@@ -211,6 +211,7 @@
     .resume-section[data-hidden="true"] { display: none !important; }
   }
 </style>
+  <script src="/static/js/actions.js" defer></script>
 </head>
 <body>
 
@@ -231,7 +232,7 @@
     <div class="actions">
       <a href="/job/{{ job.id }}">← Back</a>
       <a href="/job/{{ job.id }}/resume/download">Download .docx</a>
-      <button class="print-btn" onclick="window.print()">Print / Save PDF</button>
+      <button class="print-btn" data-call="print">Print / Save PDF</button>
     </div>
   </div>
   <div class="section-toggles" id="section-toggles">
@@ -241,7 +242,7 @@
       {% set dropped = sname in sections_to_drop %}
       <button class="section-pill {% if not dropped %}on{% else %}off{% endif %}"
               data-name="{{ sname }}"
-              onclick="toggleSection(this)">{{ sname }}</button>
+              data-call="toggleSection" data-call-with="self">{{ sname }}</button>
     {% endfor %}
   </div>
 </div>
@@ -332,7 +333,7 @@
 </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   // Section names the LLM suggested dropping (pre-hidden on load)
   var SECTIONS_TO_DROP = {{ ns.drop_json | safe }};
 

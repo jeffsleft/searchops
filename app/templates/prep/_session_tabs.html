@@ -8,7 +8,7 @@
         <div class="session-popover session-confirm" style="display:none">
           <div class="session-confirm-text">Delete <strong>{{ s.label }}</strong>? This can't be undone.</div>
           <div class="session-confirm-actions">
-            <button class="btn btn-sm btn-ghost" onclick="this.closest('.session-popover').style.display='none'; this.closest('.prep-session-tab')?.querySelector('.prep-session-x')?.style && (this.closest('.prep-session-tab').querySelector('.prep-session-x').style.display='none')">Cancel</button>
+            <button class="btn btn-sm btn-ghost" data-hide-closest=".session-popover" data-hide-related=".prep-session-tab|.prep-session-x">Cancel</button>
             <button class="btn btn-sm btn-primary" hx-delete="/prep/sessions/{{ s.id }}" hx-target=".prep-shell" hx-swap="outerHTML">Delete</button>
           </div>
         </div>
@@ -23,7 +23,7 @@
     <div class="session-popover session-add-menu" id="add-menu" style="display:none">
       <div class="session-popover-title">Add a session</div>
       {% for type_id, t in session_types.items() %}
-        <button class="session-popover-row" hx-post="/prep/{{ active_job.id }}/sessions" hx-vals='{"type_id":"{{ type_id }}"}' hx-target=".prep-shell" hx-swap="outerHTML" onclick="document.getElementById('add-menu').style.display='none'">
+        <button class="session-popover-row" hx-post="/prep/{{ active_job.id }}/sessions" hx-vals='{"type_id":"{{ type_id }}"}' hx-target=".prep-shell" hx-swap="outerHTML" data-hide="#add-menu">
           <span class="prep-session-dot" style="background:oklch(60% 0.13 {{ t.hue }})"></span>
           <div class="session-popover-row-text">
             <div class="session-popover-row-label">{{ t.label }}</div>
@@ -36,7 +36,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function() {
   const tabs = document.querySelectorAll('.prep-session-tab');
   const addBtn = document.getElementById('add-session-btn');

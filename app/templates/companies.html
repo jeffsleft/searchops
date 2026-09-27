@@ -95,7 +95,7 @@
             hx-get="/companies/{{ co.id }}/detail"
             hx-target="#co-detail-panel"
             hx-swap="innerHTML"
-            onclick="window.openOutreachPanel && window.openOutreachPanel(this)">
+            data-call="openOutreachPanel" data-call-with="self">
           <td>
             <div style="display:flex;align-items:center;gap:10px;">
               {{ logo(co.name, 'sm') }}
@@ -147,7 +147,7 @@
               {% include 'components/match_cell.html' %}
             {% endwith %}
           </td>
-          <td onclick="event.stopPropagation()">
+          <td data-stop>
             <div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;">
               {% if not co.research_date %}
               <button class="actionbtn ghost"
@@ -158,14 +158,14 @@
                       hx-disabled-elt="this">Research →</button>
               {% elif co.status == 'Watchlist' or co.status == 'Researching' %}
               <button class="actionbtn" type="button"
-                      onclick="event.stopPropagation();window.openOutreachPanel && window.openOutreachPanel(this.closest('tr'))">Draft outreach →</button>
+                      data-call="openOutreachPanel" data-call-with="row" data-stop>Draft outreach →</button>
               {% endif %}
               <form hx-post="/companies/{{ co.id }}/status"
                     hx-target="closest tr"
                     hx-swap="none"
                     style="display:inline;">
                 <select name="status" class="select" style="font-size:11px;padding:3px 22px 3px 8px;"
-                        onchange="this.closest('form').requestSubmit()">
+                        data-submit-on-change>
                   {% for s in ['Watchlist','Researching','Reached Out','Replied'] %}
                   <option {% if co.status == s %}selected{% endif %}>{{ s }}</option>
                   {% endfor %}
@@ -268,7 +268,7 @@
   </details>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   window.openOutreachPanel = function(row) {
     document.querySelectorAll('#outreach-content tr.row-selected').forEach(function(tr) {
       tr.classList.remove('row-selected');

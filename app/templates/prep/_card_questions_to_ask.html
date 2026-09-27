@@ -8,7 +8,7 @@
       <div class="qrow {% if q.asked %}answered{% endif %}">
         <input type="checkbox" {% if q.asked %}checked{% endif %}
           hx-patch="/prep/questions-to-ask/{{ q.id }}" hx-vals='{"asked":"{% if not q.asked %}on{% endif %}"}' hx-swap="none"
-          onchange="this.closest('.qrow').classList.toggle('answered', this.checked)"
+          data-check-toggles=".qrow|answered"
           title="Mark as asked"/>
         <div>
           <div class="qtext">{{ q.text }}</div>

@@ -1,4 +1,4 @@
-<div class="cmdk-backdrop" onclick="if(event.target === this) htmx.remove(this.parentElement)">
+<div class="cmdk-backdrop" data-remove-parent-on-self-click>
   <div class="cmdk">
     <div class="cmdk-search">
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="m9.5 9.5 4.5 4.5"/></svg>
@@ -14,7 +14,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function() {
   const input = document.getElementById('cmdk-input');
   const list = document.getElementById('cmdk-list');
@@ -25,7 +25,7 @@
     const q = input.value.toLowerCase();
     const filtered = jobs.filter(j => !q || (j.company + ' ' + j.job_title).toLowerCase().includes(q));
     list.innerHTML = filtered.map((j, i) => `
-      <button class="cmdk-row {% if i == idx %}selected{% endif %}" onclick="window.location='/prep/${j.id}'">
+      <button class="cmdk-row {% if i == idx %}selected{% endif %}" data-href="/prep/${j.id}">
         <div class="logo-sq sm" style="background:#ddd; font-size:11px">${j.company.substring(0,2).toUpperCase()}</div>
         <div class="cmdk-row-text">
           <div style="font-weight:500">${j.company}</div>

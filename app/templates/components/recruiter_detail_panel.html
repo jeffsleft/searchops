@@ -10,7 +10,7 @@
   {% if r.linkedin_url %}
   <a href="{{ r.linkedin_url }}" target="_blank" rel="noopener" class="weblink">LinkedIn ↗</a>
   {% endif %}
-  <button onclick="window.closeRecruitersPanel && window.closeRecruitersPanel()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
+  <button data-call="closeRecruitersPanel" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
 </div>
 
 <div class="drawer-body prospect-body">

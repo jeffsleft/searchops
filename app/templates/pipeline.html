@@ -114,7 +114,7 @@
             {%- set next_label = 'Open →' %}
           {%- endif %}
           <button class="actionbtn" type="button"
-                  onclick="event.stopPropagation();window.openJobDrawer && window.openJobDrawer('{{ job.id }}')">
+                  data-call="openJobDrawer" data-call-arg="{{ job.id }}" data-stop>
             {{ next_label }}
           </button>
         </div>
@@ -196,7 +196,7 @@
   </div>
 </dialog>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   (function() {
     var dragId = null;
     var dragSrcCol = null;

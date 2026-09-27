@@ -1,5 +1,5 @@
 {% from "components/_macros.html" import logo, stage_label %}
-<div class="drawer-backdrop" onclick="window.closeJobDrawer && window.closeJobDrawer()"></div>
+<div class="drawer-backdrop" data-call="closeJobDrawer"></div>
 <div class="drawer" role="dialog" aria-label="Job detail">
   <div class="drawer-head">
     {{ logo(job.company) }}
@@ -25,7 +25,7 @@
     <a href="{{ job.url }}" target="_blank" rel="noopener" class="weblink">JD ↗</a>
     {% endif %}
     <a href="/job/{{ job.id }}" class="btn btn-sm btn-primary">Open full view ↗</a>
-    <button onclick="window.closeJobDrawer && window.closeJobDrawer()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close drawer">✕</button>
+    <button data-call="closeJobDrawer" class="btn btn-icon btn-sm btn-ghost" aria-label="Close drawer">✕</button>
   </div>
 
   <div class="drawer-body" style="padding:18px 22px 32px;">

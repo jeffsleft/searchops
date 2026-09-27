@@ -632,7 +632,7 @@
 </dialog>
 
 {# Tab switcher + stage-change intercept #}
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function() {
   var tabs = document.querySelectorAll('.drawer-tab[data-tab]');
   var panels = document.querySelectorAll('.tab-panel[data-panel]');

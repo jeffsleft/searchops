@@ -4,7 +4,7 @@
 
 {% block topbar_actions %}
 <button class="btn btn-sm"
-        onclick="document.getElementById('add-target-form').style.display = (document.getElementById('add-target-form').style.display === 'none') ? 'block' : 'none';">
+        data-toggle-display="#add-target-form">
   + Add Target
 </button>
 {% endblock %}
@@ -28,7 +28,7 @@
   <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;"></span>
   Company added
 </div>
-<script>
+<script nonce="{{ csp_nonce() }}">
   setTimeout(function() {
     var el = document.getElementById('add-success-toast');
     if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.4s'; setTimeout(function(){ el.style.display='none'; }, 400); }
@@ -108,7 +108,7 @@
           hx-get="/targets/{{ t.id }}/detail"
           hx-target="#targets-panel"
           hx-swap="innerHTML"
-          onclick="window.openTargetsPanel && window.openTargetsPanel(this)">
+          data-call="openTargetsPanel" data-call-with="self">
         <td>
           <div style="display:flex;align-items:center;gap:10px;">
             {{ logo(t.name, 'sm') }}
@@ -169,7 +169,7 @@
 </div>
 {% endif %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   window.openTargetsPanel = function(row) {
     document.querySelectorAll('#targets-split tr.row-selected').forEach(function(tr) { tr.classList.remove('row-selected'); });
     if (row) row.classList.add('row-selected');

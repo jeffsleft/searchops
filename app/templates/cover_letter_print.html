@@ -61,6 +61,7 @@
     @page { size: Letter; margin: 0.75in; }
   }
 </style>
+  <script src="/static/js/actions.js" defer></script>
 </head>
 <body>
 
@@ -71,7 +72,7 @@
   <div class="actions">
     <a href="/job/{{ job.id }}">← Back</a>
     <a href="/job/{{ job.id }}/cover-letter/download">Download .docx</a>
-    <button class="print-btn" onclick="window.print()">Print / Save PDF</button>
+    <button class="print-btn" data-call="print">Print / Save PDF</button>
   </div>
 </div>
 

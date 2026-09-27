@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet"/>
 
   <!-- Theme: apply saved preference before paint to avoid flash -->
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     (function() {
       try {
         var t = localStorage.getItem('re-theme');
@@ -26,7 +26,10 @@
   <link rel="stylesheet" href="/static/css/styles.css">
 
   <!-- HTMX (self-hosted, H4) -->
+  {# htmx copies this nonce onto scripts inside swapped fragments (CSP). #}
+  <meta name="htmx-config" content='{"inlineScriptNonce": "{{ csp_nonce() }}"}'>
   <script src="/static/js/htmx.min.js"></script>
+  <script src="/static/js/actions.js" defer></script>
 </head>
 
 <body hx-headers='{"X-Requested-With": "XMLHttpRequest"}'>
@@ -166,7 +169,7 @@
     Loading…
   </div>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     document.body.addEventListener('htmx:beforeRequest', function(evt) {
       document.getElementById('htmx-indicator').style.display = 'block';
       // data-htmx-before-label dispatcher — CSP-safe replacement for an inline
@@ -400,7 +403,7 @@
     })();
   </script>
 
-  <script>
+  <script nonce="{{ csp_nonce() }}">
     // Follow-ups widget self-collapse: remove widget when last row is gone.
     document.body.addEventListener("followups:row-removed", function() {
       var widget = document.getElementById("followups-widget");

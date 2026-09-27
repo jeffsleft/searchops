@@ -19,7 +19,7 @@
   {% if job.url %}
   <a href="{{ job.url }}" target="_blank" rel="noopener" class="weblink">JD ↗</a>
   {% endif %}
-  <button onclick="window.closeDiscoveredPanel && window.closeDiscoveredPanel()" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
+  <button data-call="closeDiscoveredPanel" class="btn btn-icon btn-sm btn-ghost" aria-label="Close panel">✕</button>
 </div>
 
 {% if not job.final_score and job.pipeline_stage in ('identified', 'discovered') %}

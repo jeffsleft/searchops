@@ -3,6 +3,7 @@
 {% block page_title %}Scoring Methodology{% endblock %}
 
 {% block content %}
+{% set cand = 'the candidate' if is_demo() else 'Jeff' %}
 
 <div class="page-head" style="margin-bottom:18px;">
   <div>
@@ -65,8 +66,8 @@
   <div class="card">
     <div class="card-head"><h3>Why the methodology was rewritten</h3></div>
     <div class="card-body" style="font-size:13.5px;line-height:1.7;">
-      <p style="margin:0 0 10px;">The previous engine scored <em>how appealing a role looked in the abstract</em> — greenfield language, AI-native sector, modern stack — and barely scored <em>how well Jeff matches it</em>. The LLM layer received a 4-line candidate summary and was allowed to nudge by ±1.0. That is not AI scoring. That is a spreadsheet with a chat window.</p>
-      <p style="margin:0 0 10px;">The fix: a new <strong>Layer 2 — Match to Candidate</strong> that compares the JD against Jeff's full corpus (resume, LinkedIn, leadership deck, blog posts, and the Accomplishments Inventory) and produces an evidence-grounded match score worth up to ±4.0. The rest of the engine keeps doing what it did, but now it's anchored to a real candidate-vs-role comparison.</p>
+      <p style="margin:0 0 10px;">The previous engine scored <em>how appealing a role looked in the abstract</em> — greenfield language, AI-native sector, modern stack — and barely scored <em>how well {{ cand }} matches it</em>. The LLM layer received a 4-line candidate summary and was allowed to nudge by ±1.0. That is not AI scoring. That is a spreadsheet with a chat window.</p>
+      <p style="margin:0 0 10px;">The fix: a new <strong>Layer 2 — Match to Candidate</strong> that compares the JD against {{ cand }}'s full corpus (resume, LinkedIn, leadership deck, blog posts, and the Accomplishments Inventory) and produces an evidence-grounded match score worth up to ±4.0. The rest of the engine keeps doing what it did, but now it's anchored to a real candidate-vs-role comparison.</p>
       <p style="margin:0;">Layers run in this order:</p>
     </div>
   </div>
@@ -91,7 +92,7 @@
         <div class="layer-row">
           <div style="font-size:13px;font-weight:600;margin-bottom:4px;"><span class="layer-badge">L2</span>Match to Candidate <span class="dim" style="font-weight:400;">(highest weight, −4.0 to +4.0)</span></div>
           <div class="dim" style="font-size:12.5px;line-height:1.5;">
-            One Gemini call. Compares JD requirements against Jeff's <em>Accomplishments Inventory</em> and differentiators. Returns evidence rows (JD requirement → matched accomplishment), explicit mismatches, tailored resume bullets to swap in, and 1–3 cover-letter hooks. This is the layer that answers "is Jeff actually qualified for this?"
+            One Gemini call. Compares JD requirements against {{ cand }}'s <em>Accomplishments Inventory</em> and differentiators. Returns evidence rows (JD requirement → matched accomplishment), explicit mismatches, tailored resume bullets to swap in, and 1–3 cover-letter hooks. This is the layer that answers "is {{ cand }} actually qualified for this?"
           </div>
         </div>
         <div class="layer-row">
@@ -169,7 +170,7 @@
         <li><code class="mono">match_summary</code> — 2–3 sentences explaining the score in plain language.</li>
         <li><code class="mono">evidence[]</code> — each entry pairs a specific JD requirement with the corpus bullet that backs it, and rates the strength (Strong / Moderate / Weak).</li>
         <li><code class="mono">mismatches[]</code> — each entry names a JD requirement and what's missing or thin in the corpus, with severity.</li>
-        <li><code class="mono">differentiator_themes[]</code> — themes in the JD that hit Jeff's moats (finance+ops bridge, AI-native ops, consumption-pricing fluency, systems thinking, GitLab-scale).</li>
+        <li><code class="mono">differentiator_themes[]</code> — themes in the JD that hit {{ cand }}'s moats (finance+ops bridge, AI-native ops, consumption-pricing fluency, systems thinking, {{ 'hypergrowth scale' if is_demo() else 'GitLab-scale' }}).</li>
         <li><code class="mono">tailored_bullets[]</code> — 3–5 resume bullets pulled directly from the corpus that should appear on the version of the resume sent to this company.</li>
         <li><code class="mono">cover_letter_hooks[]</code> — 1–3 lines that could open a cover letter, citing corpus evidence.</li>
       </ul>
@@ -203,7 +204,7 @@
     <div class="card-body" style="display:flex;flex-direction:column;gap:16px;">
 
       <p style="font-size:13.5px;margin:0;line-height:1.7;">
-        Layer 2 asks "does Jeff have what this role needs?" Layer 3 asks "is the role actually shaped the way the title suggests?" One Gemini call returns a ±1.5 nudge plus structured role-shape signals: IC vs leadership balance, expected team size, reporting line, strategy-vs-execution skew, plus the existing pros/cons and tech-stack extraction.
+        Layer 2 asks "does {{ cand }} have what this role needs?" Layer 3 asks "is the role actually shaped the way the title suggests?" One Gemini call returns a ±1.5 nudge plus structured role-shape signals: IC vs leadership balance, expected team size, reporting line, strategy-vs-execution skew, plus the existing pros/cons and tech-stack extraction.
       </p>
 
       <div>
@@ -312,7 +313,7 @@
     <div class="card-head"><h3>Worked example — high match</h3></div>
     <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
       <p style="font-size:13px;margin:0;color:var(--text-dim);">
-        VP RevOps role at a Series C AI-native devtools company. Greenfield language, modern stack, Jeff's GitLab CS-Ops-through-IPO arc maps directly to the JD.
+        VP RevOps role at a Series C AI-native devtools company. Greenfield language, modern stack, {{ cand }}'s {{ 'scale-up CS Ops' if is_demo() else 'GitLab CS-Ops-through-IPO' }} arc maps directly to the JD.
       </p>
       <div style="background:var(--bg-sunk);padding:12px;border-radius:var(--radius);font-family:'JetBrains Mono','Courier New',monospace;font-size:12px;line-height:1.6;overflow-x:auto;">
 Layer 1: pass (no blocked sectors, salary $250k base detected)
@@ -339,7 +340,7 @@ Final = 3.5 (base) + 2.5 + 3.0 + 0.6 = <span style="color:var(--accent);">9.6</s
 Top-band gate (&gt;7.0): comp ✓ · leadership seat ✓ · sector ✓ · build mandate ✓ · strong L2 ✓ → passes
       </div>
       <p style="font-size:12.5px;margin:0;line-height:1.6;color:var(--text-dim);">
-        <strong>Result:</strong> 9.6 (Dream Job). The Match Analysis panel on the job detail page exposes the 7 evidence rows, the 1 mismatch, the 3–5 tailored resume bullets to swap in, and a cover-letter hook tying GitLab to this company's stage. Note the Layer 4 cap: surface signals maxed out at +2.5 — the score lives above 7 only because Layer 2 evidence and the top-band gate both cleared.
+        <strong>Result:</strong> 9.6 (Dream Job). The Match Analysis panel on the job detail page exposes the 7 evidence rows, the 1 mismatch, the 3–5 tailored resume bullets to swap in, and a cover-letter hook tying {{ 'past scale-up work' if is_demo() else 'GitLab' }} to this company's stage. Note the Layer 4 cap: surface signals maxed out at +2.5 — the score lives above 7 only because Layer 2 evidence and the top-band gate both cleared.
       </p>
     </div>
   </div>
@@ -349,7 +350,7 @@ Top-band gate (&gt;7.0): comp ✓ · leadership seat ✓ · sector ✓ · build 
     <div class="card-head"><h3>Worked example — looks good, doesn't match</h3></div>
     <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
       <p style="font-size:13px;margin:0;color:var(--text-dim);">
-        A flashy "Founding RevOps Engineer" role at an AI-native devtools shop. Layer 4 lights up like a Christmas tree. But the role is 80% Salesforce admin + Snowflake modeling — work Jeff has directed but not personally executed at depth. The new Layer 2 catches it.
+        A flashy "Founding RevOps Engineer" role at an AI-native devtools shop. Layer 4 lights up like a Christmas tree. But the role is 80% Salesforce admin + Snowflake modeling — work {{ cand }} has directed but not personally executed at depth. The new Layer 2 catches it.
       </p>
       <div style="background:var(--bg-sunk);padding:12px;border-radius:var(--radius);font-family:'JetBrains Mono','Courier New',monospace;font-size:12px;line-height:1.6;overflow-x:auto;">
 Layer 1: pass

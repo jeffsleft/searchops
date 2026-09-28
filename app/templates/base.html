@@ -37,10 +37,10 @@
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-head">
-        <div class="sidebar-logo">JB</div>
+        <div class="sidebar-logo">{% if is_demo() %}AR{% else %}JB{% endif %}</div>
         <div class="sidebar-title">
           SearchOps
-          <small>Beaumont · 2026</small>
+          <small>{% if is_demo() %}Demo · Alex Rivera{% else %}Beaumont · 2026{% endif %}</small>
         </div>
       </div>
 
@@ -65,12 +65,10 @@
           <span class="nav-icon">🔍</span>
           <span>Discovered</span>
         </a>
-        {% if not is_demo() %}
         <a href="/targets" class="nav-item" aria-current="{% if request.url.path == '/targets' %}true{% endif %}">
           <span class="nav-icon">🎪</span>
           <span>Watched Companies</span>
         </a>
-        {% endif %}
         {% if not is_demo() %}
         <a href="/companies" class="nav-item" aria-current="{% if request.url.path == '/companies' %}true{% endif %}">
           <span class="nav-icon">🎯</span>
@@ -95,12 +93,10 @@
         {% endif %}
 
         <div class="nav-section">{% if is_demo() %}How it works{% else %}Config{% endif %}</div>
-        {% if not is_demo() %}
         <a href="/settings" class="nav-item" aria-current="{% if request.url.path == '/settings' %}true{% endif %}">
           <span class="nav-icon">⚙️</span>
           <span>Settings</span>
         </a>
-        {% endif %}
         <a href="/settings/methodology" class="nav-item" aria-current="{% if request.url.path == '/settings/methodology' %}true{% endif %}">
           <span class="nav-icon">📖</span>
           <span>Methodology</span>
@@ -130,19 +126,15 @@
         </a>
         {% endif %}
 
-        {% if not is_demo() %}<div class="nav-section">Metrics</div>{% endif %}
-        {% if not is_demo() %}
+        <div class="nav-section">Metrics</div>
         <a href="/settings/progress" class="nav-item" aria-current="{% if request.url.path == '/settings/progress' %}true{% endif %}">
           <span class="nav-icon">📉</span>
           <span>Progress</span>
         </a>
-        {% endif %}
-        {% if not is_demo() %}
         <a href="/settings/health" class="nav-item" aria-current="{% if request.url.path == '/settings/health' %}true{% endif %}">
           <span class="nav-icon">🩺</span>
           <span>Health</span>
         </a>
-        {% endif %}
         {% if not is_demo() %}
         <a href="/settings/interviews" class="nav-item" aria-current="{% if request.url.path == '/settings/interviews' %}true{% endif %}">
           <span class="nav-icon">🎤</span>
@@ -152,9 +144,9 @@
       </nav>
 
       <div class="sidebar-foot">
-        <div class="avatar">JB</div>
+        <div class="avatar">{% if is_demo() %}AR{% else %}JB{% endif %}</div>
         <div style="flex: 1; line-height: 1.2;">
-          <div style="font-size: 12px; font-weight: 500;">Jeff Beaumont</div>
+          <div style="font-size: 12px; font-weight: 500;">{% if is_demo() %}Alex Rivera (fictional){% else %}Jeff Beaumont{% endif %}</div>
           <div class="dim mono" style="font-size: 10px;">Recruiting Engine · 2026</div>
         </div>
         <button class="btn btn-icon btn-ghost btn-sm" id="theme-toggle" type="button"

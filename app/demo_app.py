@@ -1,6 +1,6 @@
 """SearchOps public portfolio demo: a separate Modal app.
 
-    modal deploy app/demo_app.py
+    modal deploy app/demo_app.py::demo   (the app object is "demo"; "app" is the package)
 
 Isolation from the real app (app/main.py), by construction:
 - Its own image with only committed, fictional inputs: no candidate_profile.yaml,

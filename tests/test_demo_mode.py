@@ -50,9 +50,13 @@ def test_demo_loads_only_the_fictional_profile_and_corpus(monkeypatch):
 
 def test_personal_ops_pages_are_hidden_from_the_demo_nav(demo):
     html = demo.get("/").text
-    for hidden in ('href="/recruiters"', 'href="/prep"', 'href="/settings/health"', 'href="/guide"'):
+    for hidden in ('href="/recruiters"', 'href="/prep"', 'href="/companies"', 'href="/guide"',
+                   'href="/admin/patterns"', 'href="/settings/interviews"'):
         assert hidden not in html, hidden
-    assert 'href="/settings/methodology"' in html
+    for shown in ('href="/settings/methodology"', 'href="/targets"', 'href="/settings"',
+                  'href="/settings/progress"', 'href="/settings/health"'):
+        assert shown in html, shown
+    assert "Score a Job" not in html
 
 
 def test_production_still_requires_login():
@@ -106,3 +110,27 @@ def test_demo_image_ships_no_personal_files():
     code = "\n".join(line for line in src.splitlines() if not line.lstrip().startswith(("#", "-")))
     for forbidden in ("volumes=", "Secret.from_name", "recruiting-secrets", "notes-api-token"):
         assert forbidden not in code, forbidden
+
+
+def test_seeded_demo_pages_are_fictional_and_clean(monkeypatch, tmp_path):
+    import app.models as models
+    db = str(tmp_path / "demo.db")
+    monkeypatch.setattr(config, "DATABASE_PATH", db)
+    monkeypatch.setattr(models, "DATABASE_PATH", db)
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+    from app.demo_seed import seed_demo_db
+    from app.services.metrics_service import integrity_checks
+    seed_demo_db()
+    client = TestClient(create_app())
+    banner = "This is the tool Jeff Beaumont built"
+    for path in ("/", "/pipeline", "/discovered", "/targets", "/settings",
+                 "/settings/progress", "/settings/health", "/settings/methodology"):
+        r = client.get(path)
+        assert r.status_code == 200, path
+        body = r.text.replace(banner, "")
+        for real in ("Beaumont", "Jeff", "GitLab", "Mercy Ships", "Auburn"):
+            assert real not in body, (path, real)
+    assert "Forgeline" in client.get("/targets").text
+    assert "Last scan never" not in client.get("/").text
+    # The seeded history is internally consistent: Health shows no integrity warnings.
+    assert all(c["count"] == 0 for c in integrity_checks()["checks"])

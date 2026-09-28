@@ -86,6 +86,8 @@ def build_dashboard_data(archetype: str, _enrich_job_fn) -> dict:
         if scan_row:
             try:
                 dt = datetime.fromisoformat(scan_row["logged_at"].replace("Z", "+00:00"))
+                if dt.tzinfo is None:  # SQLite CURRENT_TIMESTAMP is UTC with no offset
+                    dt = dt.replace(tzinfo=timezone.utc)
                 delta = datetime.now(timezone.utc) - dt
                 if delta.total_seconds() < 60:
                     last_scan_time = "just now"

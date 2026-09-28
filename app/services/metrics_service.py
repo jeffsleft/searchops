@@ -300,11 +300,13 @@ def integrity_checks() -> dict:
     placeholders = ",".join("?" for _ in TERMINAL_STAGES) or "''"
     advanced = ",".join("?" for _ in INITIAL_STAGES)
     with get_db() as conn:
-        # 1) Terminal-stage jobs with no recorded outcome (capture gap).
+        # 1) Applied-to jobs that reached a terminal stage with no recorded outcome
+        #    (capture gap). Roles dismissed or closed before applying have none to record.
         missing_outcome = conn.execute(
             f"""
             SELECT COUNT(*) FROM jobs j
             WHERE j.pipeline_stage IN ({placeholders})
+              AND j.applied_at IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM application_outcomes ao WHERE ao.job_id = j.id)
             """,
             TERMINAL_STAGES,
